@@ -1,0 +1,51 @@
+h1 {
+  margin: 0 0 4px;
+}
+.sub {
+  color: var(--mat-sys-on-surface-variant);
+  margin: 0 0 16px;
+}
+.cat {
+  width: 260px;
+}
+.editor {
+  padding: 16px;
+}
+.badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--mat-sys-on-surface-variant);
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.f-name {
+  flex: 2 1 160px;
+}
+.f-desc {
+  flex: 3 1 200px;
+}
+.f-num {
+  flex: 1 1 90px;
+}
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+.total {
+  font-weight: 600;
+}
+.total.bad {
+  color: var(--mat-sys-error);
+}
+.spacer {
+  flex: 1 1 auto;
+}

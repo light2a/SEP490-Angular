@@ -1,0 +1,29 @@
+h1 {
+  margin: 0 0 4px;
+}
+.sub {
+  color: var(--mat-sys-on-surface-variant);
+  margin: 0 0 20px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.pkg {
+  padding: 20px;
+  text-align: center;
+}
+.pkg h3 {
+  margin: 0 0 8px;
+}
+.credits {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--mat-sys-primary);
+}
+.price {
+  color: var(--mat-sys-on-surface-variant);
+  margin: 4px 0 16px;
+}

@@ -1,0 +1,51 @@
+<h1>CV / JD của bạn</h1>
+<p class="sub">Tải lên PDF (≤ 10MB). CV/JD dùng cho luyện phỏng vấn và phân tích.</p>
+
+<input type="file" #picker hidden accept="application/pdf" (change)="onFile($event)" />
+
+@if (uploading()) {
+  <mat-progress-bar mode="indeterminate" />
+}
+
+@if (loading()) {
+  <app-spinner message="Đang tải danh sách..." />
+} @else {
+  <div class="cols">
+    @for (group of [{ type: 'cv', title: 'CV', items: cvFiles() }, { type: 'jd', title: 'JD (mô tả công việc)', items: jdFiles() }]; track group.type) {
+      <mat-card class="col">
+        <div class="head">
+          <h3>{{ group.title }}</h3>
+          <button
+            mat-stroked-button
+            color="primary"
+            (click)="pendingType.set($any(group.type)); picker.click()"
+          >
+            <mat-icon>upload</mat-icon> Tải lên
+          </button>
+        </div>
+
+        @if (group.items.length === 0) {
+          <app-empty-state icon="description" [message]="'Chưa có ' + group.title" />
+        } @else {
+          <mat-list>
+            @for (f of group.items; track f.id) {
+              <mat-list-item>
+                <mat-icon matListItemIcon>picture_as_pdf</mat-icon>
+                <span matListItemTitle>{{ f.originalName }}</span>
+                <span matListItemLine>{{ f.createdAt | date: 'short' }} · {{ f.parseStatus }}</span>
+                <span matListItemMeta>
+                  <button mat-icon-button (click)="download(f)" aria-label="Xem">
+                    <mat-icon>open_in_new</mat-icon>
+                  </button>
+                  <button mat-icon-button (click)="remove(f)" aria-label="Xoá">
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                </span>
+              </mat-list-item>
+            }
+          </mat-list>
+        }
+      </mat-card>
+    }
+  </div>
+}

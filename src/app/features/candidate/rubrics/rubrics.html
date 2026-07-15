@@ -1,0 +1,67 @@
+<h1>Tiêu chí chấm (rubric)</h1>
+<p class="sub">
+  Tuỳ chỉnh rubric riêng theo nhóm nghề. Chưa khai → dùng bản mặc định. Tổng trọng số ≈ 1.
+</p>
+
+<mat-form-field appearance="outline" class="cat">
+  <mat-label>Nhóm nghề</mat-label>
+  <mat-select [value]="category()" (valueChange)="changeCategory($event)">
+    @for (c of jobCategories; track c) {
+      <mat-option [value]="c">{{ c | jobCategory }}</mat-option>
+    }
+  </mat-select>
+</mat-form-field>
+
+@if (loading()) {
+  <app-spinner />
+} @else {
+  <mat-card class="editor">
+    <div class="badge">
+      @if (rubric()?.isCustom) {
+        <mat-icon>person</mat-icon> Đang dùng rubric riêng
+      } @else {
+        <mat-icon>lock</mat-icon> Đang dùng rubric mặc định (lưu để tạo bản riêng)
+      }
+    </div>
+
+    <form [formGroup]="form">
+      <div formArrayName="criteria">
+        @for (row of criteria.controls; track $index; let i = $index) {
+          <div class="row" [formGroupName]="i">
+            <mat-form-field appearance="outline" class="f-name">
+              <mat-label>Tên tiêu chí</mat-label>
+              <input matInput formControlName="name" />
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="f-desc">
+              <mat-label>Mô tả</mat-label>
+              <input matInput formControlName="description" />
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="f-num">
+              <mat-label>Trọng số</mat-label>
+              <input matInput type="number" step="0.05" formControlName="weight" />
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="f-num">
+              <mat-label>Điểm tối đa</mat-label>
+              <input matInput type="number" formControlName="maxScore" />
+            </mat-form-field>
+            <button mat-icon-button color="warn" type="button" (click)="removeRow(i)">
+              <mat-icon>delete</mat-icon>
+            </button>
+          </div>
+        }
+      </div>
+    </form>
+
+    <div class="actions">
+      <button mat-stroked-button (click)="addRow()"><mat-icon>add</mat-icon> Thêm tiêu chí</button>
+      <span class="total" [class.bad]="totalWeight() > 1.01 || totalWeight() < 0.99">
+        Tổng trọng số: {{ totalWeight().toFixed(2) }}
+      </span>
+      <span class="spacer"></span>
+      @if (rubric()?.isCustom) {
+        <button mat-button color="warn" (click)="resetToSeed()">Về mặc định</button>
+      }
+      <button mat-flat-button color="primary" (click)="save()" [disabled]="saving()">Lưu rubric</button>
+    </div>
+  </mat-card>
+}

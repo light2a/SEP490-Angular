@@ -1,59 +1,24 @@
-# IsasFrontend
+# ISAS Frontend (Angular)
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 21.2.19.
+Frontend cho nền tảng phỏng vấn AI **ISAS**. Đợt 1: **B2C — Ứng viên luyện tập**.
+Backend: 6 microservice .NET sau Gateway (repo `../isas-server`). FE chỉ gọi Gateway `/api/v1/*`.
 
-## Development server
-
-To start a local development server, run:
-
+## Bắt đầu nhanh
 ```bash
-ng serve
+npm install
+npm start        # http://localhost:4200  (Gateway dev: http://localhost:5131)
+npm run build    # build production
+npm test         # Vitest
 ```
+Cần backend chạy (`../isas-server` → `docker compose up`) để dùng API thật. CORS Gateway đã cho phép `localhost:4200`.
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+## Tài liệu (harness)
+- **[AGENTS.md](AGENTS.md)** — cửa vào: ràng buộc cứng, run/test, Định nghĩa "Xong", bản đồ code.
+- [docs/conventions.md](docs/conventions.md) — quy ước Angular 21 (standalone/signals/zoneless/Material).
+- [docs/api-spec.md](docs/api-spec.md) — hợp đồng API (B2C) FE tiêu thụ.
+- [docs/feature-list.md](docs/feature-list.md) — feature + trạng thái (WIP=1).
+- [docs/progress.md](docs/progress.md) — tiến độ + bước kế.
+- [docs/skills.md](docs/skills.md) — Claude skills nên dùng + kỹ năng dev.
 
-## Code scaffolding
-
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
-
-```bash
-ng generate component component-name
-```
-
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
-
-```bash
-ng generate --help
-```
-
-## Building
-
-To build the project run:
-
-```bash
-ng build
-```
-
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+## Stack
+Angular 21 (standalone · signals · zoneless) · Angular Material 3 · Vitest · TypeScript.

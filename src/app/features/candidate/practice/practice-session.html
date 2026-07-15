@@ -1,0 +1,87 @@
+<a mat-button routerLink="/candidate/practice"><mat-icon>arrow_back</mat-icon> Danh sách</a>
+
+@if (loading()) {
+  <app-spinner message="Đang tải buổi luyện..." />
+} @else if (session(); as s) {
+  <div class="head">
+    <h1>Buổi luyện · {{ s.jobCategory | jobCategory }}</h1>
+    <mat-chip>{{ s.status | sessionStatus }}</mat-chip>
+  </div>
+
+  @if (generating()) {
+    <app-spinner message="AI đang sinh câu hỏi, vui lòng đợi..." />
+  } @else {
+    @for (q of questions(); track q.id; let i = $index) {
+      <mat-card class="q">
+        <div class="q-head">
+          <h3>Câu {{ i + 1 }} <span class="tl">· {{ q.timeLimitSec }}s</span></h3>
+          @if (q.answer) {
+            <mat-chip>{{ q.answer.status | answerStatus }}</mat-chip>
+          }
+        </div>
+        <p class="q-text">{{ q.content }}</p>
+
+        @if (q.answer) {
+          @if (q.answer.transcript) {
+            <p class="tr"><b>Bản ghi:</b> {{ q.answer.transcript }}</p>
+          }
+          @if (q.answer.scores.length) {
+            <mat-divider />
+            <div class="scores">
+              @for (sc of q.answer.scores; track sc.criterionId) {
+                <div class="score-row">
+                  <span>Điểm tiêu chí</span><b>{{ sc.score | number: '1.0-1' }}</b>
+                </div>
+              }
+            </div>
+          }
+        } @else if (!scored()) {
+          <app-audio-recorder (recorded)="onRecorded(q.id, $event)" />
+          <button
+            mat-flat-button
+            color="primary"
+            class="upload-btn"
+            (click)="upload(q)"
+            [disabled]="uploadingQid() === q.id || !hasRecording(q.id)"
+          >
+            <mat-icon>cloud_upload</mat-icon> Nộp câu này
+          </button>
+        }
+      </mat-card>
+    }
+
+    @if (!scored() && answeredCount() > 0) {
+      <button
+        mat-flat-button
+        color="accent"
+        class="submit"
+        (click)="submit()"
+        [disabled]="submitting()"
+      >
+        <mat-icon>done_all</mat-icon> Nộp bài & chấm điểm
+      </button>
+    }
+  }
+
+  @if (result(); as r) {
+    <mat-card class="result">
+      <h2>Kết quả</h2>
+      <div class="overall">{{ r.overallScore | number: '1.0-1' }}<span>/100</span></div>
+      <p>{{ r.answeredCount }}/{{ r.totalQuestions }} câu đã trả lời</p>
+      @if (r.overallComment) {
+        <p class="comment">{{ r.overallComment }}</p>
+      }
+
+      <h3>Điểm theo tiêu chí</h3>
+      @for (c of r.criteriaScores; track c.criterionId) {
+        <div class="crit">
+          <div class="crit-top">
+            <span>{{ c.name }}</span
+            ><b>{{ c.averageScore | number: '1.0-1' }}/{{ c.maxScore }}</b>
+          </div>
+          <div class="bar"><div class="fill" [style.width.%]="c.percentage"></div></div>
+        </div>
+      }
+    </mat-card>
+  }
+}

@@ -1,0 +1,96 @@
+<h1>Phân tích CV</h1>
+<p class="sub">AI đánh giá điểm mạnh/yếu và độ khớp JD. <b>Mỗi lần phân tích trừ 1 credit.</b></p>
+
+<mat-card class="form-card">
+  @if (submitting()) {
+    <mat-progress-bar mode="indeterminate" />
+  }
+  <form [formGroup]="form" (ngSubmit)="submit()">
+    <mat-form-field appearance="outline">
+      <mat-label>CV</mat-label>
+      <mat-select formControlName="cvId">
+        @for (f of cvFiles(); track f.id) {
+          <mat-option [value]="f.id">{{ f.originalName }}</mat-option>
+        }
+      </mat-select>
+      @if (cvFiles().length === 0) {
+        <mat-hint>Chưa có CV — hãy tải lên ở mục CV/JD.</mat-hint>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Nhóm nghề</mat-label>
+      <mat-select formControlName="jobCategory">
+        @for (c of jobCategories; track c) {
+          <mat-option [value]="c">{{ c | jobCategory }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>JD (tuỳ chọn — để khớp)</mat-label>
+      <mat-select formControlName="jdId">
+        <mat-option [value]="''">— Không —</mat-option>
+        @for (f of jdFiles(); track f.id) {
+          <mat-option [value]="f.id">{{ f.originalName }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <button mat-flat-button color="primary" type="submit" [disabled]="submitting()">
+      <mat-icon>insights</mat-icon> Phân tích (−1 credit)
+    </button>
+  </form>
+</mat-card>
+
+<h2>Lịch sử phân tích</h2>
+@if (loading()) {
+  <app-spinner />
+} @else if (analyses().length === 0) {
+  <app-empty-state icon="insights" message="Chưa có phân tích nào" />
+} @else {
+  <mat-accordion>
+    @for (a of analyses(); track a.id) {
+      <mat-expansion-panel>
+        <mat-expansion-panel-header>
+          <mat-panel-title>{{ a.jobCategory | jobCategory }}</mat-panel-title>
+          <mat-panel-description>
+            {{ a.createdAt | date: 'short' }}
+            @if (a.jdMatch) {
+              · Khớp JD: {{ a.jdMatch.score }}%
+            }
+          </mat-panel-description>
+        </mat-expansion-panel-header>
+
+        <p class="summary">{{ a.summary }}</p>
+
+        <h4>Điểm mạnh</h4>
+        <mat-chip-set>
+          @for (s of a.strengths; track s) {
+            <mat-chip>{{ s }}</mat-chip>
+          }
+        </mat-chip-set>
+
+        <h4>Điểm yếu</h4>
+        <ul>
+          @for (w of a.weaknesses; track w) {
+            <li>{{ w }}</li>
+          }
+        </ul>
+
+        <h4>Gợi ý cải thiện</h4>
+        <ul>
+          @for (s of a.suggestions; track s) {
+            <li>{{ s }}</li>
+          }
+        </ul>
+
+        @if (a.jdMatch) {
+          <h4>Khớp JD ({{ a.jdMatch.score }}%)</h4>
+          <p>Kỹ năng khớp: {{ a.jdMatch.matchedSkills.join(', ') || '—' }}</p>
+          <p>Còn thiếu: {{ a.jdMatch.missingSkills.join(', ') || '—' }}</p>
+        }
+      </mat-expansion-panel>
+    }
+  </mat-accordion>
+}

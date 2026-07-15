@@ -1,0 +1,24 @@
+h1 {
+  margin: 0 0 4px;
+}
+.sub {
+  color: var(--mat-sys-on-surface-variant);
+  margin: 0 0 20px;
+}
+.cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+.col {
+  padding: 16px;
+}
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.head h3 {
+  margin: 0;
+}

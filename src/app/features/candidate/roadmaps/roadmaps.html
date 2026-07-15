@@ -1,0 +1,60 @@
+<h1>Lộ trình ôn tập</h1>
+<p class="sub">AI tạo roadmap cá nhân hoá theo nhóm nghề & cấp độ. <b>Miễn phí.</b></p>
+
+<mat-card class="form-card">
+  @if (creating()) {
+    <mat-progress-bar mode="indeterminate" />
+  }
+  <form [formGroup]="form" (ngSubmit)="create()">
+    <mat-form-field appearance="outline">
+      <mat-label>Nhóm nghề</mat-label>
+      <mat-select formControlName="jobCategory">
+        @for (c of jobCategories; track c) {
+          <mat-option [value]="c">{{ c | jobCategory }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Cấp độ</mat-label>
+      <mat-select formControlName="level">
+        @for (l of levels; track l) {
+          <mat-option [value]="l">{{ l }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>CV (tuỳ chọn)</mat-label>
+      <mat-select formControlName="cvId">
+        <mat-option [value]="''">— Không —</mat-option>
+        @for (f of cvFiles(); track f.id) {
+          <mat-option [value]="f.id">{{ f.originalName }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <button mat-flat-button color="primary" type="submit" [disabled]="creating()">
+      <mat-icon>map</mat-icon> Tạo lộ trình
+    </button>
+  </form>
+</mat-card>
+
+<h2>Lộ trình của bạn</h2>
+@if (loading()) {
+  <app-spinner />
+} @else if (roadmaps().length === 0) {
+  <app-empty-state icon="map" message="Chưa có lộ trình nào" />
+} @else {
+  <mat-card>
+    <mat-list>
+      @for (r of roadmaps(); track r.id) {
+        <mat-list-item [routerLink]="['/candidate/roadmaps', r.id]">
+          <mat-icon matListItemIcon>route</mat-icon>
+          <span matListItemTitle>{{ r.jobCategory | jobCategory }} · {{ r.level }}</span>
+          <span matListItemLine>{{ r.createdAt | date: 'short' }} · {{ r.status }}</span>
+        </mat-list-item>
+      }
+    </mat-list>
+  </mat-card>
+}

@@ -1,0 +1,106 @@
+<a mat-button routerLink="/candidate/roadmaps"><mat-icon>arrow_back</mat-icon> Lộ trình</a>
+
+@if (loading()) {
+  <app-spinner />
+} @else if (roadmap(); as r) {
+  <div class="head">
+    <h1>{{ r.jobCategory | jobCategory }} · {{ r.level }}</h1>
+    <mat-chip>{{ r.status }}</mat-chip>
+  </div>
+
+  @for (m of r.milestones; track m.id) {
+    <mat-card class="milestone">
+      <div class="m-head">
+        <h3>{{ m.orderNo }}. {{ m.title }}</h3>
+        <mat-chip>{{ m.status }}</mat-chip>
+      </div>
+      @if (m.focusCriteria.length) {
+        <mat-chip-set>
+          @for (fc of m.focusCriteria; track fc) {
+            <mat-chip>{{ fc }}</mat-chip>
+          }
+        </mat-chip-set>
+      }
+
+      <mat-accordion class="lessons">
+        @for (l of m.lessons; track l.id) {
+          <mat-expansion-panel (opened)="loadTheory(l)">
+            <mat-expansion-panel-header>
+              <mat-panel-title>{{ l.title }}</mat-panel-title>
+              <mat-panel-description>{{ l.status }}</mat-panel-description>
+            </mat-expansion-panel-header>
+
+            <div class="theory">
+              @if (theories()[l.id]) {
+                <p>{{ theories()[l.id] }}</p>
+              } @else {
+                <app-spinner [diameter]="24" />
+              }
+            </div>
+            <button
+              mat-flat-button
+              color="primary"
+              (click)="startLesson(l)"
+              [disabled]="startingLesson() === l.id"
+            >
+              <mat-icon>mic</mat-icon> Luyện bài này (−1 credit)
+            </button>
+          </mat-expansion-panel>
+        }
+      </mat-accordion>
+    </mat-card>
+  }
+
+  @if (report(); as rep) {
+    <mat-card class="report">
+      <h2>Báo cáo</h2>
+      @if (rep.overallComment) {
+        <p class="comment">{{ rep.overallComment }}</p>
+      }
+
+      @if (rep.radar.length) {
+        <h3>Năng lực theo tiêu chí</h3>
+        @for (c of rep.radar; track c.criterionId) {
+          <div class="crit">
+            <div class="crit-top">
+              <span>{{ c.name }}</span><b>{{ c.percentage | number: '1.0-0' }}%</b>
+            </div>
+            <div class="bar"><div class="fill" [style.width.%]="c.percentage"></div></div>
+          </div>
+        }
+      }
+
+      @if (rep.levelEvaluation.length) {
+        <h3>Đánh giá theo cấp độ</h3>
+        <ul class="lvl">
+          @for (le of rep.levelEvaluation; track le.criterionName) {
+            <li>
+              <mat-icon [class.ok]="le.passed" [class.no]="!le.passed">
+                {{ le.passed ? 'check_circle' : 'cancel' }}
+              </mat-icon>
+              {{ le.criterionName }} — {{ le.percentage | number: '1.0-0' }}% (ngưỡng
+              {{ le.levelThreshold }}%)
+            </li>
+          }
+        </ul>
+      }
+
+      @if (rep.strengths.length) {
+        <h4>Điểm mạnh</h4>
+        <ul>
+          @for (s of rep.strengths; track s) {
+            <li>{{ s }}</li>
+          }
+        </ul>
+      }
+      @if (rep.weaknesses.length) {
+        <h4>Cần cải thiện</h4>
+        <ul>
+          @for (w of rep.weaknesses; track w) {
+            <li>{{ w }}</li>
+          }
+        </ul>
+      }
+    </mat-card>
+  }
+}

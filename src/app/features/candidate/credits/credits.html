@@ -1,0 +1,49 @@
+<h1>Credit & Thanh toán</h1>
+<p class="sub">Mỗi buổi luyện / phân tích CV tiêu 1 credit. Mua gói để nạp thêm.</p>
+
+@if (loading()) {
+  <app-spinner />
+} @else {
+  <h2>Gói credit</h2>
+  <div class="grid">
+    @for (p of packages(); track p.id) {
+      <mat-card class="pkg">
+        <h3>{{ p.name }}</h3>
+        <div class="credits">{{ p.interviewCredits ?? '—' }} credit</div>
+        <div class="price">{{ p.priceVnd | vnd }}</div>
+        <button
+          mat-flat-button
+          color="primary"
+          (click)="buy(p)"
+          [disabled]="buying() === p.id || !p.isActive"
+        >
+          <mat-icon>shopping_cart</mat-icon> Mua
+        </button>
+      </mat-card>
+    } @empty {
+      <app-empty-state icon="sell" message="Chưa có gói credit nào" />
+    }
+  </div>
+
+  <h2>Đơn của bạn</h2>
+  @if (orders().length === 0) {
+    <app-empty-state icon="receipt_long" message="Chưa có đơn nào" />
+  } @else {
+    <mat-card>
+      <mat-list>
+        @for (o of orders(); track o.id) {
+          <mat-list-item>
+            <mat-icon matListItemIcon>receipt_long</mat-icon>
+            <span matListItemTitle>{{ o.amountVnd | vnd }} · {{ o.status | orderStatus }}</span>
+            <span matListItemLine>{{ o.createdAt | date: 'short' }}</span>
+            <span matListItemMeta>
+              @if (o.status === OrderStatus.Pending) {
+                <button mat-button (click)="checkStatus(o)">Kiểm tra</button>
+              }
+            </span>
+          </mat-list-item>
+        }
+      </mat-list>
+    </mat-card>
+  }
+}
