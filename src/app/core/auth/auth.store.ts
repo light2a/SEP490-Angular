@@ -25,8 +25,12 @@ export class AuthStore {
     return ((['Admin', 'Employer', 'Candidate'] as PlatformRole[]).find((x) => r.includes(x)) ??
       null) as PlatformRole | null;
   });
-  /** Có refreshToken ⇒ coi như đã đăng nhập (accessToken hết hạn sẽ tự refresh). */
-  readonly isAuthenticated = computed(() => !!this.refreshToken());
+  /**
+   * Có refreshToken ⇒ đã đăng nhập (accessToken hết hạn sẽ tự refresh).
+   * Phiên join-campaign (B2B magic-link) chỉ có accessToken → vẫn coi là đăng nhập
+   * (hết hạn → 401 không refresh được → errorInterceptor đẩy về login).
+   */
+  readonly isAuthenticated = computed(() => !!this.refreshToken() || !!this.accessToken());
 
   /** Tên hiển thị lấy từ GET /me (nạp sau khi đăng nhập). */
   readonly displayName = signal<string | null>(null);
@@ -40,6 +44,18 @@ export class AuthStore {
     tokenStorage.set(res.accessToken, res.refreshToken);
     this.accessToken.set(res.accessToken);
     this.refreshToken.set(res.refreshToken);
+  }
+
+  /**
+   * Phiên CHỈ có accessToken — dùng cho join campaign B2B (POST /campaign/invitations/{token}/join
+   * trả JWT Candidate mới, KHÔNG kèm refreshToken). Thay thế session hiện tại (nếu có) vì token
+   * thuộc về account candidate được provision riêng; giữ refreshToken cũ sẽ refresh nhầm user cũ.
+   */
+  setAccessOnlySession(accessToken: string): void {
+    tokenStorage.setAccessOnly(accessToken);
+    this.accessToken.set(accessToken);
+    this.refreshToken.set(null);
+    this.displayName.set(null);
   }
 
   login(body: LoginRequest): Observable<AuthResponse> {

@@ -65,9 +65,14 @@ export type RoadmapStatus = 'Active' | 'Completed' | 'Abandoned';
 export type MilestoneStatus = 'Pending' | 'InProgress' | 'Completed';
 export type LessonStatus = 'Theory' | 'Practicing' | 'Done';
 
-// ---------- Campaign (CHUỖI) — dùng cho B2B sau ----------
+// ---------- Campaign (CHUỖI) ----------
 export type CampaignStatus = 'Draft' | 'Active' | 'Closed' | 'Archived';
 export type CandidateInterviewStatus = 'NotStarted' | 'InProgress' | 'Completed';
+export const CANDIDATE_INTERVIEW_STATUS_LABEL: Record<CandidateInterviewStatus, string> = {
+  NotStarted: 'Chưa phỏng vấn',
+  InProgress: 'Đang phỏng vấn',
+  Completed: 'Đã hoàn thành',
+};
 
 // ---------- Payment (SỐ) ----------
 export enum OrderStatus {

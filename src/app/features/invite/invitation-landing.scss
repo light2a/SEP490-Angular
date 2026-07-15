@@ -1,0 +1,90 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--mat-sys-surface-container);
+}
+.card {
+  width: 100%;
+  max-width: 560px;
+  padding: 28px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--mat-sys-primary);
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+h1 {
+  margin: 0 0 8px;
+  font-size: 24px;
+}
+.job {
+  margin: 0 0 4px;
+}
+.deadline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 14px;
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+}
+.desc {
+  background: var(--mat-sys-surface-container);
+  padding: 12px;
+  border-radius: 8px;
+  white-space: pre-line;
+}
+h3 {
+  margin: 16px 0 8px;
+}
+.criteria {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 8px;
+  li {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--mat-sys-outline-variant);
+    font-size: 14px;
+  }
+}
+.join {
+  margin-top: 16px;
+  width: 100%;
+}
+.note {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--mat-sys-on-surface-variant);
+  text-align: center;
+}
+.err {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  color: var(--mat-sys-on-surface-variant);
+  mat-icon {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+    opacity: 0.5;
+  }
+  h2 {
+    margin: 0;
+    color: var(--mat-sys-on-surface);
+  }
+}

@@ -1,9 +1,11 @@
 # Progress / Handoff — ISAS Frontend
 
-> Cập nhật mỗi phiên (tan ca). Cập nhật lần cuối: **2026-07-15**.
+> Cập nhật mỗi phiên (tan ca). Cập nhật lần cuối: **2026-07-16**.
 
 ## Đang ở đâu
 Đợt 1 (**B2C Ứng viên**) đã dựng xong **nền tảng + toàn bộ luồng B2C** và **build sạch + smoke-test pass**.
+
+**2026-07-16 (nhánh `feat/b2b-candidate`) — luồng B2B phía ứng viên:** `/invite/:token` (public; join lưu JWT **access-only** qua `AuthStore.setAccessOnlySession` — backend không trả refreshToken) → `candidate/campaigns` (my-campaigns) → detail (tiêu chí/deadline; start: 402 = org hết credit, 409 = completed/closed) → trang thi `campaigns/:id/interview` (từng câu một, tái dùng `AudioRecorder`, đếm ngược `timeLimitSec`/câu, hết giờ tự dừng-và-nộp hoặc bỏ qua, resume từ câu chưa trả lời qua GET session Interview, submit → màn thành công). `CampaignApi` expose sẵn `reportFlag`/`faceEnroll`/`faceCheck`; `CampaignInterview` expose `faceEnrollRequired` + `sessionId` (signal public) cho agent proctoring làm sau. `errorInterceptor`: 402 từ `/campaign/*` KHÔNG redirect mua credit cá nhân. Build sạch + **72 test pass** (+13). E2E backend thật chưa chạy.
 
 - **Angular 21** (không phải 22 như plan gốc): máy có Node v24.14.0, mà Angular CLI 22 yêu cầu ≥24.15 → chọn 21 để tránh nâng Node toàn máy. 21 vẫn **zoneless mặc định + signals + standalone + Vitest**. Muốn lên 22 sau: nâng Node ≥24.15 rồi `ng update`.
 - **Build:** `npm run build` → 0 lỗi. **Smoke:** `npm start` → `/` guard đẩy về `/auth/login`, form Material render, lazy routes (login/register) load, **0 console error** (verify qua Browser 2026-07-15).

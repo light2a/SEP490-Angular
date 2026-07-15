@@ -13,6 +13,19 @@ export const CANDIDATE_ROUTES: Routes = [
     loadComponent: () => import('./practice/practice-session').then((m) => m.PracticeSession),
   },
   {
+    path: 'campaigns',
+    loadComponent: () => import('./campaigns/campaign-list').then((m) => m.CampaignList),
+  },
+  {
+    path: 'campaigns/:campaignId',
+    loadComponent: () => import('./campaigns/campaign-detail').then((m) => m.CampaignDetail),
+  },
+  {
+    path: 'campaigns/:campaignId/interview',
+    loadComponent: () =>
+      import('./campaigns/campaign-interview').then((m) => m.CampaignInterview),
+  },
+  {
     path: 'cv-analysis',
     loadComponent: () => import('./cv-analysis/cv-analysis').then((m) => m.CvAnalysis),
   },

@@ -9,6 +9,12 @@ export const routes: Routes = [
     loadChildren: () => import('./features/auth/auth.routes').then((m) => m.AUTH_ROUTES),
   },
   {
+    // Landing lời mời B2B (magic-link) — PUBLIC, ngoài shell (ứng viên có thể chưa đăng nhập).
+    path: 'invite/:token',
+    loadComponent: () =>
+      import('./features/invite/invitation-landing').then((m) => m.InvitationLanding),
+  },
+  {
     path: 'candidate',
     canActivate: [roleGuard('Candidate')],
     loadComponent: () =>

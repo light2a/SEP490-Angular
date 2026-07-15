@@ -1,0 +1,67 @@
+<a mat-button routerLink="/candidate/campaigns"><mat-icon>arrow_back</mat-icon> Danh sách</a>
+
+@if (loading()) {
+  <app-spinner message="Đang tải chiến dịch..." />
+} @else if (detail(); as d) {
+  <div class="head">
+    <h1>{{ d.title }}</h1>
+    <mat-chip [class.done]="completed()">{{ d.interviewStatus | interviewStatus }}</mat-chip>
+  </div>
+  <p class="job">
+    Vị trí: <b>{{ d.jobTitle }}</b>
+    @if (d.deadline) {
+      · Hạn chót: {{ d.deadline | date: 'short' }}
+    }
+  </p>
+
+  @if (d.description) {
+    <mat-card class="block">
+      <h3>Mô tả</h3>
+      <p class="desc">{{ d.description }}</p>
+    </mat-card>
+  }
+
+  @if (d.criteria.length) {
+    <mat-card class="block">
+      <h3>Tiêu chí đánh giá</h3>
+      @for (c of d.criteria; track c.name) {
+        <div class="crit">
+          <div class="crit-top">
+            <span>{{ c.name }}</span>
+            <b>{{ c.weight | percent: '1.0-0' }} · tối đa {{ c.maxScore }}</b>
+          </div>
+          @if (c.description) {
+            <p class="crit-desc">{{ c.description }}</p>
+          }
+        </div>
+      }
+    </mat-card>
+  }
+
+  @if (startError(); as err) {
+    <mat-card class="block error-card">
+      <mat-icon>error_outline</mat-icon>
+      <span>{{ err }}</span>
+    </mat-card>
+  }
+
+  @if (completed()) {
+    <mat-card class="block done-card">
+      <mat-icon>task_alt</mat-icon>
+      <span>Bạn đã hoàn thành bài phỏng vấn của chiến dịch này. Kết quả sẽ do nhà tuyển dụng xem xét.</span>
+    </mat-card>
+  } @else {
+    <button mat-flat-button color="primary" class="start" (click)="start()" [disabled]="starting()">
+      <mat-icon>{{ resumable() ? 'play_arrow' : 'mic' }}</mat-icon>
+      {{ resumable() ? 'Tiếp tục phỏng vấn' : 'Bắt đầu phỏng vấn' }}
+    </button>
+    <p class="note">
+      Mỗi câu hỏi có giới hạn thời gian riêng. Hãy chuẩn bị micro và không gian yên tĩnh trước khi bắt đầu.
+    </p>
+  }
+} @else {
+  <mat-card class="block error-card">
+    <mat-icon>error_outline</mat-icon>
+    <span>Không tải được chiến dịch. Có thể bạn chưa tham gia hoặc chiến dịch không tồn tại.</span>
+  </mat-card>
+}

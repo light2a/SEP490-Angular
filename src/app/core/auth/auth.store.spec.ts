@@ -89,6 +89,23 @@ describe('AuthStore', () => {
     expect(store.isAuthenticated()).toBe(false);
   });
 
+  it('setAccessOnlySession() (join campaign B2B) stores access token, clears refresh, authenticated', () => {
+    // Đang có session cũ đầy đủ → join campaign thay bằng JWT candidate mới (không refreshToken).
+    api.login.mockReturnValue(of(makeAuthResponse()));
+    store.login({ email: 'a@b.c', password: 'x' }).subscribe();
+
+    const joinJwt = makeJwt({ sub: 'cand-2', role: 'Candidate' });
+    store.setAccessOnlySession(joinJwt);
+
+    expect(localStorage.getItem('isas.accessToken')).toBe(joinJwt);
+    expect(localStorage.getItem('isas.refreshToken')).toBeNull(); // refresh cũ bị xoá (khác user)
+    expect(store.accessToken()).toBe(joinJwt);
+    expect(store.refreshToken()).toBeNull();
+    expect(store.isAuthenticated()).toBe(true); // access-only vẫn là đăng nhập
+    expect(store.userId()).toBe('cand-2');
+    expect(store.roles()).toEqual(['Candidate']);
+  });
+
   it('logout() clears session and calls AuthApi.logout when a refresh token exists', () => {
     api.login.mockReturnValue(of(makeAuthResponse()));
     store.login({ email: 'a@b.c', password: 'x' }).subscribe();

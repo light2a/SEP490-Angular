@@ -1,4 +1,4 @@
-# API spec (FE) — bản rút gọn cho B2C
+# API spec (FE) — bản rút gọn cho B2C + B2B (ứng viên)
 
 > Nguồn đầy đủ: `ISAS-API-Spec-Frontend.docx` (bàn giao). Đây là phần FE B2C tiêu thụ. Backend đổi hợp đồng → cập nhật file này + `core/models` TRƯỚC khi sửa UI.
 
@@ -44,6 +44,15 @@
 - `POST /order` `{packageId}` → OrderResponse (**checkoutUrl** → redirect PayOS). HrMember→403.
 - `GET /order/my-orders` · `GET /order/{id}` · `GET /order/{id}/status` (**status chuỗi**) · `DELETE /order/{id}` (huỷ Pending).
 - `OrderStatus`: 1 Pending·2 Paid·3 Failed·4 Expired·5 Cancelled.
+
+## Campaign B2B phía ứng viên — `/campaign` (enum CHUỖI)
+- `GET /invitations/{token}` (**public**) → `{campaignId,title,orgName?,jobTitle,description,deadline,criteria[]}`.
+- `POST /invitations/{token}/join` (**public**) → `{accessToken,campaignId,candidateId,membershipStatus}`. `accessToken` = JWT Candidate **KHÔNG kèm refreshToken** → `AuthStore.setAccessOnlySession()` (thay session hiện tại).
+- `GET /my-campaigns` → summary[] `{campaignId,title,jobTitle,deadline,membershipStatus,interviewStatus}`.
+- `GET /my-campaigns/{id}` → summary + `{description,criteria[],sessionId?,started}`.
+- `POST /{id}/start` → `{sessionId,campaignId,questions[{id,orderNo,content,timeLimitSec}],faceEnrollRequired}`. Create-or-get (idempotent). **402** = ORG hết credit (errorInterceptor KHÔNG đẩy đi mua credit cá nhân với `/campaign/*`) · **409** = completed/closed.
+- **Trả lời + nộp bài dùng lại endpoint Interview** (`/interview/practice/sessions/{sessionId}/answers|submit|GET`) — session B2B cùng shape.
+- Proctoring (UI làm sau, API đã expose ở `CampaignApi`): `POST /{campaignId}/sessions/{sessionId}/flags` `{signalType: tab_switch|paste|focus_lost, note?}` · `POST .../face-enroll` + `.../face-check` (multipart `file`) → face-check trả `{match,faceCount,signals[]}`.
 
 ## KHÔNG gọi từ FE
 AIService (internal-only, đã gỡ khỏi gateway) · `/internal/*` · webhook PayOS.

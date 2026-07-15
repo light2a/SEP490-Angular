@@ -1,0 +1,52 @@
+<div class="page">
+  <mat-card class="card">
+    @if (joining()) {
+      <mat-progress-bar mode="indeterminate" />
+    }
+
+    @if (loading()) {
+      <app-spinner message="Đang tải lời mời..." />
+    } @else if (loadError(); as err) {
+      <div class="err">
+        <mat-icon>link_off</mat-icon>
+        <h2>Lời mời không hợp lệ</h2>
+        <p>{{ err }}</p>
+      </div>
+    } @else if (invitation(); as inv) {
+      <div class="brand"><mat-icon>work</mat-icon> ISAS · Phỏng vấn tuyển dụng</div>
+      <h1>{{ inv.title }}</h1>
+      <p class="job">
+        Vị trí: <b>{{ inv.jobTitle }}</b>
+        @if (inv.orgName) {
+          · {{ inv.orgName }}
+        }
+      </p>
+      @if (inv.deadline) {
+        <p class="deadline"><mat-icon>schedule</mat-icon> Hạn chót: {{ inv.deadline | date: 'short' }}</p>
+      }
+      @if (inv.description) {
+        <p class="desc">{{ inv.description }}</p>
+      }
+
+      @if (inv.criteria.length) {
+        <mat-divider />
+        <h3>Tiêu chí đánh giá</h3>
+        <ul class="criteria">
+          @for (c of inv.criteria; track c.name) {
+            <li>
+              <span>{{ c.name }}</span>
+              <b>{{ c.weight | percent: '1.0-0' }}</b>
+            </li>
+          }
+        </ul>
+      }
+
+      <button mat-flat-button color="primary" class="join" (click)="join()" [disabled]="joining()">
+        <mat-icon>login</mat-icon> Tham gia phỏng vấn
+      </button>
+      <p class="note">
+        Nhấn "Tham gia" để nhận phiên ứng viên và làm bài phỏng vấn AI cho chiến dịch này.
+      </p>
+    }
+  </mat-card>
+</div>

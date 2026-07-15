@@ -2,6 +2,7 @@ import { HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { catchError, throwError } from 'rxjs';
+import { environment } from '../../../environments/environment';
 import { extractErrorMessage, isPublicAuthUrl } from '../api/http-utils';
 import { NotifyService } from '../notify.service';
 
@@ -28,8 +29,12 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
           router.navigate(['/auth/login']);
           break;
         case 402:
-          notify.warn('Bạn đã hết credit. Vui lòng mua thêm để tiếp tục.');
-          router.navigate(['/candidate/credits']);
+          // 402 từ /campaign/* (B2B) = ORG hết credit — ứng viên không mua được,
+          // để feature hiển thị thông điệp phù hợp thay vì đẩy đi mua credit cá nhân.
+          if (!req.url.startsWith(`${environment.apiBase}/campaign`)) {
+            notify.warn('Bạn đã hết credit. Vui lòng mua thêm để tiếp tục.');
+            router.navigate(['/candidate/credits']);
+          }
           break;
         case 403:
           notify.error('Bạn không có quyền thực hiện thao tác này.');

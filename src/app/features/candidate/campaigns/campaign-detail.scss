@@ -1,0 +1,62 @@
+.head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 0 4px;
+}
+.head h1 {
+  margin: 0;
+  font-size: 22px;
+}
+.job {
+  margin: 0 0 16px;
+  color: var(--mat-sys-on-surface-variant);
+}
+.block {
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.block h3 {
+  margin: 0 0 8px;
+}
+.desc {
+  margin: 0;
+  white-space: pre-line;
+}
+.crit {
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--mat-sys-outline-variant);
+}
+.crit:last-child {
+  border-bottom: none;
+}
+.crit-top {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+}
+.crit-desc {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--mat-sys-on-surface-variant);
+}
+.error-card,
+.done-card {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+.error-card {
+  color: var(--mat-sys-error);
+}
+.done-card {
+  color: var(--mat-sys-primary);
+}
+.start {
+  margin-top: 4px;
+}
+.note {
+  font-size: 13px;
+  color: var(--mat-sys-on-surface-variant);
+}

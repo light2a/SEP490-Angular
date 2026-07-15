@@ -1,6 +1,7 @@
 import { Pipe, PipeTransform } from '@angular/core';
 import {
   ANSWER_STATUS_LABEL,
+  CANDIDATE_INTERVIEW_STATUS_LABEL,
   JOB_CATEGORY_LABEL,
   ORDER_STATUS_LABEL,
   PACKAGE_TYPE_LABEL,
@@ -33,6 +34,13 @@ export class AnswerStatusPipe implements PipeTransform {
 export class JobCategoryPipe implements PipeTransform {
   transform(v: string | null | undefined): string {
     return v ? ((JOB_CATEGORY_LABEL as Record<string, string>)[v] ?? v) : '';
+  }
+}
+
+@Pipe({ name: 'interviewStatus' })
+export class InterviewStatusPipe implements PipeTransform {
+  transform(v: string | null | undefined): string {
+    return v ? ((CANDIDATE_INTERVIEW_STATUS_LABEL as Record<string, string>)[v] ?? v) : '';
   }
 }
 

@@ -17,6 +17,11 @@ export const tokenStorage = {
     localStorage.setItem(AT_KEY, access);
     localStorage.setItem(RT_KEY, refresh);
   },
+  /** Phiên chỉ có accessToken (join campaign B2B qua magic-link — backend không trả refreshToken). */
+  setAccessOnly(access: string): void {
+    localStorage.setItem(AT_KEY, access);
+    localStorage.removeItem(RT_KEY);
+  },
   clear(): void {
     localStorage.removeItem(AT_KEY);
     localStorage.removeItem(RT_KEY);

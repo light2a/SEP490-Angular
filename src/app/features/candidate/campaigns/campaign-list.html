@@ -1,0 +1,34 @@
+<h1>Phỏng vấn tuyển dụng</h1>
+<p class="sub">Các chiến dịch bạn đã tham gia qua lời mời của nhà tuyển dụng.</p>
+
+@if (loading()) {
+  <app-spinner message="Đang tải danh sách chiến dịch..." />
+} @else if (campaigns().length === 0) {
+  <app-empty-state
+    icon="work_off"
+    message="Bạn chưa tham gia chiến dịch nào. Hãy mở link mời trong email của nhà tuyển dụng."
+  />
+} @else {
+  <mat-card>
+    <mat-list>
+      @for (c of campaigns(); track c.campaignId) {
+        <mat-list-item [routerLink]="['/candidate/campaigns', c.campaignId]" class="row">
+          <mat-icon matListItemIcon>work</mat-icon>
+          <span matListItemTitle>{{ c.title }} · {{ c.jobTitle }}</span>
+          <span matListItemLine>
+            @if (c.deadline) {
+              Hạn chót: {{ c.deadline | date: 'short' }}
+            } @else {
+              Không giới hạn thời gian
+            }
+          </span>
+          <span matListItemMeta>
+            <mat-chip [class.done]="c.interviewStatus === 'Completed'">
+              {{ c.interviewStatus | interviewStatus }}
+            </mat-chip>
+          </span>
+        </mat-list-item>
+      }
+    </mat-list>
+  </mat-card>
+}

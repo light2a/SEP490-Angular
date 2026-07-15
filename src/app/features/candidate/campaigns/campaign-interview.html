@@ -1,0 +1,85 @@
+@if (loading()) {
+  <app-spinner message="Đang chuẩn bị bài phỏng vấn..." />
+} @else if (fatalError(); as err) {
+  <mat-card class="state-card">
+    <mat-icon class="err-ico">error_outline</mat-icon>
+    <h2>Không thể vào bài phỏng vấn</h2>
+    <p>{{ err }}</p>
+    <a mat-stroked-button [routerLink]="['/candidate/campaigns', campaignId()]">
+      <mat-icon>arrow_back</mat-icon> Về chi tiết chiến dịch
+    </a>
+  </mat-card>
+} @else if (submitted()) {
+  <mat-card class="state-card">
+    <mat-icon class="ok-ico">task_alt</mat-icon>
+    <h2>Đã nộp bài phỏng vấn</h2>
+    <p>
+      Cảm ơn bạn! AI sẽ chấm điểm câu trả lời và nhà tuyển dụng sẽ xem xét kết quả. Bạn có thể đóng
+      trang này.
+    </p>
+    <a mat-flat-button color="primary" routerLink="/candidate/campaigns">
+      <mat-icon>work</mat-icon> Về danh sách chiến dịch
+    </a>
+  </mat-card>
+} @else if (reviewStage()) {
+  <mat-card class="state-card">
+    <mat-icon class="ok-ico">flag</mat-icon>
+    <h2>Hoàn tất phần trả lời</h2>
+    <p>
+      Bạn đã trả lời <b>{{ answeredCount() }}/{{ questions().length }}</b> câu. Câu chưa trả lời sẽ
+      được tính là bỏ qua. Nhấn nộp bài để kết thúc — <b>không thể sửa lại sau khi nộp</b>.
+    </p>
+    @if (answeredCount() === 0) {
+      <p class="warn-text">Cần trả lời ít nhất 1 câu để nộp bài.</p>
+    }
+    <button
+      mat-flat-button
+      color="primary"
+      (click)="submit()"
+      [disabled]="submitting() || answeredCount() === 0"
+    >
+      <mat-icon>done_all</mat-icon> Nộp bài phỏng vấn
+    </button>
+  </mat-card>
+} @else if (current(); as q) {
+  <div class="head">
+    <h1>Bài phỏng vấn</h1>
+    <mat-chip>Câu {{ currentIndex() + 1 }}/{{ questions().length }}</mat-chip>
+  </div>
+
+  <mat-card class="q">
+    @if (q.timeLimitSec > 0) {
+      <div class="timer" [class.low]="remainingSec() <= 10">
+        <mat-icon>timer</mat-icon>
+        <span>Còn {{ remainingSec() }}s</span>
+      </div>
+      <mat-progress-bar mode="determinate" [value]="timePct()" />
+    }
+
+    <p class="q-text">{{ q.content }}</p>
+
+    @if (uploading()) {
+      <mat-progress-bar mode="indeterminate" />
+      <p class="hint">Đang tải câu trả lời lên...</p>
+    } @else {
+      <app-audio-recorder (recorded)="onRecorded($event)" />
+      <div class="actions">
+        <button
+          mat-flat-button
+          color="primary"
+          (click)="upload()"
+          [disabled]="!hasRecording() || uploading()"
+        >
+          <mat-icon>cloud_upload</mat-icon> Nộp & câu tiếp theo
+        </button>
+        <button mat-button (click)="skip()" [disabled]="uploading()">
+          <mat-icon>skip_next</mat-icon> Bỏ qua
+        </button>
+      </div>
+    }
+  </mat-card>
+  <p class="note">
+    Mỗi câu chỉ nộp 1 lần trong bài thi này. Hết giờ: câu trả lời đang ghi sẽ tự dừng và nộp; chưa
+    ghi âm thì câu bị bỏ qua.
+  </p>
+}

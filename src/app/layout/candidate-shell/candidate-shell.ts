@@ -41,6 +41,7 @@ export class CandidateShell {
     { path: 'dashboard', icon: 'dashboard', label: 'Tổng quan' },
     { path: 'files', icon: 'description', label: 'CV / JD' },
     { path: 'practice', icon: 'mic', label: 'Luyện phỏng vấn' },
+    { path: 'campaigns', icon: 'work', label: 'Phỏng vấn tuyển dụng' },
     { path: 'cv-analysis', icon: 'insights', label: 'Phân tích CV' },
     { path: 'roadmaps', icon: 'map', label: 'Lộ trình ôn' },
     { path: 'rubrics', icon: 'rule', label: 'Tiêu chí (rubric)' },

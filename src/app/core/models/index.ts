@@ -6,3 +6,4 @@ export * from './roadmap.models';
 export * from './cv-analysis.models';
 export * from './rubric.models';
 export * from './payment.models';
+export * from './campaign.models';
