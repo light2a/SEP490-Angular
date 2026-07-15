@@ -77,7 +77,7 @@ describe('CampaignApi', () => {
     req.flush({});
   });
 
-  it('faceEnroll()/faceCheck() POST multipart FormData with a `file` part', () => {
+  it('faceEnroll()/faceCheck() POST multipart FormData with an `image` part', () => {
     const img = new Blob(['img-bytes'], { type: 'image/jpeg' });
 
     api.faceEnroll('c1', 's1', img).subscribe();
@@ -85,13 +85,13 @@ describe('CampaignApi', () => {
     expect(enroll.request.method).toBe('POST');
     const enrollBody = enroll.request.body as FormData;
     expect(enrollBody).toBeInstanceOf(FormData);
-    expect((enrollBody.get('file') as File).name).toBe('face.jpg');
+    expect((enrollBody.get('image') as File).name).toBe('face.jpg');
     enroll.flush({});
 
     api.faceCheck('c1', 's1', img, 'shot.png').subscribe();
     const check = httpMock.expectOne(`${BASE}/c1/sessions/s1/face-check`);
     const checkBody = check.request.body as FormData;
-    expect((checkBody.get('file') as File).name).toBe('shot.png');
+    expect((checkBody.get('image') as File).name).toBe('shot.png');
     check.flush({ match: true, faceCount: 1, signals: [] });
   });
 });
