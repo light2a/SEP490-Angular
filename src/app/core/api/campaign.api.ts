@@ -68,11 +68,11 @@ export class CampaignApi {
     filename = 'face.jpg',
   ): Observable<unknown> {
     const form = new FormData();
-    form.append('file', image, filename);
+    form.append('image', image, filename);
     return this.http.post(`${this.base}/${campaignId}/sessions/${sessionId}/face-enroll`, form);
   }
 
-  /** Proctoring: đối chiếu khuôn mặt trong lúc thi (multipart `file`). */
+  /** Proctoring: đối chiếu khuôn mặt trong lúc thi (multipart `image`). */
   faceCheck(
     campaignId: string,
     sessionId: string,
@@ -80,7 +80,7 @@ export class CampaignApi {
     filename = 'face.jpg',
   ): Observable<FaceCheckResult> {
     const form = new FormData();
-    form.append('file', image, filename);
+    form.append('image', image, filename);
     return this.http.post<FaceCheckResult>(
       `${this.base}/${campaignId}/sessions/${sessionId}/face-check`,
       form,
