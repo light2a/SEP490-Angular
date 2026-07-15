@@ -79,3 +79,12 @@
   color: var(--mat-sys-error);
   font-size: 14px;
 }
+.warn-chip {
+  --mat-chip-selected-container-color: var(--mat-sys-error-container);
+  --mat-chip-selected-label-text-color: var(--mat-sys-on-error-container);
+}
+.head mat-chip mat-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+}

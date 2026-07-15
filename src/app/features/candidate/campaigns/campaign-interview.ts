@@ -9,10 +9,11 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
+import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { CampaignApi } from '../../../core/api/campaign.api';
@@ -22,6 +23,9 @@ import { CampaignQuestion, StartInterviewResult } from '../../../core/models';
 import { NotifyService } from '../../../core/notify.service';
 import { AudioRecorder, RecordedAudio } from '../practice/audio-recorder';
 import { Spinner } from '../../../shared/ui/spinner';
+import { ProctorService } from './proctor.service';
+import { ProctoringConsentDialog } from './proctoring-consent-dialog';
+import { WebcamCapture } from './webcam-capture';
 
 /**
  * Trang thi phỏng vấn B2B: hỏi từng câu một, ghi âm (tái dùng AudioRecorder), đếm ngược
@@ -42,8 +46,10 @@ import { Spinner } from '../../../shared/ui/spinner';
     MatChipsModule,
     MatProgressBarModule,
     AudioRecorder,
+    WebcamCapture,
     Spinner,
   ],
+  providers: [ProctorService],
   templateUrl: './campaign-interview.html',
   styleUrl: './campaign-interview.scss',
 })
@@ -52,6 +58,10 @@ export class CampaignInterview implements OnInit {
   private practiceApi = inject(PracticeApi);
   private notify = inject(NotifyService);
   private destroyRef = inject(DestroyRef);
+  private dialog = inject(MatDialog);
+  private router = inject(Router);
+  /** Giám sát tab/paste/focus (SEC) — per-interview, public để template đọc số cảnh báo. */
+  readonly proctor = inject(ProctorService);
 
   readonly campaignId = input.required<string>();
 
@@ -60,6 +70,16 @@ export class CampaignInterview implements OnInit {
   /** Cờ cho agent proctoring: campaign yêu cầu face-enroll trước khi thi. */
   readonly faceEnrollRequired = signal(false);
   readonly sessionId = computed(() => this.session()?.sessionId ?? null);
+
+  /**
+   * Anti-cheat bật cho buổi thi này. Hiện suy ra từ `faceEnrollRequired` — tín hiệu duy nhất
+   * backend trả ở /start. Khi backend surface cờ riêng (SEC-1 `anti_cheat_enabled`), đổi ở đây.
+   */
+  readonly antiCheatOn = computed(() => this.faceEnrollRequired());
+  /** Đã đồng ý giám sát → mount WebcamCapture. */
+  readonly webcamEnabled = signal(false);
+  /** Consent chỉ hỏi 1 lần mỗi buổi. */
+  private consentAsked = false;
 
   readonly loading = signal(true);
   /** Lỗi chặn cả trang (402 org hết credit / 409 completed-closed / lỗi khác lúc start). */
@@ -97,7 +117,10 @@ export class CampaignInterview implements OnInit {
   private timer?: ReturnType<typeof setInterval>;
 
   ngOnInit(): void {
-    this.destroyRef.onDestroy(() => this.clearTimer());
+    this.destroyRef.onDestroy(() => {
+      this.clearTimer();
+      this.proctor.stop();
+    });
     // Detail đã gọi start và truyền kết quả qua navigation state → khỏi gọi lại.
     // Reload/deep-link: state mất → tự gọi start (create-or-get, idempotent phía backend).
     const pre = (history.state as { start?: StartInterviewResult } | null)?.start;
@@ -144,13 +167,37 @@ export class CampaignInterview implements OnInit {
         this.currentIndex.set(firstOpen === -1 ? this.questions().length : firstOpen);
         this.loading.set(false);
         this.startTimer();
+        this.maybeStartProctoring();
       },
       error: () => {
         // Best-effort: không đọc được trạng thái → thi từ câu đầu.
         this.loading.set(false);
         this.startTimer();
+        this.maybeStartProctoring();
       },
     });
+  }
+
+  /**
+   * Giám sát chống gian lận (SEC): xin đồng ý 1 lần TRƯỚC khi bật webcam/listener (SEC-5).
+   * Đồng ý → start proctor + mount webcam. Từ chối → rời trang (không thể tiếp tục bài giám sát).
+   * Không bao giờ chặn bài vì lý do kỹ thuật (camera denied / face fail = cờ cho HR — D13).
+   */
+  private maybeStartProctoring(): void {
+    if (!this.antiCheatOn() || this.consentAsked) return;
+    this.consentAsked = true;
+    this.dialog
+      .open(ProctoringConsentDialog, { disableClose: true, width: '480px', autoFocus: false })
+      .afterClosed()
+      .subscribe((accepted: boolean | undefined) => {
+        if (accepted) {
+          this.proctor.start(this.campaignId(), () => this.sessionId());
+          this.webcamEnabled.set(true);
+        } else {
+          this.notify.warn('Bạn đã từ chối giám sát — không thể tiếp tục bài phỏng vấn.');
+          this.router.navigate(['/candidate/campaigns', this.campaignId()]);
+        }
+      });
   }
 
   // ---- đếm ngược từng câu ----

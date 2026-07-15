@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { MatDialog } from '@angular/material/dialog';
+import { Router, provideRouter } from '@angular/router';
+import { Observable, of, throwError } from 'rxjs';
 import { CampaignApi } from '../../../core/api/campaign.api';
 import { PracticeApi } from '../../../core/api/practice.api';
 import { NotifyService } from '../../../core/notify.service';
@@ -34,22 +35,43 @@ function practiceSession(answeredIds: string[] = [], status = 'InProgress') {
 }
 
 describe('CampaignInterview (smoke)', () => {
-  let campaignApi: { start: ReturnType<typeof vi.fn> };
+  let campaignApi: {
+    start: ReturnType<typeof vi.fn>;
+    reportFlag: ReturnType<typeof vi.fn>;
+    faceEnroll: ReturnType<typeof vi.fn>;
+    faceCheck: ReturnType<typeof vi.fn>;
+  };
   let practiceApi: {
     get: ReturnType<typeof vi.fn>;
     uploadAnswer: ReturnType<typeof vi.fn>;
     submit: ReturnType<typeof vi.fn>;
   };
   let notify: Record<string, ReturnType<typeof vi.fn>>;
+  let dialogOpen: ReturnType<typeof vi.fn>;
+  // Kết quả consent dialog — mặc định KHÔNG emit (of()) để smoke test không bật proctoring.
+  let consent$: Observable<boolean | undefined>;
 
   beforeEach(() => {
-    campaignApi = { start: vi.fn().mockReturnValue(of(START)) };
+    campaignApi = {
+      start: vi.fn().mockReturnValue(of(START)),
+      reportFlag: vi.fn().mockReturnValue(of({})),
+      faceEnroll: vi.fn().mockReturnValue(of({})),
+      faceCheck: vi.fn().mockReturnValue(of({ match: true, faceCount: 1, signals: [] })),
+    };
     practiceApi = {
       get: vi.fn().mockReturnValue(of(practiceSession())),
       uploadAnswer: vi.fn(),
       submit: vi.fn(),
     };
     notify = { success: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn() };
+    consent$ = of();
+    dialogOpen = vi.fn().mockReturnValue({ afterClosed: () => consent$ });
+
+    // WebcamCapture (khi mount) gọi getUserMedia — stub để rơi vào nhánh denied, không chặn.
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { getUserMedia: vi.fn().mockRejectedValue(new Error('no camera in test')) },
+    });
 
     TestBed.configureTestingModule({
       imports: [CampaignInterview],
@@ -58,6 +80,7 @@ describe('CampaignInterview (smoke)', () => {
         { provide: CampaignApi, useValue: campaignApi },
         { provide: PracticeApi, useValue: practiceApi },
         { provide: NotifyService, useValue: notify },
+        { provide: MatDialog, useValue: { open: dialogOpen } },
       ],
     });
   });
@@ -109,6 +132,52 @@ describe('CampaignInterview (smoke)', () => {
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
 
     expect(text).toContain('hết lượt phỏng vấn');
+    fixture.destroy();
+  });
+
+  // ---- Anti-cheat proctoring wiring ----
+
+  it('opens the consent dialog when anti-cheat is on; accepting wires proctoring + webcam', () => {
+    consent$ = of(true); // ứng viên đồng ý giám sát
+    const fixture = render();
+    const cmp = fixture.componentInstance;
+
+    expect(dialogOpen).toHaveBeenCalledTimes(1);
+    expect(cmp.webcamEnabled()).toBe(true);
+    expect(cmp.proctor.active()).toBe(true);
+    // Webcam mounted trong DOM (nhánh câu hỏi đang mở).
+    expect((fixture.nativeElement as HTMLElement).querySelector('app-webcam-capture')).toBeTruthy();
+
+    // Proctor listener hoạt động: rời cửa sổ → reportFlag focus_lost.
+    window.dispatchEvent(new Event('blur'));
+    expect(campaignApi.reportFlag).toHaveBeenCalledWith('c1', 's1', 'focus_lost', expect.any(String));
+
+    fixture.destroy();
+  });
+
+  it('declining consent navigates back to the campaign detail and does not wire proctoring', () => {
+    consent$ = of(false);
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+
+    const fixture = render();
+    const cmp = fixture.componentInstance;
+
+    expect(dialogOpen).toHaveBeenCalledTimes(1);
+    expect(cmp.webcamEnabled()).toBe(false);
+    expect(cmp.proctor.active()).toBe(false);
+    expect(navigate).toHaveBeenCalledWith(['/candidate/campaigns', 'c1']);
+    expect(notify['warn']).toHaveBeenCalled();
+
+    fixture.destroy();
+  });
+
+  it('does NOT open the consent dialog when anti-cheat is off (faceEnrollRequired=false)', () => {
+    campaignApi.start.mockReturnValue(of({ ...START, faceEnrollRequired: false }));
+    const fixture = render();
+
+    expect(dialogOpen).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.webcamEnabled()).toBe(false);
     fixture.destroy();
   });
 });
