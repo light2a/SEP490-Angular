@@ -62,6 +62,7 @@ export interface StartInterviewResult {
   sessionId: string;
   campaignId: string;
   questions: CampaignQuestion[];
+  antiCheatEnabled: boolean;
   faceEnrollRequired: boolean;
 }
 

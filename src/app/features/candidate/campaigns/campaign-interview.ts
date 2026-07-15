@@ -69,13 +69,15 @@ export class CampaignInterview implements OnInit {
   readonly session = signal<StartInterviewResult | null>(null);
   /** Cờ cho agent proctoring: campaign yêu cầu face-enroll trước khi thi. */
   readonly faceEnrollRequired = signal(false);
+  /** SEC-1: campaign bật giám sát chống gian lận (backend trả ở /start, độc lập face-verify). */
+  readonly antiCheatEnabled = signal(false);
   readonly sessionId = computed(() => this.session()?.sessionId ?? null);
 
   /**
-   * Anti-cheat bật cho buổi thi này. Hiện suy ra từ `faceEnrollRequired` — tín hiệu duy nhất
-   * backend trả ở /start. Khi backend surface cờ riêng (SEC-1 `anti_cheat_enabled`), đổi ở đây.
+   * Anti-cheat bật cho buổi thi này = cờ `antiCheatEnabled` từ /start (SEC-1), HOẶC cần face-enroll
+   * (face-verify bật). Bao trùm cả 2 mảng proctoring: tab/paste/focus + webcam.
    */
-  readonly antiCheatOn = computed(() => this.faceEnrollRequired());
+  readonly antiCheatOn = computed(() => this.antiCheatEnabled() || this.faceEnrollRequired());
   /** Đã đồng ý giám sát → mount WebcamCapture. */
   readonly webcamEnabled = signal(false);
   /** Consent chỉ hỏi 1 lần mỗi buổi. */
@@ -154,6 +156,7 @@ export class CampaignInterview implements OnInit {
   private hydrate(res: StartInterviewResult): void {
     this.session.set(res);
     this.faceEnrollRequired.set(res.faceEnrollRequired);
+    this.antiCheatEnabled.set(res.antiCheatEnabled);
     this.practiceApi.get(res.sessionId).subscribe({
       next: (s) => {
         if (['Completed', 'Scoring', 'Scored'].includes(s.status)) {

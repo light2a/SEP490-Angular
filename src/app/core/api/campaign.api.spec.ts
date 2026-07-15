@@ -65,7 +65,7 @@ describe('CampaignApi', () => {
 
     const req = httpMock.expectOne(`${BASE}/c1/start`);
     expect(req.request.method).toBe('POST');
-    req.flush({ sessionId: 's1', campaignId: 'c1', questions: [], faceEnrollRequired: false });
+    req.flush({ sessionId: 's1', campaignId: 'c1', questions: [], antiCheatEnabled: false, faceEnrollRequired: false });
   });
 
   it('reportFlag() POSTs {signalType, note} to /{campaignId}/sessions/{sessionId}/flags', () => {

@@ -11,6 +11,7 @@ import { CampaignInterview } from './campaign-interview';
 const START: StartInterviewResult = {
   sessionId: 's1',
   campaignId: 'c1',
+  antiCheatEnabled: true,
   faceEnrollRequired: true,
   questions: [
     { id: 'q1', orderNo: 1, content: 'Câu hỏi số một?', timeLimitSec: 60 },
@@ -172,8 +173,8 @@ describe('CampaignInterview (smoke)', () => {
     fixture.destroy();
   });
 
-  it('does NOT open the consent dialog when anti-cheat is off (faceEnrollRequired=false)', () => {
-    campaignApi.start.mockReturnValue(of({ ...START, faceEnrollRequired: false }));
+  it('does NOT open the consent dialog when anti-cheat is off (antiCheatEnabled=false, faceEnrollRequired=false)', () => {
+    campaignApi.start.mockReturnValue(of({ ...START, antiCheatEnabled: false, faceEnrollRequired: false }));
     const fixture = render();
 
     expect(dialogOpen).not.toHaveBeenCalled();
