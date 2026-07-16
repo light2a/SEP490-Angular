@@ -14,6 +14,9 @@ export interface PackageResponse {
 
 export interface CreateOrderRequest {
   packageId: string;
+  /** Redirect PayOS về đúng khu vực người mua (candidate/employer). URL http(s) tuyệt đối; thiếu → config BE. */
+  returnUrl?: string | null;
+  cancelUrl?: string | null;
 }
 
 /** POST /payment/package (Admin) — tạo gói. interviewCredits required nếu OneTime; durationDays nếu Subscription. */
