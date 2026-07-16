@@ -22,3 +22,18 @@ export interface OrgMemberResponse {
   orgRole: OrgRole;
   joinedAt: string;
 }
+
+/** GET /auth/org — thông tin tổ chức của caller. */
+export interface OrganizationResponse {
+  id: string;
+  name: string;
+  taxCode?: string | null;
+  createdAt: string;
+  memberCount: number;
+}
+
+/** PUT /auth/org — OrgAdmin sửa tên/mã số thuế. */
+export interface UpdateOrgRequest {
+  name?: string | null;
+  taxCode?: string | null;
+}

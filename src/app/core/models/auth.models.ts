@@ -42,6 +42,12 @@ export interface ResetPasswordRequest {
   newPassword: string;
 }
 
+/** POST /auth/change-password — đổi mật khẩu khi đã đăng nhập (verify mật khẩu cũ). */
+export interface ChangePasswordRequest {
+  oldPassword: string;
+  newPassword: string; // >= 6
+}
+
 /** GET /auth/me */
 export interface UserProfile {
   id: string;

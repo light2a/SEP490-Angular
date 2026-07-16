@@ -9,6 +9,10 @@
   </button>
   <mat-menu #userMenu="matMenu">
     <div class="menu-name" mat-menu-item disabled>{{ displayName() || 'Ứng viên' }}</div>
+    <a mat-menu-item routerLink="profile">
+      <mat-icon>person</mat-icon>
+      <span>Tài khoản</span>
+    </a>
     <button mat-menu-item (click)="logout()">
       <mat-icon>logout</mat-icon>
       <span>Đăng xuất</span>

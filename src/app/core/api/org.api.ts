@@ -2,7 +2,13 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { AddOrgMemberRequest, ChangeOrgMemberRoleRequest, OrgMemberResponse } from '../models';
+import {
+  AddOrgMemberRequest,
+  ChangeOrgMemberRoleRequest,
+  OrganizationResponse,
+  OrgMemberResponse,
+  UpdateOrgRequest,
+} from '../models';
 
 /**
  * /api/v1/auth/org/members — quản lý thành viên tổ chức (A6/A6b). Chỉ OrgAdmin (Employer + org_role=OrgAdmin).
@@ -12,6 +18,17 @@ import { AddOrgMemberRequest, ChangeOrgMemberRoleRequest, OrgMemberResponse } fr
 export class OrgApi {
   private http = inject(HttpClient);
   private base = `${environment.apiBase}/auth/org/members`;
+  private orgBase = `${environment.apiBase}/auth/org`;
+
+  /** GET /auth/org — thông tin tổ chức của caller (mọi member). */
+  org(): Observable<OrganizationResponse> {
+    return this.http.get<OrganizationResponse>(this.orgBase);
+  }
+
+  /** PUT /auth/org — OrgAdmin sửa tên/mã số thuế. HrMember → 403. */
+  updateOrg(body: UpdateOrgRequest): Observable<OrganizationResponse> {
+    return this.http.put<OrganizationResponse>(this.orgBase, body);
+  }
 
   /** GET — danh sách thành viên org của caller. */
   members(): Observable<OrgMemberResponse[]> {

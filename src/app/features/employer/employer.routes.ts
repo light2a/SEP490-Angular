@@ -48,6 +48,10 @@ export const EMPLOYER_ROUTES: Routes = [
     loadComponent: () => import('./invoices/invoices').then((m) => m.EmployerInvoices),
   },
   {
+    path: 'profile',
+    loadComponent: () => import('../account/account-profile').then((m) => m.AccountProfile),
+  },
+  {
     path: 'payment/:result',
     loadComponent: () => import('./credits/employer-payment-return').then((m) => m.EmployerPaymentReturn),
   },
