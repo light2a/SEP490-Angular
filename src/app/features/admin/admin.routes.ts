@@ -15,6 +15,23 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () => import('./billing/billing-close').then((m) => m.BillingClose),
   },
   {
+    path: 'organizations',
+    loadComponent: () =>
+      import('./organizations/admin-organizations').then((m) => m.AdminOrganizations),
+  },
+  {
+    path: 'users',
+    loadComponent: () => import('./users/admin-users').then((m) => m.AdminUsers),
+  },
+  {
+    path: 'campaigns',
+    loadComponent: () => import('./campaigns/admin-campaigns').then((m) => m.AdminCampaigns),
+  },
+  {
+    path: 'orders',
+    loadComponent: () => import('./orders/admin-orders').then((m) => m.AdminOrders),
+  },
+  {
     path: 'profile',
     loadComponent: () => import('../account/account-profile').then((m) => m.AccountProfile),
   },

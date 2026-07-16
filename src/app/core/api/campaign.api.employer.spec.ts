@@ -102,6 +102,14 @@ describe('CampaignApi (Employer/HR)', () => {
     req.flush({ campaignId: 'c1', totalCandidates: 0, results: [] });
   });
 
+  it('overrideResult() PUTs {score,result,note} to /results/{sessionId}/override', () => {
+    api.overrideResult('c1', 's1', { score: 90, result: 'Pass', note: 'tốt' }).subscribe();
+    const req = httpMock.expectOne(`${BASE}/c1/results/s1/override`);
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual({ score: 90, result: 'Pass', note: 'tốt' });
+    req.flush(null);
+  });
+
   it('exportResults() GETs the CSV export as a blob', () => {
     api.exportResults('c1').subscribe();
     const req = httpMock.expectOne(`${BASE}/c1/results/export?format=csv`);

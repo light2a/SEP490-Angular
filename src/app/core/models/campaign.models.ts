@@ -207,11 +207,25 @@ export interface CampaignResultRow {
   rank: number;
   candidateId: string;
   sessionId: string;
+  /** Điểm effective (đã áp override HR nếu có). */
   totalScore: number;
   /** 'Pass' | 'Fail' | null (ngưỡng chưa đặt → HR quyết tay). */
   result?: string | null;
   scoredAt: string;
   flags: FlagDto[];
+  /** E11b — điểm AI gốc (không đổi khi HR override). */
+  aiScore: number;
+  overrideScore?: number | null;
+  overrideResult?: string | null;
+  overrideNote?: string | null;
+  overriddenAt?: string | null;
+}
+
+/** PUT /campaign/{id}/results/{sessionId}/override — HR chốt điểm cuối. Score+Result null = clear (về AI). */
+export interface OverrideResultRequest {
+  score?: number | null;
+  result?: string | null;
+  note: string;
 }
 export interface CampaignResultsResponse {
   campaignId: string;
@@ -282,6 +296,19 @@ export interface CandidateDetailResponse {
 export interface PatchCandidateRequest {
   email?: string | null;
   fullName?: string | null;
+}
+
+/** GET /campaign/admin/campaigns — Admin oversight: 1 campaign cross-org. */
+export interface AdminCampaignListItem {
+  id: string;
+  orgId: string;
+  title: string;
+  domain?: string | null;
+  status: CampaignStatus;
+  maxCandidates?: number | null;
+  startsAt?: string | null;
+  expiresAt?: string | null;
+  createdAt: string;
 }
 
 /** POST /campaign/{id}/candidates/invite — mời theo shortlist. */

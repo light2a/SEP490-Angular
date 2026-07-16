@@ -15,6 +15,7 @@ import {
   InvitationInfo,
   InviteShortlistRequest,
   InviteShortlistResponse,
+  OverrideResultRequest,
   JoinCampaignResult,
   MyCampaignDetail,
   MyCampaignSummary,
@@ -163,6 +164,15 @@ export class CampaignApi {
   /** GET /campaign/{id}/results — ranking + pass/fail + flags. */
   getResults(id: string): Observable<CampaignResultsResponse> {
     return this.http.get<CampaignResultsResponse>(`${this.base}/${id}/results`);
+  }
+
+  /** PUT /campaign/{id}/results/{sessionId}/override — HR chốt/sửa điểm cuối (E11b). Clear = score/result null. */
+  overrideResult(
+    id: string,
+    sessionId: string,
+    body: OverrideResultRequest,
+  ): Observable<unknown> {
+    return this.http.put(`${this.base}/${id}/results/${sessionId}/override`, body);
   }
 
   /** GET /campaign/{id}/results/export?format=csv — tải CSV (blob). */

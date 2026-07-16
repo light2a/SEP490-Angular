@@ -8,9 +8,13 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { FormsModule } from '@angular/forms';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { CampaignApi } from '../../../core/api/campaign.api';
 import { extractErrorMessage } from '../../../core/api/http-utils';
-import { CampaignResultsResponse } from '../../../core/models';
+import { CampaignResultRow, CampaignResultsResponse } from '../../../core/models';
 import { NotifyService } from '../../../core/notify.service';
 import { EmptyState } from '../../../shared/ui/empty-state';
 import { Spinner } from '../../../shared/ui/spinner';
@@ -27,6 +31,10 @@ import { Spinner } from '../../../shared/ui/spinner';
     MatIconModule,
     MatTableModule,
     MatTooltipModule,
+    FormsModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatSelectModule,
     Spinner,
     EmptyState,
   ],
@@ -84,6 +92,14 @@ import { Spinner } from '../../../shared/ui/spinner';
               <th mat-header-cell *matHeaderCellDef>Điểm</th>
               <td mat-cell *matCellDef="let r">
                 <strong>{{ r.totalScore }}</strong>
+                @if (r.overrideScore != null || r.overrideResult) {
+                  <mat-chip
+                    class="chip-hr"
+                    [matTooltip]="'Điểm AI gốc: ' + r.aiScore + (r.overrideNote ? ' · ' + r.overrideNote : '')"
+                    highlighted
+                    >HR chỉnh</mat-chip
+                  >
+                }
               </td>
             </ng-container>
 
@@ -123,10 +139,51 @@ import { Spinner } from '../../../shared/ui/spinner';
               </td>
             </ng-container>
 
+            <ng-container matColumnDef="actions">
+              <th mat-header-cell *matHeaderCellDef>Điều chỉnh</th>
+              <td mat-cell *matCellDef="let r">
+                <button mat-button (click)="startEdit(r)">
+                  <mat-icon>tune</mat-icon> Điều chỉnh
+                </button>
+              </td>
+            </ng-container>
+
             <tr mat-header-row *matHeaderRowDef="cols"></tr>
             <tr mat-row *matRowDef="let row; columns: cols"></tr>
           </table>
         </mat-card>
+
+        @if (editing(); as sid) {
+          <mat-card class="edit-card">
+            <h3>Điều chỉnh kết quả (HR chốt) — buổi {{ short(sid) }}</h3>
+            <p class="hint">Điểm AI = gợi ý. Bỏ trống điểm + kết quả và bấm "Về AI" để huỷ điều chỉnh.</p>
+            <div class="edit-row">
+              <mat-form-field appearance="outline">
+                <mat-label>Điểm mới</mat-label>
+                <input matInput type="number" [(ngModel)]="editScore" />
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Kết quả</mat-label>
+                <mat-select [(ngModel)]="editResult">
+                  <mat-option [value]="''">— giữ theo ngưỡng —</mat-option>
+                  <mat-option value="Pass">Đạt</mat-option>
+                  <mat-option value="Fail">Không đạt</mat-option>
+                </mat-select>
+              </mat-form-field>
+            </div>
+            <mat-form-field appearance="outline" class="full">
+              <mat-label>Lý do điều chỉnh (bắt buộc)</mat-label>
+              <input matInput [(ngModel)]="editNote" />
+            </mat-form-field>
+            <div class="edit-actions">
+              <button mat-flat-button color="primary" [disabled]="saving()" (click)="saveOverride(sid)">
+                Lưu điều chỉnh
+              </button>
+              <button mat-stroked-button [disabled]="saving()" (click)="clearOverride(sid)">Về AI</button>
+              <button mat-button [disabled]="saving()" (click)="cancelEdit()">Huỷ</button>
+            </div>
+          </mat-card>
+        }
       }
     }
   `,
@@ -196,6 +253,40 @@ import { Spinner } from '../../../shared/ui/spinner';
         --mdc-chip-label-text-color: #7a4f00;
         background: #ffecb3;
       }
+      .chip-hr {
+        --mdc-chip-label-text-color: #4a148c;
+        background: #e1bee7;
+        margin-left: 6px;
+        font-size: 11px;
+      }
+      .edit-card {
+        margin-top: 16px;
+        padding: 20px;
+        max-width: 560px;
+      }
+      .edit-card h3 {
+        margin: 0 0 4px;
+      }
+      .edit-card .hint {
+        margin: 0 0 12px;
+        font-size: 13px;
+        color: var(--mat-sys-on-surface-variant);
+      }
+      .edit-row {
+        display: flex;
+        gap: 12px;
+      }
+      .edit-row mat-form-field {
+        flex: 1;
+      }
+      .full {
+        width: 100%;
+      }
+      .edit-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
     `,
   ],
 })
@@ -208,10 +299,76 @@ export class CampaignResults implements OnInit {
   readonly data = signal<CampaignResultsResponse | null>(null);
   readonly loading = signal(true);
   readonly exporting = signal(false);
-  readonly cols = ['rank', 'candidate', 'score', 'result', 'scoredAt', 'flags'];
+  readonly cols = ['rank', 'candidate', 'score', 'result', 'scoredAt', 'flags', 'actions'];
+
+  // E11b — override inline form state
+  readonly editing = signal<string | null>(null);
+  editScore: number | null = null;
+  editResult = '';
+  editNote = '';
+  readonly saving = signal(false);
 
   ngOnInit(): void {
     this.load();
+  }
+
+  startEdit(r: CampaignResultRow): void {
+    this.editing.set(r.sessionId);
+    this.editScore = r.overrideScore ?? null;
+    this.editResult = r.overrideResult ?? '';
+    this.editNote = r.overrideNote ?? '';
+  }
+
+  cancelEdit(): void {
+    this.editing.set(null);
+  }
+
+  saveOverride(sessionId: string): void {
+    if (!this.editNote.trim()) {
+      this.notify.warn('Vui lòng nhập lý do điều chỉnh.');
+      return;
+    }
+    this.saving.set(true);
+    this.api
+      .overrideResult(this.campaignId(), sessionId, {
+        score: this.editScore,
+        result: this.editResult || null,
+        note: this.editNote.trim(),
+      })
+      .subscribe({
+        next: () => {
+          this.saving.set(false);
+          this.editing.set(null);
+          this.notify.success('Đã lưu điều chỉnh.');
+          this.load();
+        },
+        error: (e: HttpErrorResponse) => {
+          this.saving.set(false);
+          this.notify.error(extractErrorMessage(e) ?? 'Lưu điều chỉnh thất bại.');
+        },
+      });
+  }
+
+  clearOverride(sessionId: string): void {
+    this.saving.set(true);
+    this.api
+      .overrideResult(this.campaignId(), sessionId, {
+        score: null,
+        result: null,
+        note: this.editNote.trim() || 'Huỷ điều chỉnh',
+      })
+      .subscribe({
+        next: () => {
+          this.saving.set(false);
+          this.editing.set(null);
+          this.notify.success('Đã về điểm AI.');
+          this.load();
+        },
+        error: (e: HttpErrorResponse) => {
+          this.saving.set(false);
+          this.notify.error(extractErrorMessage(e) ?? 'Thao tác thất bại.');
+        },
+      });
   }
 
   load(): void {
