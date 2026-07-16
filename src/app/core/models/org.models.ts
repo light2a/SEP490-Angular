@@ -37,3 +37,15 @@ export interface UpdateOrgRequest {
   name?: string | null;
   taxCode?: string | null;
 }
+
+/** GET /auth/admin/users — Admin oversight: 1 user cross-org. */
+export interface AdminUserResponse {
+  id: string;
+  email?: string | null;
+  fullName?: string | null;
+  role: string;
+  orgId?: string | null;
+  orgName?: string | null;
+  orgRole?: string | null;
+  createdAt: string;
+}

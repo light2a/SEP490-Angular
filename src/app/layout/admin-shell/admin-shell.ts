@@ -39,8 +39,12 @@ export class AdminShell {
 
   readonly nav: NavItem[] = [
     { path: 'dashboard', icon: 'dashboard', label: 'Tổng quan' },
+    { path: 'organizations', icon: 'domain', label: 'Tổ chức' },
+    { path: 'users', icon: 'group', label: 'Người dùng' },
+    { path: 'campaigns', icon: 'work', label: 'Chiến dịch' },
+    { path: 'orders', icon: 'receipt_long', label: 'Đơn hàng' },
     { path: 'packages', icon: 'inventory_2', label: 'Gói credit' },
-    { path: 'billing', icon: 'receipt_long', label: 'Chốt kỳ postpaid' },
+    { path: 'billing', icon: 'event_repeat', label: 'Chốt kỳ postpaid' },
   ];
 
   toggle(): void {
