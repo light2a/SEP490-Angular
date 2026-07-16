@@ -15,6 +15,13 @@ export const routes: Routes = [
       import('./features/invite/invitation-landing').then((m) => m.InvitationLanding),
   },
   {
+    // Đích PayOS redirect DÙNG CHUNG (fallback khi order không truyền returnUrl riêng): /payment/success|cancel.
+    // Role-agnostic, tự đối soát theo orderCode; back-link credit theo role.
+    path: 'payment/:result',
+    loadComponent: () =>
+      import('./features/account/payment-return').then((m) => m.PaymentReturnShared),
+  },
+  {
     path: 'candidate',
     canActivate: [roleGuard('Candidate')],
     loadComponent: () =>
