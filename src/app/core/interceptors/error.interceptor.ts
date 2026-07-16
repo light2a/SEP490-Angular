@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { catchError, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { extractErrorMessage, isPublicAuthUrl } from '../api/http-utils';
+import { AuthStore } from '../auth/auth.store';
 import { NotifyService } from '../notify.service';
 
 /**
@@ -13,6 +14,7 @@ import { NotifyService } from '../notify.service';
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const notify = inject(NotifyService);
   const router = inject(Router);
+  const auth = inject(AuthStore);
   const publicAuth = isPublicAuthUrl(req.url);
 
   return next(req).pipe(
@@ -29,11 +31,14 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
           router.navigate(['/auth/login']);
           break;
         case 402:
-          // 402 từ /campaign/* (B2B) = ORG hết credit — ứng viên không mua được,
-          // để feature hiển thị thông điệp phù hợp thay vì đẩy đi mua credit cá nhân.
+          // 402 từ /campaign/* (B2B start) = ORG hết credit — để feature hiển thị thông điệp
+          // phù hợp thay vì đẩy đi mua credit. Còn lại: điều hướng trang mua credit đúng khu vực
+          // (Employer → /employer/credits, ứng viên → /candidate/credits).
           if (!req.url.startsWith(`${environment.apiBase}/campaign`)) {
             notify.warn('Bạn đã hết credit. Vui lòng mua thêm để tiếp tục.');
-            router.navigate(['/candidate/credits']);
+            router.navigate([
+              auth.primaryRole() === 'Employer' ? '/employer/credits' : '/candidate/credits',
+            ]);
           }
           break;
         case 403:

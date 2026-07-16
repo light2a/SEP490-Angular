@@ -8,6 +8,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { extractErrorMessage } from '../../../core/api/http-utils';
 import { AuthStore } from '../../../core/auth/auth.store';
+import { homeRouteFor } from '../../../core/auth/home-route';
 
 @Component({
   selector: 'app-register',
@@ -59,6 +60,10 @@ import { AuthStore } from '../../../core/auth/auth.store';
     <div class="links">
       <span>Đã có tài khoản?</span>
       <a routerLink="/auth/login">Đăng nhập</a>
+    </div>
+    <div class="links">
+      <span>Bạn là nhà tuyển dụng?</span>
+      <a routerLink="/auth/register-org">Đăng ký tổ chức</a>
     </div>
   `,
   styles: [
@@ -122,7 +127,7 @@ export class Register {
     this.auth.register(this.form.getRawValue()).subscribe({
       next: () => {
         this.auth.loadProfile();
-        this.router.navigateByUrl('/candidate/dashboard');
+        this.router.navigateByUrl(homeRouteFor(this.auth.primaryRole()));
       },
       error: (e: HttpErrorResponse) => {
         this.loading.set(false);
