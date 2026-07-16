@@ -1,7 +1,13 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, finalize, map, of, shareReplay, tap, throwError } from 'rxjs';
 import { AuthApi } from '../api/auth.api';
-import { AuthResponse, LoginRequest, PlatformRole, RegisterRequest } from '../models';
+import {
+  AuthResponse,
+  LoginRequest,
+  PlatformRole,
+  RegisterOrgRequest,
+  RegisterRequest,
+} from '../models';
 import { decodeJwt } from './jwt.util';
 import { tokenStorage } from './token-storage';
 
@@ -19,6 +25,8 @@ export class AuthStore {
   readonly userId = computed(() => this.decoded()?.userId ?? null);
   readonly roles = computed<string[]>(() => this.decoded()?.roles ?? []);
   readonly orgRole = computed(() => this.decoded()?.orgRole ?? null);
+  /** org_id trong JWT (user thuộc org B2B) — dùng cho gate billing/quản thành viên. */
+  readonly orgId = computed(() => this.decoded()?.orgId ?? null);
   /** Role ưu tiên hiển thị (Admin > Employer > Candidate). */
   readonly primaryRole = computed<PlatformRole | null>(() => {
     const r = this.roles();
@@ -63,6 +71,10 @@ export class AuthStore {
   }
   register(body: RegisterRequest): Observable<AuthResponse> {
     return this.authApi.register(body).pipe(tap((r) => this.setSession(r)));
+  }
+  /** Đăng ký tổ chức (B2B): tạo Employer + Organization + OrgAdmin, trả JWT mang org_id/org_role. */
+  registerOrg(body: RegisterOrgRequest): Observable<AuthResponse> {
+    return this.authApi.registerOrg(body).pipe(tap((r) => this.setSession(r)));
   }
 
   /** Nạp tên hiển thị (best-effort). */

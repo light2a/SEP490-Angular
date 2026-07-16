@@ -45,3 +45,5 @@ Thumbs.db
 
 # Env local (đường dẫn API…) — dùng .env.example làm mẫu
 .env
+.vercel
+.env*

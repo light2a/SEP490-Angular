@@ -1,0 +1,47 @@
+:host {
+  display: block;
+  height: 100vh;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+
+  .title {
+    font-size: 18px;
+    font-weight: 600;
+  }
+  .spacer {
+    flex: 1 1 auto;
+  }
+}
+
+.container {
+  height: calc(100vh - 64px);
+}
+
+.sidenav {
+  width: 240px;
+  border-right: 1px solid var(--mat-sys-outline-variant);
+  padding-top: 8px;
+}
+
+.content {
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.menu-name {
+  font-weight: 600;
+  opacity: 1 !important;
+}
+
+@media (max-width: 720px) {
+  .sidenav {
+    width: 220px;
+  }
+  .content {
+    padding: 16px;
+  }
+}

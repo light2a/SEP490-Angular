@@ -1,15 +1,29 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
+  CampaignResponse,
+  CampaignResultsResponse,
+  CandidateDetailResponse,
+  CandidateListItem,
+  CreateCampaignRequest,
+  PatchCandidateRequest,
+  CreateInvitationsRequest,
+  CreateInvitationsResponse,
   FaceCheckResult,
   InvitationInfo,
+  InviteShortlistRequest,
+  InviteShortlistResponse,
   JoinCampaignResult,
   MyCampaignDetail,
   MyCampaignSummary,
   ProctorSignalType,
+  QuestionItem,
+  ScreenCandidatesResponse,
   StartInterviewResult,
+  TransitionStatusRequest,
+  UpdateCampaignRequest,
 } from '../models';
 
 /**
@@ -85,5 +99,119 @@ export class CampaignApi {
       `${this.base}/${campaignId}/sessions/${sessionId}/face-check`,
       form,
     );
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // EMPLOYER / HR — quản lý campaign (role Employer, JWT mang org_id). Owner = ORG.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /** GET /campaign — danh sách campaign của org. */
+  listCampaigns(): Observable<CampaignResponse[]> {
+    return this.http.get<CampaignResponse[]>(this.base);
+  }
+
+  /** GET /campaign/{id} — chi tiết (Employer). Ngoài org → 404. */
+  getCampaign(id: string): Observable<CampaignResponse> {
+    return this.http.get<CampaignResponse>(`${this.base}/${id}`);
+  }
+
+  /** POST /campaign — tạo Draft. 400 nếu thiếu question / ngày quá khứ / Σweight sai. */
+  createCampaign(body: CreateCampaignRequest): Observable<CampaignResponse> {
+    return this.http.post<CampaignResponse>(this.base, body);
+  }
+
+  /** PUT /campaign/{id} — sửa metadata + JD/criteria (chỉ Draft → khác 409). */
+  updateCampaign(id: string, body: UpdateCampaignRequest): Observable<CampaignResponse> {
+    return this.http.put<CampaignResponse>(`${this.base}/${id}`, body);
+  }
+
+  /** PUT /campaign/{id}/questions — ghi đè câu hỏi (chỉ Draft). */
+  updateQuestions(id: string, questions: QuestionItem[]): Observable<CampaignResponse> {
+    return this.http.put<CampaignResponse>(`${this.base}/${id}/questions`, questions);
+  }
+
+  /** POST /campaign/{id}/publish → Active (sinh campaign_criteria từ text/structured). */
+  publishCampaign(id: string): Observable<CampaignResponse> {
+    return this.http.post<CampaignResponse>(`${this.base}/${id}/publish`, {});
+  }
+
+  /** PUT /campaign/{id}/status — Active→Closed→Archived. */
+  transitionStatus(id: string, body: TransitionStatusRequest): Observable<CampaignResponse> {
+    return this.http.put<CampaignResponse>(`${this.base}/${id}/status`, body);
+  }
+
+  /** DELETE /campaign/{id} — soft-delete. */
+  deleteCampaign(id: string): Observable<unknown> {
+    return this.http.delete(`${this.base}/${id}`);
+  }
+
+  // ── Mời ứng viên (đường 1: email) ──────────────────────────────────────────
+  /** POST /campaign/{id}/invitations — mời theo danh sách email → {created[], failed[]}. */
+  createInvitations(
+    id: string,
+    body: CreateInvitationsRequest,
+  ): Observable<CreateInvitationsResponse> {
+    return this.http.post<CreateInvitationsResponse>(`${this.base}/${id}/invitations`, body);
+  }
+
+  /** POST /campaign/{id}/invitations/{invId}/reissue — cấp lại token + gửi mail. */
+  reissueInvitation(id: string, invitationId: string): Observable<unknown> {
+    return this.http.post(`${this.base}/${id}/invitations/${invitationId}/reissue`, {});
+  }
+
+  // ── Kết quả + xếp hạng (E5/E6) ──────────────────────────────────────────────
+  /** GET /campaign/{id}/results — ranking + pass/fail + flags. */
+  getResults(id: string): Observable<CampaignResultsResponse> {
+    return this.http.get<CampaignResultsResponse>(`${this.base}/${id}/results`);
+  }
+
+  /** GET /campaign/{id}/results/export?format=csv — tải CSV (blob). */
+  exportResults(id: string, format = 'csv'): Observable<Blob> {
+    return this.http.get(`${this.base}/${id}/results/export?format=${encodeURIComponent(format)}`, {
+      responseType: 'blob',
+    });
+  }
+
+  // ── Lọc CV / shortlist (C13–C15) ────────────────────────────────────────────
+  /** POST /campaign/{id}/candidates — bulk upload CV (multipart `files`) → sàng lọc. */
+  uploadCandidateCvs(id: string, files: File[]): Observable<ScreenCandidatesResponse> {
+    const form = new FormData();
+    for (const f of files) form.append('files', f, f.name);
+    return this.http.post<ScreenCandidatesResponse>(`${this.base}/${id}/candidates`, form);
+  }
+
+  /** GET /campaign/{id}/candidates — danh sách CV đã sàng (filter tuỳ chọn). */
+  getCandidates(
+    id: string,
+    opts?: { status?: string; minScore?: number; skill?: string; sort?: string },
+  ): Observable<CandidateListItem[]> {
+    let params = new HttpParams();
+    if (opts?.status) params = params.set('status', opts.status);
+    if (opts?.minScore != null) params = params.set('minScore', String(opts.minScore));
+    if (opts?.skill) params = params.set('skill', opts.skill);
+    if (opts?.sort) params = params.set('sort', opts.sort);
+    return this.http.get<CandidateListItem[]>(`${this.base}/${id}/candidates`, { params });
+  }
+
+  /** GET /campaign/{id}/candidates/{cid} — chi tiết ứng viên (điểm + reasoning từng tiêu chí + CV key). */
+  getCandidate(id: string, candidateId: string): Observable<CandidateDetailResponse> {
+    return this.http.get<CandidateDetailResponse>(`${this.base}/${id}/candidates/${candidateId}`);
+  }
+
+  /** PATCH /campaign/{id}/candidates/{cid} — bổ sung email/fullName (Invited → 409). */
+  patchCandidate(
+    id: string,
+    candidateId: string,
+    body: PatchCandidateRequest,
+  ): Observable<unknown> {
+    return this.http.patch(`${this.base}/${id}/candidates/${candidateId}`, body);
+  }
+
+  /** POST /campaign/{id}/candidates/invite — mời shortlist theo candidateIds. */
+  inviteShortlist(
+    id: string,
+    body: InviteShortlistRequest,
+  ): Observable<InviteShortlistResponse> {
+    return this.http.post<InviteShortlistResponse>(`${this.base}/${id}/candidates/invite`, body);
   }
 }

@@ -7,3 +7,4 @@ export * from './cv-analysis.models';
 export * from './rubric.models';
 export * from './payment.models';
 export * from './campaign.models';
+export * from './org.models';

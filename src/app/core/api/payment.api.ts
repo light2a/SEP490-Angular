@@ -3,10 +3,14 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
+  CloseBillingPeriodRequest,
   CreateOrderRequest,
+  CreatePackageRequest,
+  InvoiceResponse,
   OrderResponse,
   OrderStatusResponse,
   PackageResponse,
+  UpdatePackageRequest,
 } from '../models';
 
 /** /api/v1/payment/* — enum trả dạng SỐ (giải mã bằng bảng nhãn trong enums.ts). */
@@ -37,5 +41,35 @@ export class PaymentApi {
   }
   cancelOrder(id: string): Observable<unknown> {
     return this.http.delete(`${this.base}/order/${id}`);
+  }
+
+  // ── Invoice / postpaid (Employer) ───────────────────────────────────────────
+  /** GET /payment/me/invoices — hoá đơn postpaid của org. */
+  myInvoices(): Observable<InvoiceResponse[]> {
+    return this.http.get<InvoiceResponse[]>(`${this.base}/me/invoices`);
+  }
+  invoice(id: string): Observable<InvoiceResponse> {
+    return this.http.get<InvoiceResponse>(`${this.base}/me/invoices/${id}`);
+  }
+  /** POST /payment/invoices/{id}/pay — tạo order tất toán → checkoutUrl PayOS. */
+  payInvoice(id: string): Observable<OrderResponse> {
+    return this.http.post<OrderResponse>(`${this.base}/invoices/${id}/pay`, {});
+  }
+
+  // ── Package admin (Admin) ───────────────────────────────────────────────────
+  createPackage(body: CreatePackageRequest): Observable<PackageResponse> {
+    return this.http.post<PackageResponse>(`${this.base}/package`, body);
+  }
+  updatePackage(id: string, body: UpdatePackageRequest): Observable<PackageResponse> {
+    return this.http.put<PackageResponse>(`${this.base}/package/${id}`, body);
+  }
+  deletePackage(id: string): Observable<unknown> {
+    return this.http.delete(`${this.base}/package/${id}`);
+  }
+
+  // ── Billing close (Admin) ───────────────────────────────────────────────────
+  /** POST /payment/admin/invoices/close — chốt kỳ postpaid 1 org → InvoiceResponse. */
+  closeBillingPeriod(body: CloseBillingPeriodRequest): Observable<InvoiceResponse> {
+    return this.http.post<InvoiceResponse>(`${this.base}/admin/invoices/close`, body);
   }
 }

@@ -22,5 +22,18 @@ export const routes: Routes = [
     loadChildren: () =>
       import('./features/candidate/candidate.routes').then((m) => m.CANDIDATE_ROUTES),
   },
+  {
+    path: 'employer',
+    canActivate: [roleGuard('Employer')],
+    loadComponent: () =>
+      import('./layout/employer-shell/employer-shell').then((m) => m.EmployerShell),
+    loadChildren: () => import('./features/employer/employer.routes').then((m) => m.EMPLOYER_ROUTES),
+  },
+  {
+    path: 'admin',
+    canActivate: [roleGuard('Admin')],
+    loadComponent: () => import('./layout/admin-shell/admin-shell').then((m) => m.AdminShell),
+    loadChildren: () => import('./features/admin/admin.routes').then((m) => m.ADMIN_ROUTES),
+  },
   { path: '**', redirectTo: 'candidate/dashboard' },
 ];
