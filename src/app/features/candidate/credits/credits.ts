@@ -55,7 +55,14 @@ export class Credits {
 
   buy(pkg: PackageResponse): void {
     this.buying.set(pkg.id);
-    this.api.createOrder({ packageId: pkg.id }).subscribe({
+    const origin = window.location.origin;
+    this.api
+      .createOrder({
+        packageId: pkg.id,
+        returnUrl: `${origin}/candidate/payment/success`,
+        cancelUrl: `${origin}/candidate/payment/cancel`,
+      })
+      .subscribe({
       next: (order) => {
         this.buying.set(null);
         if (order.checkoutUrl) {

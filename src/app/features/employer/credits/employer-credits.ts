@@ -163,7 +163,14 @@ export class EmployerCredits {
 
   buy(pkg: PackageResponse): void {
     this.buying.set(pkg.id);
-    this.api.createOrder({ packageId: pkg.id }).subscribe({
+    const origin = window.location.origin;
+    this.api
+      .createOrder({
+        packageId: pkg.id,
+        returnUrl: `${origin}/employer/payment/success`,
+        cancelUrl: `${origin}/employer/payment/cancel`,
+      })
+      .subscribe({
       next: (order) => {
         this.buying.set(null);
         if (order.checkoutUrl) {
