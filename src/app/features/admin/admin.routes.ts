@@ -14,5 +14,9 @@ export const ADMIN_ROUTES: Routes = [
     path: 'billing',
     loadComponent: () => import('./billing/billing-close').then((m) => m.BillingClose),
   },
+  {
+    path: 'profile',
+    loadComponent: () => import('../account/account-profile').then((m) => m.AccountProfile),
+  },
   { path: '**', redirectTo: 'dashboard' },
 ];

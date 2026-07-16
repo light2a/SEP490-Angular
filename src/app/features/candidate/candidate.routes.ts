@@ -38,6 +38,11 @@ export const CANDIDATE_ROUTES: Routes = [
     loadComponent: () => import('./roadmaps/roadmap-detail').then((m) => m.RoadmapDetail),
   },
   { path: 'rubrics', loadComponent: () => import('./rubrics/rubrics').then((m) => m.Rubrics) },
+  {
+    path: 'profile',
+    loadComponent: () =>
+      import('../account/account-profile').then((m) => m.AccountProfile),
+  },
   { path: 'credits', loadComponent: () => import('./credits/credits').then((m) => m.Credits) },
   {
     path: 'payment/:result',

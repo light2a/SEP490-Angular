@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   AuthResponse,
+  ChangePasswordRequest,
   ForgotPasswordRequest,
   LoginRequest,
   RefreshTokenRequest,
@@ -42,6 +43,10 @@ export class AuthApi {
   // PUT /me trả về chuỗi literal → responseType text.
   updateMe(body: UpdateProfileRequest): Observable<string> {
     return this.http.put(`${this.base}/me`, body, { responseType: 'text' });
+  }
+  /** Đổi mật khẩu khi đã đăng nhập (204). Sai mật khẩu cũ → 400. */
+  changePassword(body: ChangePasswordRequest): Observable<unknown> {
+    return this.http.post(`${this.base}/change-password`, body);
   }
   // Các endpoint OTP trả chuỗi thuần → responseType text (tránh JSON parse lỗi).
   forgotPassword(body: ForgotPasswordRequest): Observable<string> {
