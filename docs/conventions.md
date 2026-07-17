@@ -31,5 +31,5 @@
 - JWT giải mã ở `core/auth/jwt.util.ts` — **dò nhiều key** (`sub`/`nameid`/URI dài) vì backend .NET dùng `ClaimTypes.*`.
 
 ## Đặt tên & thư mục
-- 1 feature = 1 thư mục dưới `features/candidate/<feature>/`. Component con (vd `audio-recorder`) đặt cạnh nơi dùng.
+- Feature gom theo mặt sản phẩm ở top-level: `features/{auth,candidate,employer,admin,invite,account}/`. 1 feature = 1 thư mục con (vd `features/candidate/practice/`). Component con (vd `audio-recorder`, `proctor.service`/`webcam-capture` trong `candidate/campaigns/`) đặt cạnh nơi dùng.
 - Model/enum tập trung ở `core/models` (barrel `index.ts`).

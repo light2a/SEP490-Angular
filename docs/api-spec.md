@@ -52,7 +52,7 @@
 - `GET /my-campaigns/{id}` → summary + `{description,criteria[],sessionId?,started}`.
 - `POST /{id}/start` → `{sessionId,campaignId,questions[{id,orderNo,content,timeLimitSec}],faceEnrollRequired}`. Create-or-get (idempotent). **402** = ORG hết credit (errorInterceptor KHÔNG đẩy đi mua credit cá nhân với `/campaign/*`) · **409** = completed/closed.
 - **Trả lời + nộp bài dùng lại endpoint Interview** (`/interview/practice/sessions/{sessionId}/answers|submit|GET`) — session B2B cùng shape.
-- Proctoring (UI làm sau, API đã expose ở `CampaignApi`): `POST /{campaignId}/sessions/{sessionId}/flags` `{signalType: tab_switch|paste|focus_lost, note?}` · `POST .../face-enroll` + `.../face-check` (multipart `file`) → face-check trả `{match,faceCount,signals[]}`.
+- Proctoring (UI đã wire ở `features/candidate/campaigns`, API ở `CampaignApi`): `POST /{campaignId}/sessions/{sessionId}/flags` `{signalType: tab_switch|paste|focus_lost, note?}` · `POST .../face-enroll` + `.../face-check` (multipart `file`) → face-check trả `{match,faceCount,signals[]}`.
 
 ## KHÔNG gọi từ FE
 AIService (internal-only, đã gỡ khỏi gateway) · `/internal/*` · webhook PayOS.
