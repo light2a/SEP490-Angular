@@ -1,6 +1,6 @@
 # ISAS Frontend (Angular)
 
-Frontend cho nền tảng phỏng vấn AI **ISAS**. Đợt 1: **B2C — Ứng viên luyện tập**.
+Frontend cho nền tảng phỏng vấn AI **ISAS** — đã dựng cả **B2C** (ứng viên luyện tập), **B2B** (console Employer/HR + ứng viên tuyển dụng + chống gian lận proctoring) và **Admin** (giám sát toàn nền tảng).
 Backend: 6 microservice .NET sau Gateway (repo `../isas-server`). FE chỉ gọi Gateway `/api/v1/*`.
 
 ## Bắt đầu nhanh

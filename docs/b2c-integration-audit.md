@@ -1,5 +1,7 @@
 # ISAS B2C — Báo cáo audit tích hợp (5-agent, 2026-07-15)
 
+> ⚠️ ARCHIVED — audit point-in-time 2026-07-15, đã bị superseded; giữ làm lịch sử.
+
 > Kết quả workflow 5 agent song song (contract · business · docs · infra · QA) + tổng hợp. 46 findings. Đây là **audit trước khi implement** — chưa sửa code, chỉ đề xuất.
 
 ## 1. Tóm tắt
