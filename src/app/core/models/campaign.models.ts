@@ -1,4 +1,4 @@
-import { CampaignStatus, CandidateInterviewStatus } from './enums';
+import { CampaignStatus, CandidateInterviewStatus, QuestionKind } from './enums';
 
 /** Tín hiệu proctoring (anti-cheat B2B) gửi lên backend — flag cho HR, KHÔNG auto-hủy. */
 export type ProctorSignalType = 'tab_switch' | 'paste' | 'focus_lost';
@@ -55,6 +55,8 @@ export interface CampaignQuestion {
   orderNo: number;
   content: string;
   timeLimitSec: number;
+  /** Phỏng vấn THÍCH ỨNG (INT-17): Seed = câu campaign gốc; FollowUp/Clarify/NewQuestion = AI sinh động. */
+  kind?: QuestionKind;
 }
 
 /** POST /campaign/{id}/start — create-or-get session (402 = org hết credit, 409 = completed/closed). */
