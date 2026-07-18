@@ -12,4 +12,9 @@ export const AUTH_ROUTES: Routes = [
     path: 'forgot-password',
     loadComponent: () => import('./forgot-password/forgot-password').then((m) => m.ForgotPassword),
   },
+  {
+    // Đích backend 302 về sau khi đăng nhập Google (token nằm ở fragment URL).
+    path: 'google/callback',
+    loadComponent: () => import('./google-callback/google-callback').then((m) => m.GoogleCallback),
+  },
 ];
