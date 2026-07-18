@@ -185,3 +185,85 @@ describe('InterviewAvatar', () => {
     expect(api.speech).toHaveBeenCalledWith('s1', 'q2');
   });
 });
+
+/**
+ * Trần thời gian khoá mic. Bối cảnh: đo trên production 2026-07-19, câu chưa cache mất ~6,4s tổng
+ * hợp giọng. Nếu vendor chậm bất thường thì ứng viên bị khoá mic VĨNH VIỄN — trợ năng "nghe câu
+ * hỏi" biến thành lỗi chặn bài thi. Thà mất giọng đọc còn hơn chặn người ta làm bài.
+ */
+describe('InterviewAvatar — không khoá mic vô thời hạn', () => {
+  let api: { speech: ReturnType<typeof vi.fn> };
+  let speechSubject: Subject<Blob>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    speechSubject = new Subject<Blob>();
+    api = { speech: vi.fn().mockReturnValue(speechSubject.asObservable()) };
+
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
+    HTMLMediaElement.prototype.pause = vi.fn();
+    localStorage.clear();
+
+    TestBed.configureTestingModule({
+      imports: [InterviewAvatar],
+      providers: [{ provide: PracticeApi, useValue: api }],
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  function make() {
+    const fixture = TestBed.createComponent(InterviewAvatar);
+    fixture.componentRef.setInput('sessionId', 's1');
+    fixture.componentRef.setInput('questionId', 'q1');
+    fixture.componentRef.setInput('locked', false);
+    return fixture;
+  }
+
+  it('TTS chậm quá trần → mở khoá mic, KHÔNG bắt ứng viên chờ mãi', () => {
+    const fixture = make();
+    const speaking: boolean[] = [];
+    fixture.componentInstance.speakingChange.subscribe((v) => speaking.push(v));
+    fixture.detectChanges();
+
+    // Đang tải: mic phải khoá.
+    expect(fixture.componentInstance.speaking()).toBe(true);
+
+    vi.advanceTimersByTime(9500);   // quá trần 9s
+
+    expect(fixture.componentInstance.speaking()).toBe(false);
+    expect(speaking.at(-1)).toBe(false);            // cha nhận tín hiệu mở khoá
+    expect(fixture.componentInstance.speechSlow()).toBe(true);
+  });
+
+  it('giọng đọc về MUỘN sau khi đã mở khoá → không tự phát (tránh nổ tiếng giữa lúc ghi âm)', () => {
+    const fixture = make();
+    fixture.detectChanges();
+    vi.advanceTimersByTime(9500);
+
+    speechSubject.next(new Blob(['late'], { type: 'audio/mpeg' }));
+    speechSubject.complete();
+
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.speaking()).toBe(false);
+  });
+
+  it('giọng đọc về TRƯỚC trần → vẫn phát bình thường, mic vẫn khoá lúc đang phát', () => {
+    const fixture = make();
+    fixture.detectChanges();
+
+    vi.advanceTimersByTime(2000);                    // còn trong trần
+    speechSubject.next(new Blob(['ok'], { type: 'audio/mpeg' }));
+    speechSubject.complete();
+
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalled();
+    // Ràng buộc CŨ không được nới: đang phát thì mic vẫn phải khoá.
+    expect(fixture.componentInstance.speaking()).toBe(true);
+    expect(fixture.componentInstance.speechSlow()).toBe(false);
+  });
+});

@@ -34,6 +34,19 @@ export const AVATAR_MODEL_URL = new InjectionToken<string | null>('AVATAR_MODEL_
 const MUTE_STORAGE_KEY = 'isas.avatar.muted';
 
 /**
+ * Trần thời gian được phép khoá mic để CHỜ TẢI giọng đọc. Quá ngưỡng → mở khoá, ứng viên trả lời
+ * bình thường; giọng đọc tới muộn thì chỉ nằm sẵn ở nút nghe lại.
+ *
+ * Vì sao cần: đo trên production 2026-07-19, câu chưa cache mất ~6,4s tổng hợp (đã cache 0,55s).
+ * Nếu vendor chậm bất thường hoặc mạng đứt, ứng viên sẽ bị KHOÁ VĨNH VIỄN — biến trợ năng "nghe câu
+ * hỏi" thành lỗi chặn bài thi. Thà mất giọng đọc còn hơn chặn người ta làm bài.
+ *
+ * ⚠ Chỉ nới nhánh ĐANG CHỜ TẢI. Lúc đang thực sự PHÁT thì mic vẫn phải khoá, nếu không tiếng loa
+ * lọt vào bài ghi → Whisper bóc cả câu hỏi lẫn câu trả lời → chấm sai.
+ */
+const SPEECH_LOAD_TIMEOUT_MS = 9000;
+
+/**
  * Avatar 3D đọc câu hỏi phỏng vấn — DÙNG CHUNG cho B2C (luyện tập) và B2B (campaign).
  *
  * ⚠ RÀNG BUỘC AN TOÀN DỮ LIỆU (không phải tuỳ chọn UX): loa phát câu hỏi trong lúc mic đang ghi thì
@@ -55,6 +68,9 @@ const MUTE_STORAGE_KEY = 'isas.avatar.muted';
       @if (showCharacter()) {
         <div class="stage" [class.talking]="playing()">
           <canvas #canvas class="stage-canvas"></canvas>
+          @if (!sceneReady()) {
+            <div class="stage-skeleton" aria-hidden="true"></div>
+          }
           @if (loadingSpeech()) {
             <div class="stage-badge">Đang chuẩn bị giọng đọc…</div>
           }
@@ -114,6 +130,26 @@ const MUTE_STORAGE_KEY = 'isas.avatar.muted';
         background: color-mix(in srgb, var(--mat-sys-primary) 8%, transparent);
         border-radius: 12px;
         overflow: hidden;
+      }
+      /* Khối chờ trong lúc three.js tải lazy + cảnh chưa dựng: nhìn "đang chạy" thay vì ô trống. */
+      .stage-skeleton {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          100deg,
+          transparent 30%,
+          color-mix(in srgb, var(--mat-sys-on-surface) 6%, transparent) 50%,
+          transparent 70%
+        );
+        background-size: 200% 100%;
+        animation: stage-shimmer 1.4s ease-in-out infinite;
+      }
+      @keyframes stage-shimmer {
+        from { background-position: 150% 0; }
+        to { background-position: -50% 0; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .stage-skeleton { animation: none; }
       }
       .stage-canvas {
         width: 100%;
@@ -185,6 +221,10 @@ export class InterviewAvatar {
   readonly ttsFailed = signal(false);
   /** Trình duyệt chặn tự phát (chính sách autoplay) → phải mời người dùng bấm nút. */
   readonly autoplayBlocked = signal(false);
+  /** Quá trần chờ tải: đã mở khoá mic, giọng đọc (nếu về) chỉ còn ở nút nghe lại. */
+  readonly speechSlow = signal(false);
+  /** Cảnh 3D đã dựng xong chưa — chưa xong thì hiện placeholder thay vì canvas trống trơn. */
+  readonly sceneReady = signal(false);
   readonly muted = signal(readStoredMute());
 
   /**
@@ -209,6 +249,7 @@ export class InterviewAvatar {
     if (this.locked()) return 'Đang ghi âm — avatar im lặng';
     if (this.muted()) return 'Đã tắt tiếng giọng đọc';
     if (this.loadingSpeech()) return 'Đang tải giọng đọc…';
+    if (this.speechSlow()) return 'Giọng đọc tải chậm — bạn cứ trả lời, bấm ↻ để nghe lại';
     if (this.playing()) return 'Avatar đang đọc câu hỏi…';
     if (this.ttsFailed()) return 'Giọng đọc không khả dụng';
     if (this.autoplayBlocked()) return 'Bấm ▶ để nghe avatar đọc câu hỏi';
@@ -218,6 +259,7 @@ export class InterviewAvatar {
   private canvasRef = viewChild<ElementRef<HTMLCanvasElement>>('canvas');
   private scene?: AvatarScene;
   private speech = new AvatarSpeech();
+  private loadTimer?: ReturnType<typeof setTimeout>;
   /** Cache blob theo questionId: nghe lại không tốn thêm một lượt gọi TTS. */
   private cache = new Map<string, Blob>();
   /** Câu đã đọc rồi — tránh đọc lại khi component render lại vì lý do khác. */
@@ -237,11 +279,16 @@ export class InterviewAvatar {
       const scene = new AvatarScene();
       this.scene = scene;
       // Lỗi WebGL/model → ẩn nhân vật, KHÔNG để lỗi nổi lên chặn bài phỏng vấn.
-      scene.init(canvas, { modelUrl: this.modelUrl }).catch(() => {
-        this.webglAvailable.set(false);
-        scene.dispose();
-        this.scene = undefined;
-      });
+      scene
+        .init(canvas, { modelUrl: this.modelUrl })
+        // Cảnh dựng xong mới bỏ placeholder: three.js tải lazy nên có một khoảng canvas còn trống,
+        // đúng khoảng đó người dùng nhìn thấy "ô trống" và tưởng hỏng.
+        .then(() => this.sceneReady.set(true))
+        .catch(() => {
+          this.webglAvailable.set(false);
+          scene.dispose();
+          this.scene = undefined;
+        });
     });
 
     // Đổi câu → đọc câu mới. Đang ghi âm → im ngay lập tức.
@@ -260,6 +307,7 @@ export class InterviewAvatar {
     });
 
     this.destroyRef.onDestroy(() => {
+      this.clearLoadTimeout();
       this.pendingRequest?.unsubscribe();
       this.speech.dispose();
       this.scene?.dispose();
@@ -271,6 +319,7 @@ export class InterviewAvatar {
    * chạy xong trước cả lúc `getUserMedia` mở được mic, nên không có khung audio nào lọt vào bài ghi.
    */
   stopSpeaking(): void {
+    this.clearLoadTimeout();
     this.pendingRequest?.unsubscribe();
     this.pendingRequest = undefined;
     this.loadingSpeech.set(false);
@@ -304,8 +353,10 @@ export class InterviewAvatar {
     }
 
     this.ttsFailed.set(false);
+    this.speechSlow.set(false);
     this.loadingSpeech.set(true);
     this.emitSpeaking();
+    this.armLoadTimeout();
     try {
       this.pendingRequest = this.subscribeSpeech(questionId);
     } catch {
@@ -320,10 +371,13 @@ export class InterviewAvatar {
     return this.api.speech(this.sessionId(), questionId).subscribe({
       next: (blob) => {
         this.pendingRequest = undefined;
+        this.clearLoadTimeout();
         this.loadingSpeech.set(false);
         this.cache.set(questionId, blob);
         // Ứng viên có thể đã bấm ghi âm trong lúc chờ tải → tuyệt đối không phát nữa.
-        if (this.locked() || this.muted()) {
+        // Quá trần chờ (speechSlow) cũng KHÔNG tự phát: mic đã mở khoá nên tiếng có thể nổ ra đúng
+        // lúc người ta vừa bấm ghi âm. Để dành ở nút nghe lại, người dùng chủ động bấm.
+        if (this.locked() || this.muted() || this.speechSlow()) {
           this.emitSpeaking();
           return;
         }
@@ -353,6 +407,28 @@ export class InterviewAvatar {
     this.playing.set(value);
     this.scene?.setSpeaking(value);
     this.emitSpeaking();
+  }
+
+  /**
+   * Hết trần chờ mà giọng đọc chưa về → nhả khoá mic. KHÔNG huỷ request: nó có thể về muộn và nằm
+   * sẵn trong cache cho nút nghe lại, đồng thời đã hâm nóng cache phía server cho lần sau.
+   */
+  private armLoadTimeout(): void {
+    this.clearLoadTimeout();
+    this.loadTimer = setTimeout(() => {
+      this.loadTimer = undefined;
+      if (!this.loadingSpeech()) return;
+      this.loadingSpeech.set(false);
+      this.speechSlow.set(true);
+      this.emitSpeaking();   // ← mở khoá nút ghi âm cho trang cha
+    }, SPEECH_LOAD_TIMEOUT_MS);
+  }
+
+  private clearLoadTimeout(): void {
+    if (this.loadTimer) {
+      clearTimeout(this.loadTimer);
+      this.loadTimer = undefined;
+    }
   }
 
   private emitSpeaking(): void {
