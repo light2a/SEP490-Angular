@@ -130,6 +130,29 @@ describe('CampaignApi (Employer/HR)', () => {
     req.flush(null);
   });
 
+  // AI4 — HR drill-down transcript: đường dẫn phải nằm dưới /results/{sessionId} (org-scoped như override).
+  it('getSessionTranscript() GETs /campaign/{id}/results/{sessionId}/transcript', () => {
+    api.getSessionTranscript('c1', 's1').subscribe((t) => {
+      expect(t.questions[0].needsReview).toBe(true);
+      expect(t.questions[0].scores[0].reasoning).toBe('Ứng viên nói "…"');
+    });
+    const req = httpMock.expectOne(`${BASE}/c1/results/s1/transcript`);
+    expect(req.request.method).toBe('GET');
+    req.flush({
+      sessionId: 's1',
+      questions: [
+        {
+          questionId: 'q1',
+          orderNo: 1,
+          content: 'Giới thiệu bản thân',
+          transcript: 'Tôi là…',
+          needsReview: true,
+          scores: [{ criterionId: 'cr1', score: 3, reasoning: 'Ứng viên nói "…"' }],
+        },
+      ],
+    });
+  });
+
   it('exportResults() GETs the CSV export as a blob', () => {
     api.exportResults('c1').subscribe();
     const req = httpMock.expectOne(`${BASE}/c1/results/export?format=csv`);

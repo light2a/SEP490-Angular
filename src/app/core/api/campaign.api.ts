@@ -22,6 +22,7 @@ import {
   ProctorSignalType,
   QuestionItem,
   ScreenCandidatesResponse,
+  SessionTranscriptResponse,
   StartInterviewResult,
   TransitionStatusRequest,
   UpdateCampaignRequest,
@@ -173,6 +174,16 @@ export class CampaignApi {
     body: OverrideResultRequest,
   ): Observable<unknown> {
     return this.http.put(`${this.base}/${id}/results/${sessionId}/override`, body);
+  }
+
+  /**
+   * GET /campaign/{id}/results/{sessionId}/transcript — transcript + dẫn chứng AI 1 buổi (AI4).
+   * 404 = buổi chưa chấm / ngoài org · 502 = InterviewService lỗi (transcript đọc xuyên service).
+   */
+  getSessionTranscript(id: string, sessionId: string): Observable<SessionTranscriptResponse> {
+    return this.http.get<SessionTranscriptResponse>(
+      `${this.base}/${id}/results/${sessionId}/transcript`,
+    );
   }
 
   /** GET /campaign/{id}/results/export?format=csv — tải CSV (blob). */
