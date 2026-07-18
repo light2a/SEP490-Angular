@@ -59,16 +59,6 @@ export class AuthStore {
    * trả JWT Candidate mới, KHÔNG kèm refreshToken). Thay thế session hiện tại (nếu có) vì token
    * thuộc về account candidate được provision riêng; giữ refreshToken cũ sẽ refresh nhầm user cũ.
    */
-  /**
-   * Nạp phiên từ token nhận qua REDIRECT thay vì response HTTP (đăng nhập Google: OAuth là điều
-   * hướng cả trang nên token về qua fragment URL, không qua XHR). Đi chung setSession để token
-   * chỉ có MỘT đường vào store/localStorage.
-   */
-  setSessionFromRedirect(res: AuthResponse): void {
-    this.setSession(res);
-    this.displayName.set(null);
-  }
-
   setAccessOnlySession(accessToken: string): void {
     tokenStorage.setAccessOnly(accessToken);
     this.accessToken.set(accessToken);
@@ -85,6 +75,14 @@ export class AuthStore {
   /** Đăng ký tổ chức (B2B): tạo Employer + Organization + OrgAdmin, trả JWT mang org_id/org_role. */
   registerOrg(body: RegisterOrgRequest): Observable<AuthResponse> {
     return this.authApi.registerOrg(body).pipe(tap((r) => this.setSession(r)));
+  }
+  /**
+   * Đăng nhập Google, chặng 2: đổi mã dùng-một-lần (nhận qua URL callback) lấy phiên. Token về qua
+   * response HTTP y như `login()` — KHÔNG đi qua URL — nên dùng chung `setSession`, token chỉ có
+   * MỘT đường vào store/localStorage.
+   */
+  loginWithGoogleCode(code: string): Observable<AuthResponse> {
+    return this.authApi.exchangeGoogleCode(code).pipe(tap((r) => this.setSession(r)));
   }
 
   /** Nạp tên hiển thị (best-effort). */

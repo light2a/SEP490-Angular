@@ -162,7 +162,7 @@ export class Login {
   /**
    * OAuth Google là điều hướng CẢ TRANG (rời app sang accounts.google.com rồi quay lại), không
    * phải XHR — nên phải đổi location chứ không gọi HttpClient. Backend sẽ 302 về
-   * /auth/google/callback kèm token ở fragment.
+   * /auth/google/callback kèm MÃ dùng-một-lần (token không đi qua URL; trang callback đổi mã lấy phiên).
    */
   loginWithGoogle(): void {
     window.location.href = `${environment.apiBase}/auth/login-google`;

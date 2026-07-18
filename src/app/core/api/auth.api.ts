@@ -34,6 +34,14 @@ export class AuthApi {
   refresh(body: RefreshTokenRequest): Observable<AuthResponse> {
     return this.http.post<AuthResponse>(`${this.base}/refresh`, body);
   }
+  /**
+   * Chặng 2 của đăng nhập Google: đổi mã dùng-một-lần (backend gửi về qua `?code=` trên URL
+   * callback) lấy phiên thật. Token KHÔNG bao giờ đi qua URL — mã sống vài chục giây và chết ngay
+   * sau lần đổi đầu, nên đọc trộm được URL cũng không dựng lại được phiên.
+   */
+  exchangeGoogleCode(code: string): Observable<AuthResponse> {
+    return this.http.post<AuthResponse>(`${this.base}/google/exchange`, { code });
+  }
   logout(refreshToken: string): Observable<unknown> {
     return this.http.post(`${this.base}/logout`, { refreshToken });
   }
