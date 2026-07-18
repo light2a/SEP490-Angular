@@ -17,6 +17,7 @@ import { PracticeApi } from '../../../core/api/practice.api';
 import { NotifyService } from '../../../core/notify.service';
 import {
   FileRecord,
+  JD_TEXT_MAX_CHARS,
   JOB_CATEGORIES,
   JobCategory,
   PracticeSessionSummary,
@@ -65,7 +66,7 @@ export class PracticeList {
     jobCategory: ['BA', [Validators.required]],
     cvId: [''],
     jdId: [''],
-    jdText: [''],
+    jdText: ['', [Validators.maxLength(JD_TEXT_MAX_CHARS)]],
   });
 
   /**
@@ -74,10 +75,15 @@ export class PracticeList {
    */
   readonly usingJdText = signal(false);
 
+  /** Giới hạn ký tự JD nhập tay + độ dài hiện tại (bộ đếm) — khớp hằng số BE (vượt → 400). */
+  readonly jdTextMaxChars = JD_TEXT_MAX_CHARS;
+  readonly jdTextLength = signal(0);
+
   constructor() {
     this.form.controls.jdText.valueChanges.subscribe((v) => {
       const using = v.trim().length > 0;
       this.usingJdText.set(using);
+      this.jdTextLength.set(v.length);
       // Khoá dropdown file bằng CODE (không dùng [disabled] trong template — reactive form cảnh báo).
       // emitEvent:false để không kích lại vòng valueChanges của chính form.
       if (using) this.form.controls.jdId.disable({ emitEvent: false });

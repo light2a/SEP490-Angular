@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { of } from 'rxjs';
 import { FilesApi } from '../../../core/api/files.api';
 import { PracticeApi } from '../../../core/api/practice.api';
+import { JD_TEXT_MAX_CHARS } from '../../../core/models';
 import { NotifyService } from '../../../core/notify.service';
 import { PracticeList } from './practice-list';
 
@@ -72,6 +73,32 @@ describe('PracticeList — JD dạng text', () => {
     );
     expect(cmp.usingJdText()).toBe(false);
     expect(cmp.form.controls.jdId.enabled).toBe(true);
+    fixture.destroy();
+  });
+
+  // Cap độ dài JD: người dùng phải THẤY giới hạn trước khi gửi (BE mới enforce thật → 400).
+  it('textarea JD có maxlength + bộ đếm khớp hằng số dùng chung với BE', () => {
+    const fixture = render();
+    const cmp = fixture.componentInstance;
+
+    const textarea: HTMLTextAreaElement = fixture.nativeElement.querySelector(
+      'textarea[formControlName="jdText"]',
+    );
+    expect(textarea.getAttribute('maxlength')).toBe(String(JD_TEXT_MAX_CHARS));
+
+    cmp.form.patchValue({ jdText: 'abc' });
+    fixture.detectChanges();
+    expect(cmp.jdTextLength()).toBe(3);
+    expect(fixture.nativeElement.textContent).toContain(`3 / ${JD_TEXT_MAX_CHARS}`);
+
+    // Vượt ngưỡng → form invalid ngay ở FE (khỏi gửi request chắc chắn bị BE trả 400).
+    cmp.form.patchValue({ jdText: 'x'.repeat(JD_TEXT_MAX_CHARS + 1) });
+    expect(cmp.form.controls.jdText.hasError('maxlength')).toBe(true);
+
+    // Sát ngưỡng → vẫn hợp lệ ("tối đa", không phải "nhỏ hơn").
+    cmp.form.patchValue({ jdText: 'x'.repeat(JD_TEXT_MAX_CHARS) });
+    expect(cmp.form.controls.jdText.valid).toBe(true);
+
     fixture.destroy();
   });
 });
