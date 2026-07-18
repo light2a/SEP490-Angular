@@ -67,6 +67,22 @@ export class PracticeSession implements OnInit {
   readonly generating = computed(() => this.status() === 'GeneratingQuestions');
   readonly scored = computed(() => this.status() === 'Scored');
 
+  /**
+   * Điểm per-answer chỉ mang `criterionId` (không kèm tên) nên mọi dòng breakdown dưới từng câu
+   * trước đây hiện trơ "Điểm tiêu chí". Tên nằm sẵn ở `result.criteriaScores[]` trên CÙNG response
+   * → tra ngược theo id, không cần API mới. (Bắt ở e2e 2026-07-18.)
+   */
+  private readonly criterionNames = computed(() => {
+    const map = new Map<string, string>();
+    for (const c of this.result()?.criteriaScores ?? []) map.set(c.criterionId, c.name);
+    return map;
+  });
+
+  /** Tên tiêu chí; buổi chưa chấm xong (result null) thì lùi về nhãn chung. */
+  criterionName(criterionId: string): string {
+    return this.criterionNames().get(criterionId) ?? 'Điểm tiêu chí';
+  }
+
   ngOnInit(): void {
     this.load();
     this.destroyRef.onDestroy(() => this.stopPoll());

@@ -114,6 +114,15 @@ export enum PackageType {
   OneTime = 1,
   Subscription = 2,
 }
+/** Ví: B2C (User) luôn Prepaid; Org có thể Postpaid (hạn mức + hoá đơn cuối kỳ). */
+export enum PaymentMode {
+  Prepaid = 0,
+  Postpaid = 1,
+}
+export enum CreditAccountStatus {
+  Active = 0,
+  Suspended = 1,
+}
 export enum InvoiceStatus {
   Issued = 0,
   Paid = 1,
