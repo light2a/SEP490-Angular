@@ -9,7 +9,12 @@ import { PaymentApi } from '../../../core/api/payment.api';
 import { extractErrorMessage } from '../../../core/api/http-utils';
 import { AuthStore } from '../../../core/auth/auth.store';
 import { NotifyService } from '../../../core/notify.service';
-import { OrderResponse, OrderStatus, PackageResponse } from '../../../core/models';
+import {
+  CreditAccountResponse,
+  OrderResponse,
+  OrderStatus,
+  PackageResponse,
+} from '../../../core/models';
 import { OrderStatusPipe, PackageTypePipe, VndPipe } from '../../../shared/pipes';
 import { EmptyState } from '../../../shared/ui/empty-state';
 import { Spinner } from '../../../shared/ui/spinner';
@@ -43,6 +48,20 @@ import { Spinner } from '../../../shared/ui/spinner';
     @if (loading()) {
       <app-spinner />
     } @else {
+      @if (account(); as acc) {
+        <mat-card class="balance">
+          <div class="bal-main">
+            <span class="bal-num">{{ acc.remainingCredits }}</span>
+            <span class="bal-unit">credit khả dụng của tổ chức</span>
+          </div>
+          @if (acc.reservedCredits > 0) {
+            <p class="bal-sub">
+              {{ acc.reservedCredits }} credit đang giữ cho buổi phỏng vấn ứng viên chưa hoàn tất.
+            </p>
+          }
+        </mat-card>
+      }
+
       <h2>Gói credit</h2>
       <div class="grid">
         @for (p of packages(); track p.id) {
@@ -103,6 +122,29 @@ import { Spinner } from '../../../shared/ui/spinner';
         padding: 12px 16px;
         margin-bottom: 12px;
       }
+      .balance {
+        padding: 20px;
+        margin-bottom: 20px;
+      }
+      .bal-main {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+      }
+      .bal-num {
+        font-size: 34px;
+        font-weight: 700;
+        line-height: 1;
+        color: var(--mat-sys-primary);
+      }
+      .bal-unit {
+        color: var(--mat-sys-on-surface-variant);
+      }
+      .bal-sub {
+        margin: 8px 0 0;
+        font-size: 13px;
+        color: var(--mat-sys-on-surface-variant);
+      }
       .grid {
         display: flex;
         flex-wrap: wrap;
@@ -138,6 +180,8 @@ export class EmployerCredits {
   private auth = inject(AuthStore);
 
   readonly OrderStatus = OrderStatus;
+  /** Số dư ví ORG (chủ ví suy từ claim org_id). HrMember vẫn XEM được, chỉ không mua được. */
+  readonly account = signal<CreditAccountResponse | null>(null);
   readonly packages = signal<PackageResponse[]>([]);
   readonly orders = signal<OrderResponse[]>([]);
   readonly loading = signal(true);
@@ -151,6 +195,7 @@ export class EmployerCredits {
 
   load(): void {
     this.loading.set(true);
+    this.api.myAccount().subscribe({ next: (a) => this.account.set(a) });
     this.api.packages().subscribe({ next: (p) => this.packages.set(p) });
     this.api.myOrders().subscribe({
       next: (o) => {

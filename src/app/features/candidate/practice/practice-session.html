@@ -33,7 +33,8 @@
             <div class="scores">
               @for (sc of q.answer.scores; track sc.criterionId) {
                 <div class="score-row">
-                  <span>Điểm tiêu chí</span><b>{{ sc.score | number: '1.0-1' }}</b>
+                  <span>{{ criterionName(sc.criterionId) }}</span
+                  ><b>{{ sc.score | number: '1.0-1' }}</b>
                 </div>
               }
             </div>

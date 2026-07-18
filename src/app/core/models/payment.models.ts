@@ -1,4 +1,28 @@
-import { InvoiceStatus, OrderKind, OrderStatus, OwnerType, PackageType } from './enums';
+import {
+  CreditAccountStatus,
+  InvoiceStatus,
+  OrderKind,
+  OrderStatus,
+  OwnerType,
+  PackageType,
+  PaymentMode,
+} from './enums';
+
+/**
+ * GET /payment/me/account — số dư ví của chính người đăng nhập (chủ ví suy từ JWT:
+ * thuộc org → ví Org, không → ví cá nhân). Chưa từng mua credit → 200 với 0 credit.
+ */
+export interface CreditAccountResponse {
+  ownerType: OwnerType;
+  ownerId: string;
+  paymentMode: PaymentMode;
+  status: CreditAccountStatus;
+  remainingCredits: number;
+  reservedCredits: number;
+  creditLimit?: number | null;
+  periodUsage?: number | null;
+  updatedAt: string;
+}
 
 /** GET /payment/package (enum dạng SỐ). */
 export interface PackageResponse {

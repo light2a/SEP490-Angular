@@ -5,6 +5,29 @@ h1 {
   color: var(--mat-sys-on-surface-variant);
   margin: 0 0 20px;
 }
+.balance {
+  padding: 20px;
+  margin-bottom: 24px;
+}
+.bal-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.bal-num {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--mat-sys-primary);
+}
+.bal-unit {
+  color: var(--mat-sys-on-surface-variant);
+}
+.bal-sub {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--mat-sys-on-surface-variant);
+}
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
