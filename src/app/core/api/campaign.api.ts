@@ -219,6 +219,17 @@ export class CampaignApi {
     return this.http.get<CandidateDetailResponse>(`${this.base}/${id}/candidates/${candidateId}`);
   }
 
+  /**
+   * GET /campaign/{id}/candidates/{cid}/cv — CV gốc. Backend trả THẲNG file PDF (không phải URL/key),
+   * mà endpoint cần JWT → phải tải bằng HttpClient (interceptor gắn token) rồi tự tạo link tải,
+   * không dùng được <a href> trực tiếp. 404 = chưa archive CV / ngoài org.
+   */
+  downloadCandidateCv(id: string, candidateId: string): Observable<Blob> {
+    return this.http.get(`${this.base}/${id}/candidates/${candidateId}/cv`, {
+      responseType: 'blob',
+    });
+  }
+
   /** PATCH /campaign/{id}/candidates/{cid} — bổ sung email/fullName (Invited → 409). */
   patchCandidate(
     id: string,

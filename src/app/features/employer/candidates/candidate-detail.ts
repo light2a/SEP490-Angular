@@ -101,11 +101,13 @@ const STATUS_LABEL: Record<string, string> = {
 
             @if (c.cvFileUrl) {
               <mat-divider />
-              <p class="cv-key">
-                <mat-icon>description</mat-icon>
-                <span>CV: {{ c.cvFileUrl }}</span>
-                <span class="muted">(khoá lưu trữ S3)</span>
-              </p>
+              <div class="cv-row">
+                <button mat-flat-button color="primary" [disabled]="downloading()" (click)="downloadCv()">
+                  <mat-icon>download</mat-icon>
+                  {{ downloading() ? 'Đang tải…' : 'Tải CV gốc (PDF)' }}
+                </button>
+                <span class="cv-key muted" [title]="c.cvFileUrl">{{ c.cvFileUrl }}</span>
+              </div>
             }
           </mat-card-content>
         </mat-card>
@@ -246,11 +248,15 @@ const STATUS_LABEL: Record<string, string> = {
       .callout p {
         margin: 4px 0 0;
       }
-      .cv-key {
-        display: inline-flex;
+      .cv-row {
+        display: flex;
         align-items: center;
-        gap: 6px;
-        margin: 12px 0 0;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+      }
+      .cv-key {
+        font-size: 12px;
         color: var(--mat-sys-on-surface-variant);
         word-break: break-all;
       }
@@ -329,6 +335,7 @@ export class CandidateDetail implements OnInit {
 
   readonly loading = signal(true);
   readonly busy = signal(false);
+  readonly downloading = signal(false);
   readonly candidate = signal<CandidateDetailResponse | null>(null);
 
   editFullName = '';
@@ -351,6 +358,36 @@ export class CandidateDetail implements OnInit {
         this.loading.set(false);
         this.candidate.set(null);
         this.notify.error(extractErrorMessage(e) ?? 'Không tải được thông tin ứng viên.');
+      },
+    });
+  }
+
+  /**
+   * Tải CV gốc. Endpoint trả thẳng bytes PDF và đòi JWT → phải lấy blob qua HttpClient rồi tạo
+   * object URL để trình duyệt lưu file (mở tab mới bằng URL trần sẽ 401 vì thiếu header).
+   */
+  downloadCv(): void {
+    this.downloading.set(true);
+    this.api.downloadCandidateCv(this.campaignId(), this.candidateId()).subscribe({
+      next: (blob) => {
+        this.downloading.set(false);
+        const name = (this.candidate()?.fullName ?? '').trim();
+        // Tên file theo họ tên cho HR dễ tra; không có tên → lùi về id (bám tên backend đặt).
+        const safe = name ? name.replace(/[^\p{L}\p{N}]+/gu, '_') : `candidate_${this.candidateId()}`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${safe}.pdf`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      },
+      error: (e: HttpErrorResponse) => {
+        this.downloading.set(false);
+        this.notify.error(
+          e.status === 404
+            ? 'Không tìm thấy file CV gốc (chưa lưu trữ được lúc tải lên).'
+            : (extractErrorMessage(e) ?? 'Tải CV thất bại.'),
+        );
       },
     });
   }

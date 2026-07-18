@@ -153,6 +153,15 @@ describe('CampaignApi (Employer/HR)', () => {
     });
   });
 
+  // CV gốc: backend trả THẲNG file PDF (cần JWT) → phải request kiểu blob, không phải link trần.
+  it('downloadCandidateCv() GETs the CV as a blob', () => {
+    api.downloadCandidateCv('c1', 'cand1').subscribe();
+    const req = httpMock.expectOne(`${BASE}/c1/candidates/cand1/cv`);
+    expect(req.request.method).toBe('GET');
+    expect(req.request.responseType).toBe('blob');
+    req.flush(new Blob(['%PDF-1.4'], { type: 'application/pdf' }));
+  });
+
   it('exportResults() GETs the CSV export as a blob', () => {
     api.exportResults('c1').subscribe();
     const req = httpMock.expectOne(`${BASE}/c1/results/export?format=csv`);
