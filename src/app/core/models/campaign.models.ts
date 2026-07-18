@@ -66,6 +66,8 @@ export interface StartInterviewResult {
   questions: CampaignQuestion[];
   antiCheatEnabled: boolean;
   faceEnrollRequired: boolean;
+  /** INT-17: campaign bật thích ứng → sẽ có câu hỏi AI sinh ở đuôi (sau khi trả lời hết seed). */
+  adaptiveEnabled?: boolean;
 }
 
 /** POST .../face-check — kết quả đối chiếu khuôn mặt. */
@@ -117,6 +119,11 @@ export interface CampaignResponse {
   antiCheatEnabled: boolean;
   faceVerifyEnabled: boolean;
   passScorePct?: number | null;
+  /** INT-17: bật phỏng vấn THÍCH ỨNG cho chiến dịch (AI hỏi thêm ở đuôi sau khi hết câu seed). */
+  adaptiveEnabled: boolean;
+  /** INT-17: trần câu thích ứng / tổng câu. null = dùng mặc định phía backend. */
+  maxFollowUps?: number | null;
+  maxQuestions?: number | null;
   startsAt?: string | null;
   expiresAt?: string | null;
   questions: CampaignQuestionResponse[];
@@ -151,6 +158,10 @@ export interface CreateCampaignRequest {
   antiCheatEnabled: boolean;
   faceVerifyEnabled: boolean;
   passScorePct?: number | null;
+  /** INT-17: bật phỏng vấn thích ứng (không gửi → backend mặc định false = luồng tĩnh). */
+  adaptiveEnabled: boolean;
+  maxFollowUps?: number | null;
+  maxQuestions?: number | null;
   jdText?: string | null;
   criteriaText?: string | null;
   criteria?: CriterionItem[];
@@ -168,6 +179,10 @@ export interface UpdateCampaignRequest {
   antiCheatEnabled?: boolean;
   faceVerifyEnabled?: boolean;
   passScorePct?: number | null;
+  /** INT-17: undefined/null = KHÔNG đổi (giữ giá trị cũ), như antiCheatEnabled. */
+  adaptiveEnabled?: boolean;
+  maxFollowUps?: number | null;
+  maxQuestions?: number | null;
   jdText?: string | null;
   criteriaText?: string | null;
   criteria?: CriterionItem[];

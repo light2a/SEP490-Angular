@@ -130,7 +130,29 @@ function toIso(local: string | null | undefined): string | null {
             <mat-slide-toggle formControlName="faceVerifyEnabled"
               >Bật xác thực khuôn mặt</mat-slide-toggle
             >
+            <mat-slide-toggle formControlName="adaptiveEnabled"
+              >Bật phỏng vấn thích ứng</mat-slide-toggle
+            >
           </div>
+
+          @if (form.controls.adaptiveEnabled.value) {
+            <p class="hint-adaptive">
+              Mọi ứng viên vẫn nhận đủ bộ câu hỏi bạn đã soạn. Sau khi trả lời hết, AI hỏi thêm vài
+              câu bám theo câu trả lời của từng người — vẫn chấm theo đúng tiêu chí của chiến dịch.
+            </p>
+            <div class="two">
+              <mat-form-field appearance="outline">
+                <mat-label>Số câu AI hỏi thêm tối đa</mat-label>
+                <input matInput type="number" min="0" formControlName="maxFollowUps" />
+                <mat-hint>Để trống = dùng mặc định hệ thống</mat-hint>
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Tổng số câu tối đa</mat-label>
+                <input matInput type="number" min="0" formControlName="maxQuestions" />
+                <mat-hint>Gồm cả câu bạn soạn + câu AI hỏi thêm</mat-hint>
+              </mat-form-field>
+            </div>
+          }
         </mat-card>
 
         <mat-card class="section">
@@ -271,6 +293,14 @@ function toIso(local: string | null | undefined): string | null {
         flex-wrap: wrap;
         margin-top: 8px;
       }
+      .hint-adaptive {
+        color: var(--mat-sys-on-surface-variant);
+        font-size: 13px;
+        background: var(--mat-sys-surface-container);
+        border-radius: 8px;
+        padding: 10px 12px;
+        margin: 12px 0;
+      }
       .hint {
         color: var(--mat-sys-on-surface-variant);
         font-size: 13px;
@@ -350,6 +380,11 @@ export class CampaignForm implements OnInit {
     expiresAt: [''],
     antiCheatEnabled: [false],
     faceVerifyEnabled: [false],
+    // INT-17: phỏng vấn thích ứng — AI hỏi thêm ở ĐUÔI sau khi ứng viên trả lời hết câu seed.
+    // Trần để trống = dùng mặc định phía backend. form.disable() (ngoài Draft) tự cascade xuống.
+    adaptiveEnabled: [false],
+    maxFollowUps: [null as number | null, [Validators.min(0)]],
+    maxQuestions: [null as number | null, [Validators.min(0)]],
     criteria: this.fb.array<FormGroup>([]),
     questions: this.fb.array<FormGroup>([]),
   });
@@ -404,6 +439,9 @@ export class CampaignForm implements OnInit {
       expiresAt: toLocalInput(c.expiresAt),
       antiCheatEnabled: c.antiCheatEnabled,
       faceVerifyEnabled: c.faceVerifyEnabled,
+      adaptiveEnabled: c.adaptiveEnabled,   // INT-17
+      maxFollowUps: c.maxFollowUps ?? null,
+      maxQuestions: c.maxQuestions ?? null,
     });
     this.criteria.clear();
     c.criteria.forEach((cr) =>
@@ -502,6 +540,9 @@ export class CampaignForm implements OnInit {
         passScorePct: v.passScorePct ?? null,
         antiCheatEnabled: !!v.antiCheatEnabled,
         faceVerifyEnabled: !!v.faceVerifyEnabled,
+        adaptiveEnabled: !!v.adaptiveEnabled,   // INT-17
+        maxFollowUps: v.maxFollowUps ?? null,
+        maxQuestions: v.maxQuestions ?? null,
         startsAt: toIso(v.startsAt),
         expiresAt: toIso(v.expiresAt),
         criteria: criteria.length ? criteria : undefined,
@@ -531,6 +572,9 @@ export class CampaignForm implements OnInit {
       passScorePct: v.passScorePct ?? null,
       antiCheatEnabled: !!v.antiCheatEnabled,
       faceVerifyEnabled: !!v.faceVerifyEnabled,
+      adaptiveEnabled: !!v.adaptiveEnabled,   // INT-17
+      maxFollowUps: v.maxFollowUps ?? null,
+      maxQuestions: v.maxQuestions ?? null,
       startsAt: toIso(v.startsAt),
       expiresAt: toIso(v.expiresAt),
       criteria: criteria.length ? criteria : undefined,
