@@ -251,6 +251,37 @@ export interface CampaignResultsResponse {
   results: CampaignResultRow[];
 }
 
+// ── Transcript + dẫn chứng chấm điểm cho HR (AI4) ───────────────────────────
+/**
+ * Điểm + nhận xét AI của 1 tiêu chí trong 1 câu trả lời.
+ * ⚠ Backend chỉ trả `criterionId` (GUID rubric_criteria phía Interview, KHÁC id campaign_criteria
+ * vì được materialize mới lúc tạo session) — KHÔNG có tên tiêu chí lẫn maxScore, nên FE không thể
+ * tra ngược tên. Hiển thị id rút gọn thay vì đoán mò (đoán sai = gán nhầm dẫn chứng cho tiêu chí).
+ */
+export interface TranscriptCriterionScore {
+  criterionId: string;
+  score: number;
+  /** E11 — AI phải trích dẫn chứng từ transcript; rỗng/ngắn → BE bật needsReview. */
+  reasoning?: string | null;
+}
+
+/** 1 câu hỏi + transcript câu trả lời + điểm từng tiêu chí. Chưa trả lời/Skipped → transcript null, scores rỗng. */
+export interface TranscriptQuestion {
+  questionId: string;
+  orderNo: number;
+  content: string;
+  transcript?: string | null;
+  /** E10 — spread điểm giữa các lần chấm vượt ngưỡng → AI không chắc, HR nên soi lại. */
+  needsReview: boolean;
+  scores: TranscriptCriterionScore[];
+}
+
+/** GET /campaign/{id}/results/{sessionId}/transcript — chi tiết 1 buổi cho HR đối chiếu điểm ranking. */
+export interface SessionTranscriptResponse {
+  sessionId: string;
+  questions: TranscriptQuestion[];
+}
+
 // ── Lọc CV / shortlist (C13–C15) ────────────────────────────────────────────
 export type ScreenedCandidateStatus =
   | 'Filtered'
