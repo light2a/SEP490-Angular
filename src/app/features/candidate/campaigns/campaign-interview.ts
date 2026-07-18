@@ -19,7 +19,14 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { CampaignApi } from '../../../core/api/campaign.api';
 import { extractErrorMessage } from '../../../core/api/http-utils';
 import { PracticeApi } from '../../../core/api/practice.api';
-import { CampaignQuestion, StartInterviewResult } from '../../../core/models';
+import {
+  ADAPTIVE_ACTION_MESSAGE,
+  CampaignQuestion,
+  NextQuestion,
+  QUESTION_KIND_LABEL,
+  StartInterviewResult,
+  UploadAnswerResult,
+} from '../../../core/models';
 import { NotifyService } from '../../../core/notify.service';
 import { AudioRecorder, RecordedAudio } from '../practice/audio-recorder';
 import { Spinner } from '../../../shared/ui/spinner';
@@ -99,6 +106,12 @@ export class CampaignInterview implements OnInit {
     () => !this.loading() && !!this.session() && this.currentIndex() >= this.questions().length,
   );
 
+  /** INT-17: nhãn badge cho câu hiện tại nếu là câu thích ứng (Seed → null). */
+  readonly currentKindBadge = computed(() => {
+    const k = this.current()?.kind;
+    return k && k !== 'Seed' ? QUESTION_KIND_LABEL[k] : null;
+  });
+
   readonly answeredIds = signal<ReadonlySet<string>>(new Set<string>());
   readonly answeredCount = computed(() => this.answeredIds().size);
   readonly hasRecording = signal(false);
@@ -164,6 +177,22 @@ export class CampaignInterview implements OnInit {
           this.loading.set(false);
           return;
         }
+        // Phỏng vấn THÍCH ỨNG (INT-17) resume: GET session mang danh sách ĐẦY ĐỦ (seed + câu thích ứng
+        // đã sinh ở lần vào trước), còn /start chỉ có seed → merge từ GET để không mất câu thích ứng.
+        this.session.update((cur) =>
+          cur
+            ? {
+                ...cur,
+                questions: s.questions.map((q) => ({
+                  id: q.id,
+                  orderNo: q.orderNo,
+                  content: q.content,
+                  timeLimitSec: q.timeLimitSec,
+                  kind: q.kind,
+                })),
+              }
+            : cur,
+        );
         const answered = new Set(s.questions.filter((q) => q.answer).map((q) => q.id));
         this.answeredIds.set(answered);
         const firstOpen = this.questions().findIndex((q) => !answered.has(q.id));
@@ -259,16 +288,36 @@ export class CampaignInterview implements OnInit {
     }
     this.uploading.set(true);
     this.practiceApi.uploadAnswer(sid, q.id, rec.blob, rec.durationSec).subscribe({
-      next: () => {
+      next: (res: UploadAnswerResult) => {
         this.uploading.set(false);
         this.answeredIds.update((set) => new Set(set).add(q.id));
-        this.notify.success('Đã nộp câu trả lời.');
+        // Phỏng vấn THÍCH ỨNG (INT-17): backend sinh câu kế động (đuôi thích ứng sau khi hết seed) →
+        // thêm vào danh sách TRƯỚC advance() để advance() dừng ở nó thay vì nhảy sang màn tổng kết.
+        if (res.nextQuestion) this.appendAdaptiveQuestion(res.nextQuestion);
+        this.notify.success(
+          res.nextAction ? ADAPTIVE_ACTION_MESSAGE[res.nextAction] : 'Đã nộp câu trả lời.',
+        );
         this.advance();
       },
       error: (e: HttpErrorResponse) => {
         this.uploading.set(false);
         this.notify.error(extractErrorMessage(e) ?? 'Nộp câu trả lời thất bại. Thử lại.');
       },
+    });
+  }
+
+  /** INT-17: chèn câu hỏi thích ứng backend vừa sinh vào cuối danh sách (idempotent theo id). */
+  private appendAdaptiveQuestion(nq: NextQuestion): void {
+    this.session.update((s) => {
+      if (!s || s.questions.some((x) => x.id === nq.id)) return s;
+      const q: CampaignQuestion = {
+        id: nq.id,
+        orderNo: nq.orderNo,
+        content: nq.content,
+        timeLimitSec: nq.timeLimitSec,
+        kind: nq.kind,
+      };
+      return { ...s, questions: [...s.questions, q] };
     });
   }
 

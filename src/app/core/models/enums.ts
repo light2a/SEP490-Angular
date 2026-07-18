@@ -59,6 +59,24 @@ export const ANSWER_STATUS_LABEL: Record<AnswerStatus, string> = {
   Failed: 'Lỗi',
 };
 
+// Phỏng vấn THÍCH ỨNG (INT-17) — nguồn câu hỏi. Seed = mở đầu; còn lại do AI sinh động theo câu trả lời.
+export type QuestionKind = 'Seed' | 'FollowUp' | 'Clarify' | 'NewQuestion';
+/** Nhãn hiển thị badge (Seed không hiện badge — đó là câu bình thường). */
+export const QUESTION_KIND_LABEL: Record<Exclude<QuestionKind, 'Seed'>, string> = {
+  FollowUp: 'AI hỏi sâu',
+  Clarify: 'AI làm rõ',
+  NewQuestion: 'Chủ đề mới',
+};
+
+// INT-17 — hành động AI quyết định sau mỗi câu trả lời.
+export type AdaptiveAction = 'follow_up' | 'clarify' | 'new_question' | 'end';
+export const ADAPTIVE_ACTION_MESSAGE: Record<AdaptiveAction, string> = {
+  follow_up: 'AI hỏi sâu thêm về câu trả lời vừa rồi.',
+  clarify: 'AI muốn bạn làm rõ câu trả lời.',
+  new_question: 'AI chuyển sang một năng lực khác.',
+  end: 'AI đã hỏi xong — bạn có thể nộp bài.',
+};
+
 export type RoadmapLevel = 'Fresher' | 'Junior' | 'Middle' | 'Senior';
 export const ROADMAP_LEVELS: readonly RoadmapLevel[] = ['Fresher', 'Junior', 'Middle', 'Senior'] as const;
 export type RoadmapStatus = 'Active' | 'Completed' | 'Abandoned';

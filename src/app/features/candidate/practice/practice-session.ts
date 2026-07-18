@@ -10,7 +10,13 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { extractErrorMessage } from '../../../core/api/http-utils';
 import { PracticeApi } from '../../../core/api/practice.api';
 import { NotifyService } from '../../../core/notify.service';
-import { PracticeSession as SessionData, QuestionResponse } from '../../../core/models';
+import {
+  ADAPTIVE_ACTION_MESSAGE,
+  PracticeSession as SessionData,
+  QUESTION_KIND_LABEL,
+  QuestionResponse,
+  UploadAnswerResult,
+} from '../../../core/models';
 import { AnswerStatusPipe, JobCategoryPipe, SessionStatusPipe } from '../../../shared/pipes';
 import { Spinner } from '../../../shared/ui/spinner';
 import { AudioRecorder, RecordedAudio } from './audio-recorder';
@@ -48,6 +54,8 @@ export class PracticeSession implements OnInit {
   readonly loading = signal(true);
   readonly submitting = signal(false);
   readonly uploadingQid = signal<string | null>(null);
+  /** Phỏng vấn THÍCH ỨNG (INT-17): AI báo đã hỏi xong → gợi ý nộp bài. */
+  readonly interviewComplete = signal(false);
 
   private recordings = new Map<string, RecordedAudio>();
   private pollTimer?: ReturnType<typeof setInterval>;
@@ -105,6 +113,11 @@ export class PracticeSession implements OnInit {
     }
   }
 
+  /** INT-17: nhãn badge cho câu thích ứng (Seed → null, không hiện badge). */
+  kindBadge(q: QuestionResponse): string | null {
+    return q.kind && q.kind !== 'Seed' ? QUESTION_KIND_LABEL[q.kind] : null;
+  }
+
   onRecorded(qid: string, rec: RecordedAudio): void {
     this.recordings.set(qid, rec);
   }
@@ -120,10 +133,14 @@ export class PracticeSession implements OnInit {
     }
     this.uploadingQid.set(q.id);
     this.api.uploadAnswer(this.sessionId(), q.id, rec.blob, rec.durationSec).subscribe({
-      next: () => {
+      next: (res: UploadAnswerResult) => {
         this.uploadingQid.set(null);
         this.recordings.delete(q.id);
-        this.notify.success('Đã nộp câu trả lời.');
+        // Phỏng vấn THÍCH ỨNG (INT-17): nếu backend trả action → hiển thị ngữ cảnh câu kế; end → gợi ý nộp.
+        // `refresh()` (GET session) đã kéo về câu hỏi thích ứng mới (list tự lớn dần) — không cần poll thêm.
+        this.interviewComplete.set(res.interviewComplete === true);
+        const msg = res.nextAction ? ADAPTIVE_ACTION_MESSAGE[res.nextAction] : 'Đã nộp câu trả lời.';
+        this.notify.success(msg);
         this.refresh();
       },
       error: (e) => {

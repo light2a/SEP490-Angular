@@ -15,6 +15,9 @@
       <mat-card class="q">
         <div class="q-head">
           <h3>Câu {{ i + 1 }} <span class="tl">· {{ q.timeLimitSec }}s</span></h3>
+          @if (kindBadge(q); as kb) {
+            <mat-chip highlighted><mat-icon>auto_awesome</mat-icon> {{ kb }}</mat-chip>
+          }
           @if (q.answer) {
             <mat-chip>{{ q.answer.status | answerStatus }}</mat-chip>
           }
@@ -48,6 +51,12 @@
           </button>
         }
       </mat-card>
+    }
+
+    @if (interviewComplete() && !scored()) {
+      <p class="adaptive-done">
+        <mat-icon>auto_awesome</mat-icon> AI đã hỏi xong. Bạn có thể nộp bài để chấm điểm.
+      </p>
     }
 
     @if (!scored() && answeredCount() > 0) {

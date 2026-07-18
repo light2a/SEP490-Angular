@@ -181,4 +181,60 @@ describe('CampaignInterview (smoke)', () => {
     expect(fixture.componentInstance.webcamEnabled()).toBe(false);
     fixture.destroy();
   });
+
+  // ---- Phỏng vấn THÍCH ỨNG (INT-17) ----
+
+  it('appends the adaptive question returned by upload and advances to it (not review stage)', () => {
+    practiceApi.get.mockReturnValue(of(practiceSession(['q1']))); // resume ở q2 (seed cuối)
+    practiceApi.uploadAnswer.mockReturnValue(
+      of({
+        answerId: 'a-q2',
+        questionId: 'q2',
+        status: 'Scoring',
+        nextAction: 'follow_up',
+        nextQuestion: { id: 'q3', orderNo: 3, content: 'Câu hỏi thích ứng?', timeLimitSec: 60, kind: 'FollowUp' },
+        interviewComplete: false,
+      }),
+    );
+    const fixture = render();
+    const cmp = fixture.componentInstance;
+
+    cmp.onRecorded({ blob: new Blob(['x']), durationSec: 5 });
+    cmp.upload();
+    fixture.detectChanges();
+
+    // Câu thích ứng được chèn + trở thành câu hiện tại (KHÔNG rơi vào màn tổng kết).
+    expect(cmp.questions().length).toBe(3);
+    expect(cmp.current()?.id).toBe('q3');
+    expect(cmp.reviewStage()).toBe(false);
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('Câu hỏi thích ứng?');
+    expect(text).toContain('AI hỏi sâu'); // badge kind=FollowUp
+    fixture.destroy();
+  });
+
+  it('goes to review stage when upload signals interviewComplete (no next question)', () => {
+    practiceApi.get.mockReturnValue(of(practiceSession(['q1']))); // resume ở q2 (seed cuối)
+    practiceApi.uploadAnswer.mockReturnValue(
+      of({
+        answerId: 'a-q2',
+        questionId: 'q2',
+        status: 'Scoring',
+        nextAction: 'end',
+        nextQuestion: null,
+        interviewComplete: true,
+      }),
+    );
+    const fixture = render();
+    const cmp = fixture.componentInstance;
+
+    cmp.onRecorded({ blob: new Blob(['x']), durationSec: 5 });
+    cmp.upload();
+    fixture.detectChanges();
+
+    expect(cmp.questions().length).toBe(2); // không thêm câu
+    expect(cmp.reviewStage()).toBe(true);
+    expect((fixture.nativeElement as HTMLElement).textContent ?? '').toContain('Hoàn tất phần trả lời');
+    fixture.destroy();
+  });
 });

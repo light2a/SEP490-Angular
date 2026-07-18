@@ -87,3 +87,11 @@
   height: 100%;
   background: var(--mat-sys-primary);
 }
+.adaptive-done {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--mat-sys-primary);
+  font-weight: 500;
+  margin: 12px 0;
+}

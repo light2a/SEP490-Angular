@@ -1,4 +1,4 @@
-import { AnswerStatus, JobCategory, SessionStatus } from './enums';
+import { AdaptiveAction, AnswerStatus, JobCategory, QuestionKind, SessionStatus } from './enums';
 
 export interface CreatePracticeSessionRequest {
   cvId?: string | null;
@@ -29,6 +29,8 @@ export interface QuestionResponse {
   content: string;
   timeLimitSec: number;
   answer?: AnswerResponse | null;
+  /** Phỏng vấn THÍCH ỨNG (INT-17): Seed | FollowUp | Clarify | NewQuestion. Optional (client cũ). */
+  kind?: QuestionKind;
 }
 
 export interface CriterionScore {
@@ -84,9 +86,26 @@ export interface PracticeSessionSummary {
   overallScore?: number | null;
 }
 
-/** POST .../answers (multipart) */
+/** Phỏng vấn THÍCH ỨNG (INT-17): câu hỏi kế backend sinh động, trả kèm response upload. */
+export interface NextQuestion {
+  id: string;
+  orderNo: number;
+  content: string;
+  timeLimitSec: number;
+  kind: QuestionKind;
+}
+
+/** POST .../answers (multipart). Các field adaptive optional → luồng tĩnh cũ bỏ qua vẫn chạy. */
 export interface UploadAnswerResult {
   answerId: string;
   questionId: string;
   status: AnswerStatus;
+  /** INT-17 — transcript đồng bộ (có thể hiện ngay). */
+  transcript?: string | null;
+  /** INT-17 — follow_up | clarify | new_question | end. */
+  nextAction?: AdaptiveAction | null;
+  /** INT-17 — câu hỏi kế (null khi end / adaptive tắt / chưa tới frontier). */
+  nextQuestion?: NextQuestion | null;
+  /** INT-17 — AI kết thúc / hết ngân sách → mời nộp bài. */
+  interviewComplete?: boolean;
 }

@@ -45,6 +45,9 @@
   <div class="head">
     <h1>Bài phỏng vấn</h1>
     <mat-chip>Câu {{ currentIndex() + 1 }}/{{ questions().length }}</mat-chip>
+    @if (currentKindBadge(); as kb) {
+      <mat-chip highlighted><mat-icon>auto_awesome</mat-icon> {{ kb }}</mat-chip>
+    }
     @if (proctor.active()) {
       <mat-chip [class.warn-chip]="proctor.warnings() > 0" highlighted>
         <mat-icon>shield</mat-icon>
