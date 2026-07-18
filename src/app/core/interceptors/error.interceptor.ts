@@ -27,8 +27,16 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
           notify.error('Không kết nối được máy chủ. Kiểm tra mạng hoặc Gateway.');
           break;
         case 401:
-          notify.warn('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
-          router.navigate(['/auth/login']);
+          // Chỉ đá về login khi phiên THẬT SỰ chết (authInterceptor đã refresh hỏng và clear session).
+          // Phiên còn sống mà vẫn 401 = lỗi cục bộ của riêng request đó → báo thôi, giữ người dùng ở
+          // lại trang. Trước đây mọi 401 đều điều hướng, nên một 401 thoáng qua là mất cả phiên làm
+          // việc dở (bắt 2026-07-19 cùng lỗi retry-clears-session bên authInterceptor).
+          if (auth.isAuthenticated()) {
+            notify.error('Không thực hiện được thao tác này. Vui lòng thử lại.');
+          } else {
+            notify.warn('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+            router.navigate(['/auth/login']);
+          }
           break;
         case 402:
           // 402 từ /campaign/* (B2B start) = ORG hết credit — để feature hiển thị thông điệp

@@ -4,6 +4,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { Router } from '@angular/router';
 import { errorInterceptor } from './error.interceptor';
 import { NotifyService } from '../notify.service';
+import { AuthStore } from '../auth/auth.store';
 import { environment } from '../../../environments/environment';
 
 const API = environment.apiBase;
@@ -19,15 +20,21 @@ describe('errorInterceptor', () => {
     success: ReturnType<typeof vi.fn>;
   };
 
+  let auth: { isAuthenticated: () => boolean; primaryRole: () => string | null };
+
   beforeEach(() => {
     router = { navigate: vi.fn() };
     notify = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), success: vi.fn() };
+    // AuthStore GIẢ: store thật đọc localStorage dùng chung giữa các spec → nhánh 401 (nay có hỏi
+    // isAuthenticated) sẽ đổi kết quả theo thứ tự chạy. Fake để test tất định.
+    auth = { isAuthenticated: () => false, primaryRole: () => null };
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(withInterceptors([errorInterceptor])),
         provideHttpClientTesting(),
         { provide: Router, useValue: router },
         { provide: NotifyService, useValue: notify },
+        { provide: AuthStore, useValue: auth },
       ],
     });
     http = TestBed.inject(HttpClient);
@@ -50,10 +57,20 @@ describe('errorInterceptor', () => {
     expect(err()).toBeTruthy();
   });
 
-  it('401 → navigate to /auth/login + warn', () => {
+  it('401 + phiên ĐÃ chết → đá về /auth/login', () => {
+    auth.isAuthenticated = () => false;
     fire(401);
     expect(router.navigate).toHaveBeenCalledWith(['/auth/login']);
     expect(notify.warn).toHaveBeenCalledTimes(1);
+  });
+
+  // Phiên còn sống mà vẫn 401 = lỗi cục bộ của riêng request đó (vd retry đứt giữa chừng). Trước
+  // đây mọi 401 đều điều hướng → mất cả phiên làm việc dở. Xem auth.interceptor.spec cùng bug.
+  it('401 nhưng phiên CÒN SỐNG → báo lỗi, KHÔNG điều hướng', () => {
+    auth.isAuthenticated = () => true;
+    fire(401);
+    expect(router.navigate).not.toHaveBeenCalled();
+    expect(notify.error).toHaveBeenCalledTimes(1);
   });
 
   it('409 → warn with extracted message, no navigation', () => {
