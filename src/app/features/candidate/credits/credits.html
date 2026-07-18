@@ -4,6 +4,20 @@
 @if (loading()) {
   <app-spinner />
 } @else {
+  @if (account(); as acc) {
+    <mat-card class="balance">
+      <div class="bal-main">
+        <span class="bal-num">{{ acc.remainingCredits }}</span>
+        <span class="bal-unit">credit khả dụng</span>
+      </div>
+      @if (acc.reservedCredits > 0) {
+        <p class="bal-sub">
+          {{ acc.reservedCredits }} credit đang giữ cho buổi luyện chưa hoàn tất.
+        </p>
+      }
+    </mat-card>
+  }
+
   <h2>Gói credit</h2>
   <div class="grid">
     @for (p of packages(); track p.id) {

@@ -6,6 +6,7 @@ import {
   CloseBillingPeriodRequest,
   CreateOrderRequest,
   CreatePackageRequest,
+  CreditAccountResponse,
   InvoiceResponse,
   OrderResponse,
   OrderStatusResponse,
@@ -19,6 +20,10 @@ export class PaymentApi {
   private http = inject(HttpClient);
   private base = `${environment.apiBase}/payment`;
 
+  /** Số dư ví của chính người đăng nhập (ví Org nếu thuộc tổ chức, else ví cá nhân). */
+  myAccount(): Observable<CreditAccountResponse> {
+    return this.http.get<CreditAccountResponse>(`${this.base}/me/account`);
+  }
   packages(): Observable<PackageResponse[]> {
     return this.http.get<PackageResponse[]>(`${this.base}/package`);
   }

@@ -6,7 +6,12 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
 import { PaymentApi } from '../../../core/api/payment.api';
 import { NotifyService } from '../../../core/notify.service';
-import { OrderResponse, OrderStatus, PackageResponse } from '../../../core/models';
+import {
+  CreditAccountResponse,
+  OrderResponse,
+  OrderStatus,
+  PackageResponse,
+} from '../../../core/models';
 import { OrderStatusPipe, VndPipe } from '../../../shared/pipes';
 import { EmptyState } from '../../../shared/ui/empty-state';
 import { Spinner } from '../../../shared/ui/spinner';
@@ -32,6 +37,8 @@ export class Credits {
   private notify = inject(NotifyService);
 
   readonly OrderStatus = OrderStatus;
+  /** Số dư ví — null khi chưa tải xong hoặc API lỗi: khối số dư ẩn, không chặn phần mua gói. */
+  readonly account = signal<CreditAccountResponse | null>(null);
   readonly packages = signal<PackageResponse[]>([]);
   readonly orders = signal<OrderResponse[]>([]);
   readonly loading = signal(true);
@@ -43,6 +50,7 @@ export class Credits {
 
   load(): void {
     this.loading.set(true);
+    this.api.myAccount().subscribe({ next: (a) => this.account.set(a) });
     this.api.packages().subscribe({ next: (p) => this.packages.set(p) });
     this.api.myOrders().subscribe({
       next: (o) => {
