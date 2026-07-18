@@ -29,7 +29,9 @@ describe('AudioRecorder', () => {
     FakeMediaRecorder.instances = [];
     trackStop.mockReset();
     getUserMedia.mockReset();
-    getUserMedia.mockResolvedValue({ getTracks: () => [{ stop: trackStop }] } as unknown as MediaStream);
+    getUserMedia.mockResolvedValue({
+      getTracks: () => [{ stop: trackStop }],
+    } as unknown as MediaStream);
 
     Object.defineProperty(navigator, 'mediaDevices', {
       configurable: true,
@@ -67,5 +69,43 @@ describe('AudioRecorder', () => {
     expect(emitted!.blob).toBeInstanceOf(Blob);
     expect(emitted!.durationSec).toBeGreaterThanOrEqual(1);
     expect(trackStop).toHaveBeenCalled(); // giải phóng track micro
+  });
+
+  // ---- Khoá ghi âm khi avatar đang đọc câu hỏi ----
+  // Mic mở lúc loa phát câu hỏi → Whisper bóc cả câu hỏi vào transcript → chấm điểm sai.
+
+  it('disabled=true → start() KHÔNG chạm tới micro', async () => {
+    const fixture = TestBed.createComponent(AudioRecorder);
+    fixture.componentRef.setInput('disabled', true);
+    await fixture.componentInstance.start();
+
+    expect(getUserMedia).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.recording()).toBe(false);
+  });
+
+  it('start() báo startRequested TRƯỚC khi mở mic (cha kịp tắt tiếng avatar)', async () => {
+    const fixture = TestBed.createComponent(AudioRecorder);
+    const cmp = fixture.componentInstance;
+    const order: string[] = [];
+    cmp.startRequested.subscribe(() => order.push('startRequested'));
+    getUserMedia.mockImplementation(async () => {
+      order.push('getUserMedia');
+      return { getTracks: () => [{ stop: trackStop }] } as unknown as MediaStream;
+    });
+
+    await cmp.start();
+
+    expect(order).toEqual(['startRequested', 'getUserMedia']);
+  });
+
+  it('recordingChange báo trạng thái mic để cha khoá ngược phía avatar', async () => {
+    const cmp = TestBed.createComponent(AudioRecorder).componentInstance;
+    const states: boolean[] = [];
+    cmp.recordingChange.subscribe((v) => states.push(v));
+
+    await cmp.start();
+    cmp.stop();
+
+    expect(states).toEqual([true, false]);
   });
 });

@@ -51,7 +51,10 @@
     @if (proctor.active()) {
       <mat-chip [class.warn-chip]="proctor.warnings() > 0" highlighted>
         <mat-icon>shield</mat-icon>
-        Giám sát @if (proctor.warnings() > 0) {· {{ proctor.warnings() }} cảnh báo}
+        Giám sát
+        @if (proctor.warnings() > 0) {
+          · {{ proctor.warnings() }} cảnh báo
+        }
       </mat-chip>
     }
   </div>
@@ -61,6 +64,16 @@
       [campaignId]="campaignId()"
       [sessionId]="sid"
       [enrollRequired]="faceEnrollRequired()"
+    />
+  }
+
+  <!-- Avatar đọc đề. Ẩn nếu máy không chạy được 3D / TTS lỗi — không ai được trượt vì máy yếu. -->
+  @if (sessionId(); as sid) {
+    <app-interview-avatar
+      [sessionId]="sid"
+      [questionId]="q.id"
+      [locked]="recordingActive()"
+      (speakingChange)="avatarSpeaking.set($event)"
     />
   }
 
@@ -79,7 +92,12 @@
       <mat-progress-bar mode="indeterminate" />
       <p class="hint">Đang tải câu trả lời lên...</p>
     } @else {
-      <app-audio-recorder (recorded)="onRecorded($event)" />
+      <app-audio-recorder
+        [disabled]="avatarSpeaking()"
+        (recorded)="onRecorded($event)"
+        (startRequested)="onRecorderStart()"
+        (recordingChange)="recordingActive.set($event)"
+      />
       <div class="actions">
         <button
           mat-flat-button

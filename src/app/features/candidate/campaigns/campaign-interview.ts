@@ -29,6 +29,7 @@ import {
 } from '../../../core/models';
 import { NotifyService } from '../../../core/notify.service';
 import { AudioRecorder, RecordedAudio } from '../practice/audio-recorder';
+import { InterviewAvatar } from '../../../shared/avatar/interview-avatar';
 import { Spinner } from '../../../shared/ui/spinner';
 import { ProctorService } from './proctor.service';
 import { ProctoringConsentDialog } from './proctoring-consent-dialog';
@@ -53,6 +54,7 @@ import { WebcamCapture } from './webcam-capture';
     MatChipsModule,
     MatProgressBarModule,
     AudioRecorder,
+    InterviewAvatar,
     WebcamCapture,
     Spinner,
   ],
@@ -112,6 +114,12 @@ export class CampaignInterview implements OnInit {
     return k && k !== 'Seed' ? QUESTION_KIND_LABEL[k] : null;
   });
 
+  /** Avatar đang đọc câu hỏi → khoá nút ghi âm (chống lẫn tiếng câu hỏi vào bài ghi). */
+  readonly avatarSpeaking = signal(false);
+  /** Mic đang mở → khoá ngược phía avatar (cấm nghe lại giữa lúc ghi). */
+  readonly recordingActive = signal(false);
+  private avatarRef = viewChild(InterviewAvatar);
+
   readonly answeredIds = signal<ReadonlySet<string>>(new Set<string>());
   readonly answeredCount = computed(() => this.answeredIds().size);
   readonly hasRecording = signal(false);
@@ -152,8 +160,7 @@ export class CampaignInterview implements OnInit {
             );
           } else if (e.status === 409) {
             this.fatalError.set(
-              extractErrorMessage(e) ??
-                'Bạn đã hoàn thành phỏng vấn hoặc chiến dịch đã đóng.',
+              extractErrorMessage(e) ?? 'Bạn đã hoàn thành phỏng vấn hoặc chiến dịch đã đóng.',
             );
           } else {
             this.fatalError.set(
@@ -241,6 +248,9 @@ export class CampaignInterview implements OnInit {
     this.remainingSec.set(q.timeLimitSec);
     if (q.timeLimitSec <= 0) return; // không giới hạn
     this.timer = setInterval(() => {
+      // Đồng hồ ĐỨNG YÊN trong lúc avatar đọc đề: ứng viên không được mất thời gian trả lời
+      // vì máy đọc câu hỏi (và ghi âm cũng đang bị khoá, nên đếm lúc này là tính phí oan).
+      if (this.avatarSpeaking()) return;
       const left = this.remainingSec() - 1;
       this.remainingSec.set(Math.max(0, left));
       if (left <= 0) {
@@ -276,6 +286,14 @@ export class CampaignInterview implements OnInit {
     this.pendingRecording = rec;
     this.hasRecording.set(true);
     if (this.timeUp()) this.upload();
+  }
+
+  /**
+   * Ứng viên bấm ghi âm → tắt tiếng avatar NGAY (đồng bộ, trước khi mic mở).
+   * Nút đã `[disabled]` lúc avatar đọc; đây là chốt thứ hai cho đường gọi bằng code (vd hết giờ).
+   */
+  onRecorderStart(): void {
+    this.avatarRef()?.stopSpeaking();
   }
 
   upload(): void {
