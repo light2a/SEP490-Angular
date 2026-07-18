@@ -33,7 +33,7 @@
             <div class="scores">
               @for (sc of q.answer.scores; track sc.criterionId) {
                 <div class="score-row">
-                  <span>{{ criterionName(sc.criterionId) }}</span
+                  <span>{{ criterionName(sc) }}</span
                   ><b>{{ sc.score | number: '1.0-1' }}</b>
                 </div>
               }

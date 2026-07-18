@@ -12,6 +12,7 @@ import { PracticeApi } from '../../../core/api/practice.api';
 import { NotifyService } from '../../../core/notify.service';
 import {
   ADAPTIVE_ACTION_MESSAGE,
+  AnswerScore,
   PracticeSession as SessionData,
   QUESTION_KIND_LABEL,
   QuestionResponse,
@@ -68,9 +69,9 @@ export class PracticeSession implements OnInit {
   readonly scored = computed(() => this.status() === 'Scored');
 
   /**
-   * Điểm per-answer chỉ mang `criterionId` (không kèm tên) nên mọi dòng breakdown dưới từng câu
-   * trước đây hiện trơ "Điểm tiêu chí". Tên nằm sẵn ở `result.criteriaScores[]` trên CÙNG response
-   * → tra ngược theo id, không cần API mới. (Bắt ở e2e 2026-07-18.)
+   * Dự phòng cho buổi chấm TRƯỚC 2026-07-18: hồi đó điểm per-answer không mang tên tiêu chí nên
+   * breakdown dưới từng câu hiện trơ "Điểm tiêu chí". Tên khi ấy chỉ có ở `result.criteriaScores[]`
+   * (cùng response) → tra ngược theo id.
    */
   private readonly criterionNames = computed(() => {
     const map = new Map<string, string>();
@@ -78,9 +79,12 @@ export class PracticeSession implements OnInit {
     return map;
   });
 
-  /** Tên tiêu chí; buổi chưa chấm xong (result null) thì lùi về nhãn chung. */
-  criterionName(criterionId: string): string {
-    return this.criterionNames().get(criterionId) ?? 'Điểm tiêu chí';
+  /**
+   * Ưu tiên `criterionName` BE trả kèm — đúng cả khi buổi CHƯA chấm xong (`result` còn null, nên
+   * bảng tra ở trên rỗng). Không có thì mới tra ngược, cuối cùng mới lùi về nhãn chung.
+   */
+  criterionName(sc: AnswerScore): string {
+    return sc.criterionName || this.criterionNames().get(sc.criterionId) || 'Điểm tiêu chí';
   }
 
   ngOnInit(): void {
