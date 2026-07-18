@@ -1,4 +1,5 @@
 export * from './enums';
+export * from './text-limits';
 export * from './auth.models';
 export * from './file.models';
 export * from './practice.models';

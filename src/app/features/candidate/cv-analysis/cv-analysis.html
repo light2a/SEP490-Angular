@@ -29,13 +29,16 @@
 
     <mat-form-field appearance="outline">
       <mat-label>JD — dán mô tả công việc (tuỳ chọn, để chấm độ khớp)</mat-label>
+      <!-- maxlength + bộ đếm: thấy giới hạn TRƯỚC khi gửi, thay vì ăn 400 từ BE (BE enforce thật). -->
       <textarea
         matInput
         formControlName="jdText"
         rows="5"
+        [maxlength]="jdTextMaxChars"
         placeholder="Dán JD của vị trí bạn ứng tuyển để xem CV khớp bao nhiêu — khỏi cần tải file PDF."
       ></textarea>
       <mat-hint>Dán text thì không cần chọn file JD bên dưới.</mat-hint>
+      <mat-hint align="end">{{ jdTextLength() }} / {{ jdTextMaxChars }}</mat-hint>
     </mat-form-field>
 
     <mat-form-field appearance="outline">

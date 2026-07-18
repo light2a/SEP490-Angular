@@ -15,7 +15,12 @@ import { CvAnalysisApi } from '../../../core/api/cv-analysis.api';
 import { FilesApi } from '../../../core/api/files.api';
 import { extractErrorMessage } from '../../../core/api/http-utils';
 import { NotifyService } from '../../../core/notify.service';
-import { CvAnalysisResponse, FileRecord, JOB_CATEGORIES } from '../../../core/models';
+import {
+  CvAnalysisResponse,
+  FileRecord,
+  JD_TEXT_MAX_CHARS,
+  JOB_CATEGORIES,
+} from '../../../core/models';
 import { JobCategoryPipe } from '../../../shared/pipes';
 import { EmptyState } from '../../../shared/ui/empty-state';
 import { Spinner } from '../../../shared/ui/spinner';
@@ -57,16 +62,21 @@ export class CvAnalysis {
     cvId: ['', [Validators.required]],
     jobCategory: ['BA', [Validators.required]],
     jdId: [''],
-    jdText: [''],
+    jdText: ['', [Validators.maxLength(JD_TEXT_MAX_CHARS)]],
   });
 
   /** Đang dán JD tay → BE bỏ file JD (C11 "text ưu tiên file"); mirror lên UI cho khỏi bất ngờ. */
   readonly usingJdText = signal(false);
 
+  /** Giới hạn ký tự JD nhập tay + độ dài hiện tại (bộ đếm) — khớp hằng số BE (vượt → 400). */
+  readonly jdTextMaxChars = JD_TEXT_MAX_CHARS;
+  readonly jdTextLength = signal(0);
+
   constructor() {
     this.form.controls.jdText.valueChanges.subscribe((v) => {
       const using = v.trim().length > 0;
       this.usingJdText.set(using);
+      this.jdTextLength.set(v.length);
       // Khoá dropdown file bằng CODE (không dùng [disabled] template — reactive form cảnh báo).
       if (using) this.form.controls.jdId.disable({ emitEvent: false });
       else this.form.controls.jdId.enable({ emitEvent: false });

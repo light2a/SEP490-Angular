@@ -1,5 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, OnInit, inject, input, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   FormArray,
   FormBuilder,
@@ -22,6 +23,7 @@ import {
   CampaignResponse,
   CreateCampaignRequest,
   CriterionItem,
+  JD_TEXT_MAX_CHARS,
   QuestionItem,
   UpdateCampaignRequest,
 } from '../../../core/models';
@@ -93,7 +95,15 @@ function toIso(local: string | null | undefined): string | null {
 
           <mat-form-field appearance="outline" class="full">
             <mat-label>Mô tả công việc (JD)</mat-label>
-            <textarea matInput formControlName="jdText" rows="5"></textarea>
+            <!-- maxlength + bộ đếm: cho HR thấy giới hạn TRƯỚC khi gửi, thay vì ăn 400 từ BE
+                 (BE mới là nơi enforce thật — xem TextInputLimits.JdTextMaxChars). -->
+            <textarea
+              matInput
+              formControlName="jdText"
+              rows="5"
+              [maxlength]="jdTextMaxChars"
+            ></textarea>
+            <mat-hint align="end">{{ jdTextLength() }} / {{ jdTextMaxChars }}</mat-hint>
           </mat-form-field>
 
           <div class="two">
@@ -369,10 +379,16 @@ export class CampaignForm implements OnInit {
   readonly readOnly = signal(false);
   private original = signal<CampaignResponse | null>(null);
 
+  /** Giới hạn ký tự JD nhập tay — khớp hằng số BE (vượt → 400). */
+  readonly jdTextMaxChars = JD_TEXT_MAX_CHARS;
+
+  /** Độ dài JD hiện tại cho bộ đếm dưới textarea (theo dõi cả patchValue lúc load bản nháp). */
+  readonly jdTextLength = signal(0);
+
   readonly form = this.fb.group({
     title: ['', [Validators.required]],
     domain: [''],
-    jdText: [''],
+    jdText: ['', [Validators.maxLength(JD_TEXT_MAX_CHARS)]],
     maxCandidates: [null as number | null],
     timeLimitMinutes: [15 as number | null, [Validators.required, Validators.min(1)]],
     passScorePct: [null as number | null],
@@ -388,6 +404,13 @@ export class CampaignForm implements OnInit {
     criteria: this.fb.array<FormGroup>([]),
     questions: this.fb.array<FormGroup>([]),
   });
+
+  constructor() {
+    // Đồng bộ bộ đếm ký tự với control (bắt cả gõ tay lẫn patchValue khi load campaign để sửa).
+    this.form.controls.jdText.valueChanges
+      .pipe(takeUntilDestroyed())
+      .subscribe((v) => this.jdTextLength.set(v?.length ?? 0));
+  }
 
   get criteria(): FormArray<FormGroup> {
     return this.form.get('criteria') as FormArray<FormGroup>;
