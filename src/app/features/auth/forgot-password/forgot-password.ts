@@ -134,14 +134,33 @@ export class ForgotPassword {
       this.run(this.authApi.verifyOtp({ email, otp }), () => this.step.set(3));
     } else {
       if (this.form.controls.newPassword.invalid) return;
-      this.run(this.authApi.resetPassword({ email, newPassword }), () => {
-        this.notify.success('Đổi mật khẩu thành công. Vui lòng đăng nhập.');
-        this.router.navigateByUrl('/auth/login');
-      });
+      // BE (DB24) bắt buộc gửi LẠI otp ở bước reset, không chỉ ở verify-otp.
+      // Form giữ nguyên 1 FormGroup xuyên 3 bước nên otp người dùng nhập ở bước 2
+      // vẫn còn nguyên đây — không cần thêm state hay bắt nhập lại.
+      this.run(
+        this.authApi.resetPassword({ email, otp, newPassword }),
+        () => {
+          this.notify.success('Đổi mật khẩu thành công. Vui lòng đăng nhập.');
+          this.router.navigateByUrl('/auth/login');
+        },
+        // OTP sống 5 phút nên bước 3 GIỜ có thể fail (trước DB24 bước 3 luôn 500 nên
+        // chưa ai chạm tới). Nếu để nguyên ở bước 3 thì người dùng kẹt: chỉ còn ô mật
+        // khẩu, không có đường xin mã mới. Mã hỏng/hết hạn → quay về bước 1 xin mã mới
+        // (không phải bước 2: mã cũ đã chết, nhập lại nó cũng vô ích).
+        () => {
+          this.form.controls.otp.reset('');
+          this.form.controls.newPassword.reset('');
+          this.step.set(1);
+        },
+      );
     }
   }
 
-  private run(obs: import('rxjs').Observable<unknown>, onOk: () => void): void {
+  private run(
+    obs: import('rxjs').Observable<unknown>,
+    onOk: () => void,
+    onError?: () => void,
+  ): void {
     this.loading.set(true);
     obs.subscribe({
       next: () => {
@@ -151,6 +170,8 @@ export class ForgotPassword {
       error: (e: HttpErrorResponse) => {
         this.loading.set(false);
         this.error.set(extractErrorMessage(e) ?? 'Có lỗi xảy ra.');
+        // Chạy SAU khi set error để onError được phép ghi đè thông điệp nếu cần.
+        onError?.();
       },
     });
   }

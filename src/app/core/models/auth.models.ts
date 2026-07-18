@@ -39,6 +39,12 @@ export interface VerifyOtpRequest {
 }
 export interface ResetPasswordRequest {
   email: string;
+  /**
+   * BẮT BUỘC (BE task DB24). Phải gửi LẠI đúng OTP đã nhập ở bước verify-otp:
+   * cờ "đã verify" phía server chỉ khoá theo email nên tự nó không chứng minh
+   * người gọi đang cầm OTP. Thiếu trường này → 400.
+   */
+  otp: string;
   newPassword: string;
 }
 
