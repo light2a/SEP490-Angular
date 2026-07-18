@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, OnDestroy, computed, inject, signal } from '@angular/core';
 import { Observable, finalize, map, of, shareReplay, tap, throwError } from 'rxjs';
 import { AuthApi } from '../api/auth.api';
 import {
@@ -9,13 +9,13 @@ import {
   RegisterRequest,
 } from '../models';
 import { decodeJwt } from './jwt.util';
-import { tokenStorage } from './token-storage';
+import { TOKEN_STORAGE_KEYS, tokenStorage } from './token-storage';
 
 /**
  * Nguồn sự thật về phiên đăng nhập (signals). Vừa giữ token, vừa điều phối login/refresh/logout.
  */
 @Injectable({ providedIn: 'root' })
-export class AuthStore {
+export class AuthStore implements OnDestroy {
   private authApi = inject(AuthApi);
 
   readonly accessToken = signal<string | null>(tokenStorage.access);
@@ -42,6 +42,48 @@ export class AuthStore {
 
   /** Tên hiển thị lấy từ GET /me (nạp sau khi đăng nhập). */
   readonly displayName = signal<string | null>(null);
+
+  constructor() {
+    window.addEventListener('storage', this.onStorageChanged);
+  }
+
+  ngOnDestroy(): void {
+    window.removeEventListener('storage', this.onStorageChanged);
+  }
+
+  /**
+   * Đồng bộ phiên giữa các tab. Sự kiện `storage` CHỈ bắn ở tab KHÁC (trình duyệt không bắn ở chính
+   * tab vừa ghi) → đây đúng là kênh nghe "tab kia vừa đổi token".
+   *
+   * Không đồng bộ thì mỗi tab giữ token đã chụp lúc tải trang: tab A refresh → token cũ bị thu hồi →
+   * tab B vẫn cầm token chết → refresh 401 → đăng xuất oan. Mở 2 tab là dính (quay về từ PayOS gần
+   * như luôn tạo tab thứ hai).
+   */
+  private readonly onStorageChanged = (e: StorageEvent): void => {
+    // key === null nghĩa là localStorage bị clear() sạch ở tab khác → vẫn phải xử lý.
+    if (
+      e.key !== null &&
+      e.key !== TOKEN_STORAGE_KEYS.access &&
+      e.key !== TOKEN_STORAGE_KEYS.refresh
+    ) {
+      return;
+    }
+
+    const access = tokenStorage.access;
+    const refresh = tokenStorage.refresh;
+
+    // Tab khác đăng xuất (storage sạch token) → tab này rời phiên theo, không giữ signal trỏ token
+    // đã chết. Đăng xuất ở một tab là đăng xuất cả phiên.
+    if (!access && !refresh) {
+      this.accessToken.set(null);
+      this.refreshToken.set(null);
+      this.displayName.set(null);
+      return;
+    }
+
+    this.accessToken.set(access);
+    this.refreshToken.set(refresh);
+  };
 
   hasRole(...roles: PlatformRole[]): boolean {
     const mine = this.roles();
@@ -99,7 +141,10 @@ export class AuthStore {
   private refreshInFlight$?: Observable<string>;
   refresh$(): Observable<string> {
     if (this.refreshInFlight$) return this.refreshInFlight$;
-    const rt = this.refreshToken();
+    // Đọc token từ STORAGE tại thời điểm gọi, không dùng giá trị đã chụp vào signal lúc tải trang:
+    // tab khác có thể vừa xoay vòng token và ghi token mới vào storage. Refresh bằng token cũ đã bị
+    // thu hồi → 401 → người dùng bị đá về trang đăng nhập dù phiên vẫn còn hạn.
+    const rt = tokenStorage.refresh;
     if (!rt) return throwError(() => new Error('No refresh token'));
     this.refreshInFlight$ = this.authApi.refresh({ refreshToken: rt }).pipe(
       tap((r) => this.setSession(r)),
@@ -110,8 +155,13 @@ export class AuthStore {
     return this.refreshInFlight$;
   }
 
+  /**
+   * Xoá phiên ở máy TRƯỚC rồi mới gọi API: access token không thu hồi được ở server (validate offline)
+   * nên việc dọn storage là phần bắt buộc của đăng xuất, không được phụ thuộc API thành công.
+   * Server thu hồi MỌI refresh token của user → tab khác cũng không gia hạn phiên tiếp được.
+   */
   logout(): Observable<unknown> {
-    const rt = this.refreshToken();
+    const rt = tokenStorage.refresh; // đọc lúc gọi — tab khác có thể vừa xoay vòng token
     this.clearSession();
     return rt ? this.authApi.logout(rt).pipe(map(() => true)) : of(true);
   }
