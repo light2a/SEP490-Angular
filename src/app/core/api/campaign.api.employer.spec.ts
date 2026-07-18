@@ -40,12 +40,32 @@ describe('CampaignApi (Employer/HR)', () => {
       title: 'T',
       antiCheatEnabled: true,
       faceVerifyEnabled: false,
+      adaptiveEnabled: false,   // INT-17: bắt buộc như antiCheat/faceVerify (mặc định tắt)
       questions: [{ questionText: 'Q1', source: 'CustomHr', isRequired: true }],
     };
     api.createCampaign(body).subscribe();
     const req = httpMock.expectOne(BASE);
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual(body);
+    req.flush({});
+  });
+
+  // INT-17: HR bật thích ứng + trần → phải đi nguyên vẹn trong body POST (không bị API layer lọc).
+  it('createCampaign() forwards the adaptive toggle and caps', () => {
+    const body: CreateCampaignRequest = {
+      title: 'Adaptive',
+      antiCheatEnabled: false,
+      faceVerifyEnabled: false,
+      adaptiveEnabled: true,
+      maxFollowUps: 2,
+      maxQuestions: 8,
+      questions: [{ questionText: 'Q1', source: 'CustomHr', isRequired: true }],
+    };
+    api.createCampaign(body).subscribe();
+    const req = httpMock.expectOne(BASE);
+    expect(req.request.body.adaptiveEnabled).toBe(true);
+    expect(req.request.body.maxFollowUps).toBe(2);
+    expect(req.request.body.maxQuestions).toBe(8);
     req.flush({});
   });
 

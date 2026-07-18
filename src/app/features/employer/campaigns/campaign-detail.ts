@@ -84,6 +84,15 @@ const STATUS_LABEL: Record<CampaignStatus, string> = {
             <span class="v">{{ c.faceVerifyEnabled ? 'Bật' : 'Tắt' }}</span>
           </div>
           <div class="item">
+            <span class="k">Phỏng vấn thích ứng</span>
+            <span class="v">
+              {{ c.adaptiveEnabled ? 'Bật' : 'Tắt' }}
+              @if (c.adaptiveEnabled) {
+                · tối đa {{ c.maxFollowUps ?? '—' }} câu hỏi thêm, {{ c.maxQuestions ?? '—' }} tổng
+              }
+            </span>
+          </div>
+          <div class="item">
             <span class="k">Bắt đầu</span>
             <span class="v">{{ c.startsAt ? (c.startsAt | date: 'dd/MM/yyyy HH:mm') : '—' }}</span>
           </div>
