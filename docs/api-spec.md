@@ -28,7 +28,7 @@
 ## Luyện — `/interview/practice/sessions`
 - `POST` `{jobCategory, cvId?, jdId?}` → PracticeSession. **−1 credit** (402). Poll `GeneratingQuestions→Ready`.
 - `GET /history` → summary[]. `GET /{id}` → PracticeSession (questions + answer.scores + result).
-- `POST /{sessionId}/answers` multipart `{questionId, file(audio), durationSec}` → UploadAnswerResult. Chấm dần khi upload.
+- `POST /{sessionId}/answers` multipart `{questionId, file(audio), durationSec}` → UploadAnswerResult. Chấm dần khi upload. **INT-17 (phỏng vấn thích ứng):** response thêm `transcript?`, `nextAction? (follow_up|clarify|new_question|end)`, `nextQuestion?{id,orderNo,content,timeLimitSec,kind}`, `interviewComplete` — optional (client cũ bỏ qua vẫn chạy). `QuestionResponse`/`CampaignQuestion` thêm `kind? (Seed|FollowUp|Clarify|NewQuestion)`.
 - `POST /{sessionId}/submit` → 204 (cần ≥1 câu). Poll tới `Scored` để lấy `result`.
 
 ## Roadmap — `/interview/practice/roadmaps`
