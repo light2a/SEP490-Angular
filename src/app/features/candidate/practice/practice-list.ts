@@ -7,6 +7,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
+import { MatInputModule } from '@angular/material/input';
 import { MatListModule } from '@angular/material/list';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSelectModule } from '@angular/material/select';
@@ -16,6 +17,7 @@ import { PracticeApi } from '../../../core/api/practice.api';
 import { NotifyService } from '../../../core/notify.service';
 import {
   FileRecord,
+  JD_TEXT_MAX_CHARS,
   JOB_CATEGORIES,
   JobCategory,
   PracticeSessionSummary,
@@ -34,6 +36,7 @@ import { Spinner } from '../../../shared/ui/spinner';
     MatCardModule,
     MatFormFieldModule,
     MatSelectModule,
+    MatInputModule,
     MatButtonModule,
     MatIconModule,
     MatListModule,
@@ -63,9 +66,29 @@ export class PracticeList {
     jobCategory: ['BA', [Validators.required]],
     cvId: [''],
     jdId: [''],
+    jdText: ['', [Validators.maxLength(JD_TEXT_MAX_CHARS)]],
   });
 
+  /**
+   * Đang dán JD tay → BE sẽ BỎ file JD (quy ước C11 "text ưu tiên file"). Mirror lên UI để
+   * người dùng thấy trước khi bấm, thay vì ngạc nhiên vì file chọn rồi mà không được dùng.
+   */
+  readonly usingJdText = signal(false);
+
+  /** Giới hạn ký tự JD nhập tay + độ dài hiện tại (bộ đếm) — khớp hằng số BE (vượt → 400). */
+  readonly jdTextMaxChars = JD_TEXT_MAX_CHARS;
+  readonly jdTextLength = signal(0);
+
   constructor() {
+    this.form.controls.jdText.valueChanges.subscribe((v) => {
+      const using = v.trim().length > 0;
+      this.usingJdText.set(using);
+      this.jdTextLength.set(v.length);
+      // Khoá dropdown file bằng CODE (không dùng [disabled] trong template — reactive form cảnh báo).
+      // emitEvent:false để không kích lại vòng valueChanges của chính form.
+      if (using) this.form.controls.jdId.disable({ emitEvent: false });
+      else this.form.controls.jdId.enable({ emitEvent: false });
+    });
     this.load();
   }
 
@@ -90,8 +113,15 @@ export class PracticeList {
     if (this.form.invalid) return;
     const v = this.form.getRawValue();
     this.creating.set(true);
+    // Có jdText → gửi text và BỎ jdId luôn (đúng thứ tự ưu tiên C11, khỏi để BE phải đoán).
+    const jdText = v.jdText.trim();
     this.api
-      .create({ jobCategory: v.jobCategory as JobCategory, cvId: v.cvId || null, jdId: v.jdId || null })
+      .create({
+        jobCategory: v.jobCategory as JobCategory,
+        cvId: v.cvId || null,
+        jdId: jdText ? null : v.jdId || null,
+        jdText: jdText || null,
+      })
       .subscribe({
         next: (s) => {
           this.creating.set(false);

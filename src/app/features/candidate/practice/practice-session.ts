@@ -1,5 +1,14 @@
 import { DecimalPipe } from '@angular/common';
-import { Component, DestroyRef, OnInit, computed, inject, input, signal } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  OnInit,
+  computed,
+  inject,
+  input,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -12,11 +21,13 @@ import { PracticeApi } from '../../../core/api/practice.api';
 import { NotifyService } from '../../../core/notify.service';
 import {
   ADAPTIVE_ACTION_MESSAGE,
+  AnswerScore,
   PracticeSession as SessionData,
   QUESTION_KIND_LABEL,
   QuestionResponse,
   UploadAnswerResult,
 } from '../../../core/models';
+import { InterviewAvatar } from '../../../shared/avatar/interview-avatar';
 import { AnswerStatusPipe, JobCategoryPipe, SessionStatusPipe } from '../../../shared/pipes';
 import { Spinner } from '../../../shared/ui/spinner';
 import { AudioRecorder, RecordedAudio } from './audio-recorder';
@@ -36,6 +47,7 @@ const ANSWER_PENDING = ['Uploaded', 'Transcribing', 'Scoring'];
     MatDividerModule,
     MatProgressBarModule,
     AudioRecorder,
+    InterviewAvatar,
     Spinner,
     SessionStatusPipe,
     AnswerStatusPipe,
@@ -67,10 +79,25 @@ export class PracticeSession implements OnInit {
   readonly generating = computed(() => this.status() === 'GeneratingQuestions');
   readonly scored = computed(() => this.status() === 'Scored');
 
+  /** Avatar đang đọc → khoá MỌI nút ghi âm trên trang (không chỉ câu đang đọc). */
+  readonly avatarSpeaking = signal(false);
+  /** Có mic nào đang mở không → khoá ngược lại phía avatar (cấm nghe lại giữa lúc ghi). */
+  readonly recordingActive = signal(false);
+  private avatarRef = viewChild(InterviewAvatar);
+
   /**
-   * Điểm per-answer chỉ mang `criterionId` (không kèm tên) nên mọi dòng breakdown dưới từng câu
-   * trước đây hiện trơ "Điểm tiêu chí". Tên nằm sẵn ở `result.criteriaScores[]` trên CÙNG response
-   * → tra ngược theo id, không cần API mới. (Bắt ở e2e 2026-07-18.)
+   * Câu avatar sẽ đọc: câu chưa trả lời đầu tiên. Trang B2C hiện hết câu cùng lúc, nên phải chọn
+   * đúng một câu để đọc — chọn câu kế tiếp cần trả lời là sát với luồng làm bài nhất.
+   */
+  readonly currentQuestionId = computed(() => {
+    if (this.generating() || this.scored()) return null;
+    return this.questions().find((q) => !q.answer)?.id ?? null;
+  });
+
+  /**
+   * Dự phòng cho buổi chấm TRƯỚC 2026-07-18: hồi đó điểm per-answer không mang tên tiêu chí nên
+   * breakdown dưới từng câu hiện trơ "Điểm tiêu chí". Tên khi ấy chỉ có ở `result.criteriaScores[]`
+   * (cùng response) → tra ngược theo id.
    */
   private readonly criterionNames = computed(() => {
     const map = new Map<string, string>();
@@ -78,9 +105,12 @@ export class PracticeSession implements OnInit {
     return map;
   });
 
-  /** Tên tiêu chí; buổi chưa chấm xong (result null) thì lùi về nhãn chung. */
-  criterionName(criterionId: string): string {
-    return this.criterionNames().get(criterionId) ?? 'Điểm tiêu chí';
+  /**
+   * Ưu tiên `criterionName` BE trả kèm — đúng cả khi buổi CHƯA chấm xong (`result` còn null, nên
+   * bảng tra ở trên rỗng). Không có thì mới tra ngược, cuối cùng mới lùi về nhãn chung.
+   */
+  criterionName(sc: AnswerScore): string {
+    return sc.criterionName || this.criterionNames().get(sc.criterionId) || 'Điểm tiêu chí';
   }
 
   ngOnInit(): void {
@@ -137,6 +167,14 @@ export class PracticeSession implements OnInit {
   onRecorded(qid: string, rec: RecordedAudio): void {
     this.recordings.set(qid, rec);
   }
+
+  /**
+   * Ứng viên bấm ghi âm → tắt tiếng avatar NGAY, đồng bộ, trước khi mic kịp mở.
+   * Nút đã bị `[disabled]` lúc avatar nói, đây là chốt thứ hai cho mọi đường gọi khác.
+   */
+  onRecorderStart(): void {
+    this.avatarRef()?.stopSpeaking();
+  }
   hasRecording(qid: string): boolean {
     return this.recordings.has(qid);
   }
@@ -155,7 +193,9 @@ export class PracticeSession implements OnInit {
         // Phỏng vấn THÍCH ỨNG (INT-17): nếu backend trả action → hiển thị ngữ cảnh câu kế; end → gợi ý nộp.
         // `refresh()` (GET session) đã kéo về câu hỏi thích ứng mới (list tự lớn dần) — không cần poll thêm.
         this.interviewComplete.set(res.interviewComplete === true);
-        const msg = res.nextAction ? ADAPTIVE_ACTION_MESSAGE[res.nextAction] : 'Đã nộp câu trả lời.';
+        const msg = res.nextAction
+          ? ADAPTIVE_ACTION_MESSAGE[res.nextAction]
+          : 'Đã nộp câu trả lời.';
         this.notify.success(msg);
         this.refresh();
       },

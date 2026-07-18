@@ -117,4 +117,73 @@ describe('AuthStore', () => {
     expect(store.isAuthenticated()).toBe(false);
     expect(localStorage.getItem('isas.refreshToken')).toBeNull();
   });
+
+  // ── Đồng bộ phiên giữa nhiều tab ────────────────────────────────────────────
+  // Mô phỏng "tab kia vừa ghi localStorage": ghi thẳng vào storage rồi bắn StorageEvent — đúng như
+  // trình duyệt làm (sự kiện chỉ tới các tab KHÁC, không tới tab vừa ghi).
+  function simulateOtherTabWrite(key: string | null, newValue: string | null): void {
+    window.dispatchEvent(new StorageEvent('storage', { key, newValue, storageArea: localStorage }));
+  }
+
+  it('refresh$() uses the token currently in storage, not the one captured at load', () => {
+    api.login.mockReturnValue(of(makeAuthResponse()));
+    store.login({ email: 'a@b.c', password: 'x' }).subscribe();
+    api.refresh.mockReturnValue(of(makeAuthResponse({ refreshToken: 'refresh-token-3' })));
+
+    // Tab khác vừa xoay vòng token và ghi token mới, nhưng tab này CHƯA nhận sự kiện storage.
+    localStorage.setItem('isas.refreshToken', 'refresh-token-2');
+
+    store.refresh$().subscribe();
+
+    // Phải gửi token mới nhất trong storage — gửi token đã chụp sẵn ('refresh-token-1') thì server
+    // trả 401 (token đã bị thu hồi) và người dùng bị đăng xuất oan.
+    expect(api.refresh).toHaveBeenCalledWith({ refreshToken: 'refresh-token-2' });
+  });
+
+  it('adopts tokens written by another tab (storage event)', () => {
+    api.login.mockReturnValue(of(makeAuthResponse()));
+    store.login({ email: 'a@b.c', password: 'x' }).subscribe();
+
+    const rotated = makeJwt({ sub: 'user-1', role: 'Candidate' });
+    localStorage.setItem('isas.accessToken', rotated);
+    localStorage.setItem('isas.refreshToken', 'refresh-token-rotated');
+    simulateOtherTabWrite('isas.refreshToken', 'refresh-token-rotated');
+
+    expect(store.refreshToken()).toBe('refresh-token-rotated');
+    expect(store.accessToken()).toBe(rotated);
+  });
+
+  it('clears the session when another tab logs out', () => {
+    api.login.mockReturnValue(of(makeAuthResponse()));
+    store.login({ email: 'a@b.c', password: 'x' }).subscribe();
+    expect(store.isAuthenticated()).toBe(true);
+
+    localStorage.clear(); // tab kia đăng xuất
+    simulateOtherTabWrite('isas.refreshToken', null);
+
+    expect(store.accessToken()).toBeNull();
+    expect(store.refreshToken()).toBeNull();
+    expect(store.isAuthenticated()).toBe(false);
+  });
+
+  it('clears the session when another tab wipes storage entirely (key === null)', () => {
+    api.login.mockReturnValue(of(makeAuthResponse()));
+    store.login({ email: 'a@b.c', password: 'x' }).subscribe();
+
+    localStorage.clear();
+    simulateOtherTabWrite(null, null); // localStorage.clear() ở tab khác → key null
+
+    expect(store.isAuthenticated()).toBe(false);
+  });
+
+  it('ignores storage events for unrelated keys', () => {
+    api.login.mockReturnValue(of(makeAuthResponse()));
+    store.login({ email: 'a@b.c', password: 'x' }).subscribe();
+
+    localStorage.setItem('some.other.app', 'noise');
+    simulateOtherTabWrite('some.other.app', 'noise');
+
+    expect(store.refreshToken()).toBe('refresh-token-1'); // phiên không bị đụng
+    expect(store.isAuthenticated()).toBe(true);
+  });
 });

@@ -4,11 +4,19 @@ export interface CreatePracticeSessionRequest {
   cvId?: string | null;
   jdId?: string | null;
   jobCategory: JobCategory;
+  /**
+   * JD dán thẳng dạng text — khỏi phải upload PDF trước (quy ước C11 của B2B).
+   * Gửi cả jdText lẫn jdId → BE dùng TEXT, bỏ file (và không lưu jdId).
+   */
+  jdText?: string | null;
 }
 
 export interface AnswerScore {
   criterionId: string;
+  /** BE trả kèm từ 2026-07-18; buổi chấm TRƯỚC đó không có → lùi về tra `result.criteriaScores`. */
+  criterionName?: string | null;
   score: number;
+  maxScore?: number | null;
   reasoning?: string | null;
   rubricVersion: number;
   levelMatched?: number | null;

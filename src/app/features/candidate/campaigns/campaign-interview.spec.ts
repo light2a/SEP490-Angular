@@ -46,6 +46,7 @@ describe('CampaignInterview (smoke)', () => {
     get: ReturnType<typeof vi.fn>;
     uploadAnswer: ReturnType<typeof vi.fn>;
     submit: ReturnType<typeof vi.fn>;
+    speech: ReturnType<typeof vi.fn>;
   };
   let notify: Record<string, ReturnType<typeof vi.fn>>;
   let dialogOpen: ReturnType<typeof vi.fn>;
@@ -63,6 +64,8 @@ describe('CampaignInterview (smoke)', () => {
       get: vi.fn().mockReturnValue(of(practiceSession())),
       uploadAnswer: vi.fn(),
       submit: vi.fn(),
+      // Avatar đọc đề gọi endpoint này; trả lỗi để test rơi vào nhánh degrade (không phát tiếng).
+      speech: vi.fn().mockReturnValue(throwError(() => new Error('no tts in test'))),
     };
     notify = { success: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn() };
     consent$ = of();
@@ -151,7 +154,12 @@ describe('CampaignInterview (smoke)', () => {
 
     // Proctor listener hoạt động: rời cửa sổ → reportFlag focus_lost.
     window.dispatchEvent(new Event('blur'));
-    expect(campaignApi.reportFlag).toHaveBeenCalledWith('c1', 's1', 'focus_lost', expect.any(String));
+    expect(campaignApi.reportFlag).toHaveBeenCalledWith(
+      'c1',
+      's1',
+      'focus_lost',
+      expect.any(String),
+    );
 
     fixture.destroy();
   });
@@ -174,7 +182,9 @@ describe('CampaignInterview (smoke)', () => {
   });
 
   it('does NOT open the consent dialog when anti-cheat is off (antiCheatEnabled=false, faceEnrollRequired=false)', () => {
-    campaignApi.start.mockReturnValue(of({ ...START, antiCheatEnabled: false, faceEnrollRequired: false }));
+    campaignApi.start.mockReturnValue(
+      of({ ...START, antiCheatEnabled: false, faceEnrollRequired: false }),
+    );
     const fixture = render();
 
     expect(dialogOpen).not.toHaveBeenCalled();
@@ -192,7 +202,13 @@ describe('CampaignInterview (smoke)', () => {
         questionId: 'q2',
         status: 'Scoring',
         nextAction: 'follow_up',
-        nextQuestion: { id: 'q3', orderNo: 3, content: 'Câu hỏi thích ứng?', timeLimitSec: 60, kind: 'FollowUp' },
+        nextQuestion: {
+          id: 'q3',
+          orderNo: 3,
+          content: 'Câu hỏi thích ứng?',
+          timeLimitSec: 60,
+          kind: 'FollowUp',
+        },
         interviewComplete: false,
       }),
     );
@@ -234,7 +250,9 @@ describe('CampaignInterview (smoke)', () => {
 
     expect(cmp.questions().length).toBe(2); // không thêm câu
     expect(cmp.reviewStage()).toBe(true);
-    expect((fixture.nativeElement as HTMLElement).textContent ?? '').toContain('Hoàn tất phần trả lời');
+    expect((fixture.nativeElement as HTMLElement).textContent ?? '').toContain(
+      'Hoàn tất phần trả lời',
+    );
     fixture.destroy();
   });
 });

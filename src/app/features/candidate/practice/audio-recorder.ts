@@ -1,6 +1,7 @@
-import { Component, output, signal } from '@angular/core';
+import { Component, input, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatTooltipModule } from '@angular/material/tooltip';
 
 export interface RecordedAudio {
   blob: Blob;
@@ -10,11 +11,18 @@ export interface RecordedAudio {
 /** Ghi âm câu trả lời bằng MediaRecorder → phát ra { blob, durationSec }. */
 @Component({
   selector: 'app-audio-recorder',
-  imports: [MatButtonModule, MatIconModule],
+  imports: [MatButtonModule, MatIconModule, MatTooltipModule],
   template: `
     <div class="rec">
       @if (!recording() && !blobUrl()) {
-        <button mat-flat-button color="warn" type="button" (click)="start()">
+        <button
+          mat-flat-button
+          color="warn"
+          type="button"
+          [disabled]="disabled()"
+          [matTooltip]="disabled() ? disabledReason() : ''"
+          (click)="start()"
+        >
           <mat-icon>mic</mat-icon> Ghi âm
         </button>
       }
@@ -63,7 +71,21 @@ export interface RecordedAudio {
   ],
 })
 export class AudioRecorder {
+  /**
+   * Khoá nút ghi âm (avatar đang đọc câu hỏi). Bắt buộc phải khoá: mic mở trong lúc loa phát
+   * câu hỏi sẽ khiến Whisper bóc cả câu hỏi vào transcript → chấm điểm sai.
+   */
+  readonly disabled = input(false);
+  readonly disabledReason = input('Đợi avatar đọc xong câu hỏi rồi mới ghi âm được.');
+
   readonly recorded = output<RecordedAudio>();
+  /**
+   * Bắn ĐỒNG BỘ ngay đầu `start()`, trước cả khi xin quyền mic. Trang cha dùng để tắt tiếng
+   * avatar tức thì — chốt an toàn thứ hai cho cả đường gọi `start()` bằng code (không qua nút bấm).
+   */
+  readonly startRequested = output<void>();
+  /** Trạng thái ghi âm để cha khoá ngược lại phía avatar (không cho nghe lại lúc đang ghi). */
+  readonly recordingChange = output<boolean>();
 
   readonly recording = signal(false);
   readonly blobUrl = signal<string | null>(null);
@@ -75,6 +97,10 @@ export class AudioRecorder {
   private timer?: ReturnType<typeof setInterval>;
 
   async start(): Promise<void> {
+    // Báo cha TRƯỚC khi chạm tới mic: cha dừng giọng avatar ngay trong tick này, còn getUserMedia
+    // là async nên mic chỉ mở sau đó → không có khung tiếng nào của câu hỏi lọt vào bài ghi.
+    this.startRequested.emit();
+    if (this.disabled()) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       this.chunks = [];
@@ -100,6 +126,7 @@ export class AudioRecorder {
       );
       mr.start();
       this.recording.set(true);
+      this.recordingChange.emit(true);
     } catch {
       alert('Không truy cập được micro. Vui lòng cấp quyền micro cho trình duyệt.');
     }
@@ -108,6 +135,7 @@ export class AudioRecorder {
   stop(): void {
     this.mediaRecorder?.stop();
     this.recording.set(false);
+    this.recordingChange.emit(false);
     if (this.timer) clearInterval(this.timer);
   }
 

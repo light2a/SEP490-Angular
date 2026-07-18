@@ -26,13 +26,30 @@
     </mat-form-field>
 
     <mat-form-field appearance="outline">
-      <mat-label>JD (tuỳ chọn)</mat-label>
+      <mat-label>JD — dán mô tả công việc (tuỳ chọn)</mat-label>
+      <!-- maxlength + bộ đếm: thấy giới hạn TRƯỚC khi gửi, thay vì ăn 400 từ BE (BE enforce thật). -->
+      <textarea
+        matInput
+        formControlName="jdText"
+        rows="5"
+        [maxlength]="jdTextMaxChars"
+        placeholder="Dán JD vào đây để AI hỏi bám vị trí bạn nhắm — khỏi cần tải file PDF."
+      ></textarea>
+      <mat-hint>Dán text thì không cần chọn file JD bên dưới.</mat-hint>
+      <mat-hint align="end">{{ jdTextLength() }} / {{ jdTextMaxChars }}</mat-hint>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>…hoặc chọn file JD đã tải lên</mat-label>
       <mat-select formControlName="jdId">
         <mat-option [value]="''">— Không —</mat-option>
         @for (f of jdFiles(); track f.id) {
           <mat-option [value]="f.id">{{ f.originalName }}</mat-option>
         }
       </mat-select>
+      @if (usingJdText()) {
+        <mat-hint>Đang dùng JD dán tay — file JD sẽ được bỏ qua.</mat-hint>
+      }
     </mat-form-field>
 
     <button mat-flat-button color="primary" type="submit" [disabled]="creating()">

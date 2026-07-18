@@ -22,6 +22,7 @@ import {
   ProctorSignalType,
   QuestionItem,
   ScreenCandidatesResponse,
+  SessionTranscriptResponse,
   StartInterviewResult,
   TransitionStatusRequest,
   UpdateCampaignRequest,
@@ -175,6 +176,16 @@ export class CampaignApi {
     return this.http.put(`${this.base}/${id}/results/${sessionId}/override`, body);
   }
 
+  /**
+   * GET /campaign/{id}/results/{sessionId}/transcript — transcript + dẫn chứng AI 1 buổi (AI4).
+   * 404 = buổi chưa chấm / ngoài org · 502 = InterviewService lỗi (transcript đọc xuyên service).
+   */
+  getSessionTranscript(id: string, sessionId: string): Observable<SessionTranscriptResponse> {
+    return this.http.get<SessionTranscriptResponse>(
+      `${this.base}/${id}/results/${sessionId}/transcript`,
+    );
+  }
+
   /** GET /campaign/{id}/results/export?format=csv — tải CSV (blob). */
   exportResults(id: string, format = 'csv'): Observable<Blob> {
     return this.http.get(`${this.base}/${id}/results/export?format=${encodeURIComponent(format)}`, {
@@ -206,6 +217,17 @@ export class CampaignApi {
   /** GET /campaign/{id}/candidates/{cid} — chi tiết ứng viên (điểm + reasoning từng tiêu chí + CV key). */
   getCandidate(id: string, candidateId: string): Observable<CandidateDetailResponse> {
     return this.http.get<CandidateDetailResponse>(`${this.base}/${id}/candidates/${candidateId}`);
+  }
+
+  /**
+   * GET /campaign/{id}/candidates/{cid}/cv — CV gốc. Backend trả THẲNG file PDF (không phải URL/key),
+   * mà endpoint cần JWT → phải tải bằng HttpClient (interceptor gắn token) rồi tự tạo link tải,
+   * không dùng được <a href> trực tiếp. 404 = chưa archive CV / ngoài org.
+   */
+  downloadCandidateCv(id: string, candidateId: string): Observable<Blob> {
+    return this.http.get(`${this.base}/${id}/candidates/${candidateId}/cv`, {
+      responseType: 'blob',
+    });
   }
 
   /** PATCH /campaign/{id}/candidates/{cid} — bổ sung email/fullName (Invited → 409). */

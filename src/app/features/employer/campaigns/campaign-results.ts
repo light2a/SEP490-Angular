@@ -12,12 +12,17 @@ import { FormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { MatDialog } from '@angular/material/dialog';
 import { CampaignApi } from '../../../core/api/campaign.api';
 import { extractErrorMessage } from '../../../core/api/http-utils';
 import { CampaignResultRow, CampaignResultsResponse } from '../../../core/models';
 import { NotifyService } from '../../../core/notify.service';
 import { EmptyState } from '../../../shared/ui/empty-state';
 import { Spinner } from '../../../shared/ui/spinner';
+import {
+  SessionTranscriptDialog,
+  SessionTranscriptDialogData,
+} from './session-transcript-dialog';
 
 /** Kết quả + xếp hạng ứng viên của 1 campaign (E5/E6) — chỉ thành viên org sở hữu. */
 @Component({
@@ -140,8 +145,15 @@ import { Spinner } from '../../../shared/ui/spinner';
             </ng-container>
 
             <ng-container matColumnDef="actions">
-              <th mat-header-cell *matHeaderCellDef>Điều chỉnh</th>
+              <th mat-header-cell *matHeaderCellDef>Thao tác</th>
               <td mat-cell *matCellDef="let r">
+                <button
+                  mat-button
+                  matTooltip="Xem transcript + lý do AI chấm điểm"
+                  (click)="openTranscript(r)"
+                >
+                  <mat-icon>record_voice_over</mat-icon> Transcript
+                </button>
                 <button mat-button (click)="startEdit(r)">
                   <mat-icon>tune</mat-icon> Điều chỉnh
                 </button>
@@ -293,6 +305,7 @@ import { Spinner } from '../../../shared/ui/spinner';
 export class CampaignResults implements OnInit {
   private api = inject(CampaignApi);
   private notify = inject(NotifyService);
+  private dialog = inject(MatDialog);
 
   readonly campaignId = input.required<string>();
 
@@ -310,6 +323,19 @@ export class CampaignResults implements OnInit {
 
   ngOnInit(): void {
     this.load();
+  }
+
+  /**
+   * AI4 — mở transcript + dẫn chứng AI của buổi trên dòng đang xem. Dialog (không đổi route) để
+   * HR đọc xong là đóng lại, giữ nguyên bảng xếp hạng + form điều chỉnh đang mở dở.
+   */
+  openTranscript(r: CampaignResultRow): void {
+    const data: SessionTranscriptDialogData = {
+      campaignId: this.campaignId(),
+      sessionId: r.sessionId,
+      candidateId: r.candidateId,
+    };
+    this.dialog.open(SessionTranscriptDialog, { data, width: '760px', maxWidth: '95vw' });
   }
 
   startEdit(r: CampaignResultRow): void {
