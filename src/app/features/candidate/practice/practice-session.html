@@ -11,10 +11,22 @@
   @if (generating()) {
     <app-spinner message="AI đang sinh câu hỏi, vui lòng đợi..." />
   } @else {
+    <!-- Avatar đọc câu chưa trả lời đầu tiên; ẩn khi đã trả lời hết / đã chấm. -->
+    @if (currentQuestionId(); as qid) {
+      <app-interview-avatar
+        [sessionId]="sessionId()"
+        [questionId]="qid"
+        [locked]="recordingActive()"
+        (speakingChange)="avatarSpeaking.set($event)"
+      />
+    }
+
     @for (q of questions(); track q.id; let i = $index) {
       <mat-card class="q">
         <div class="q-head">
-          <h3>Câu {{ i + 1 }} <span class="tl">· {{ q.timeLimitSec }}s</span></h3>
+          <h3>
+            Câu {{ i + 1 }} <span class="tl">· {{ q.timeLimitSec }}s</span>
+          </h3>
           @if (kindBadge(q); as kb) {
             <mat-chip highlighted><mat-icon>auto_awesome</mat-icon> {{ kb }}</mat-chip>
           }
@@ -40,7 +52,13 @@
             </div>
           }
         } @else if (!scored()) {
-          <app-audio-recorder (recorded)="onRecorded(q.id, $event)" />
+          <!-- Khoá ghi âm khi avatar đang đọc: mic mở lúc loa kêu sẽ làm transcript lẫn câu hỏi. -->
+          <app-audio-recorder
+            [disabled]="avatarSpeaking()"
+            (recorded)="onRecorded(q.id, $event)"
+            (startRequested)="onRecorderStart()"
+            (recordingChange)="recordingActive.set($event)"
+          />
           <button
             mat-flat-button
             color="primary"

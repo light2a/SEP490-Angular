@@ -28,6 +28,17 @@ export class PracticeApi {
     return this.http.post(`${this.base}/${sessionId}/submit`, {});
   }
 
+  /**
+   * GET .../{sessionId}/questions/{questionId}/speech — giọng đọc câu hỏi (audio/mpeg).
+   * Trả blob chứ không gán thẳng vào `<audio src>` vì endpoint đòi JWT: thẻ `<audio>` không đính
+   * Authorization header nên sẽ 401. Tải qua HttpClient (interceptor gắn token) rồi mới tạo object URL.
+   */
+  speech(sessionId: string, questionId: string): Observable<Blob> {
+    return this.http.get(`${this.base}/${sessionId}/questions/${questionId}/speech`, {
+      responseType: 'blob',
+    });
+  }
+
   /** POST .../{sessionId}/answers (multipart: questionId, file audio, durationSec). */
   uploadAnswer(
     sessionId: string,

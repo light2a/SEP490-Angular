@@ -1,5 +1,14 @@
 import { DecimalPipe } from '@angular/common';
-import { Component, DestroyRef, OnInit, computed, inject, input, signal } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  OnInit,
+  computed,
+  inject,
+  input,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -18,6 +27,7 @@ import {
   QuestionResponse,
   UploadAnswerResult,
 } from '../../../core/models';
+import { InterviewAvatar } from '../../../shared/avatar/interview-avatar';
 import { AnswerStatusPipe, JobCategoryPipe, SessionStatusPipe } from '../../../shared/pipes';
 import { Spinner } from '../../../shared/ui/spinner';
 import { AudioRecorder, RecordedAudio } from './audio-recorder';
@@ -37,6 +47,7 @@ const ANSWER_PENDING = ['Uploaded', 'Transcribing', 'Scoring'];
     MatDividerModule,
     MatProgressBarModule,
     AudioRecorder,
+    InterviewAvatar,
     Spinner,
     SessionStatusPipe,
     AnswerStatusPipe,
@@ -67,6 +78,21 @@ export class PracticeSession implements OnInit {
   readonly answeredCount = computed(() => this.questions().filter((q) => q.answer).length);
   readonly generating = computed(() => this.status() === 'GeneratingQuestions');
   readonly scored = computed(() => this.status() === 'Scored');
+
+  /** Avatar đang đọc → khoá MỌI nút ghi âm trên trang (không chỉ câu đang đọc). */
+  readonly avatarSpeaking = signal(false);
+  /** Có mic nào đang mở không → khoá ngược lại phía avatar (cấm nghe lại giữa lúc ghi). */
+  readonly recordingActive = signal(false);
+  private avatarRef = viewChild(InterviewAvatar);
+
+  /**
+   * Câu avatar sẽ đọc: câu chưa trả lời đầu tiên. Trang B2C hiện hết câu cùng lúc, nên phải chọn
+   * đúng một câu để đọc — chọn câu kế tiếp cần trả lời là sát với luồng làm bài nhất.
+   */
+  readonly currentQuestionId = computed(() => {
+    if (this.generating() || this.scored()) return null;
+    return this.questions().find((q) => !q.answer)?.id ?? null;
+  });
 
   /**
    * Dự phòng cho buổi chấm TRƯỚC 2026-07-18: hồi đó điểm per-answer không mang tên tiêu chí nên
@@ -141,6 +167,14 @@ export class PracticeSession implements OnInit {
   onRecorded(qid: string, rec: RecordedAudio): void {
     this.recordings.set(qid, rec);
   }
+
+  /**
+   * Ứng viên bấm ghi âm → tắt tiếng avatar NGAY, đồng bộ, trước khi mic kịp mở.
+   * Nút đã bị `[disabled]` lúc avatar nói, đây là chốt thứ hai cho mọi đường gọi khác.
+   */
+  onRecorderStart(): void {
+    this.avatarRef()?.stopSpeaking();
+  }
   hasRecording(qid: string): boolean {
     return this.recordings.has(qid);
   }
@@ -159,7 +193,9 @@ export class PracticeSession implements OnInit {
         // Phỏng vấn THÍCH ỨNG (INT-17): nếu backend trả action → hiển thị ngữ cảnh câu kế; end → gợi ý nộp.
         // `refresh()` (GET session) đã kéo về câu hỏi thích ứng mới (list tự lớn dần) — không cần poll thêm.
         this.interviewComplete.set(res.interviewComplete === true);
-        const msg = res.nextAction ? ADAPTIVE_ACTION_MESSAGE[res.nextAction] : 'Đã nộp câu trả lời.';
+        const msg = res.nextAction
+          ? ADAPTIVE_ACTION_MESSAGE[res.nextAction]
+          : 'Đã nộp câu trả lời.';
         this.notify.success(msg);
         this.refresh();
       },
