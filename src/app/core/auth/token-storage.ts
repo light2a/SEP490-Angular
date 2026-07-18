@@ -6,6 +6,12 @@
 const AT_KEY = 'isas.accessToken';
 const RT_KEY = 'isas.refreshToken';
 
+/**
+ * Tên key lộ ra ngoài để AuthStore lọc sự kiện `storage` (đồng bộ phiên giữa các tab) — chỉ quan tâm
+ * hai key này, bỏ qua mọi key khác mà app/thư viện khác ghi vào localStorage.
+ */
+export const TOKEN_STORAGE_KEYS = { access: AT_KEY, refresh: RT_KEY } as const;
+
 export const tokenStorage = {
   get access(): string | null {
     return localStorage.getItem(AT_KEY);
