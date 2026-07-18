@@ -123,3 +123,63 @@ describe('authInterceptor', () => {
     expect(errored).toBeTruthy();
   });
 });
+
+/**
+ * Bug 2026-07-19: `catchError` đặt SAU `switchMap` nên nó ôm luôn lỗi của request được GỬI LẠI →
+ * retry chết vì lý do không liên quan đến auth (502 tunnel, timeout) cũng xoá sạch phiên đăng nhập.
+ * Triệu chứng thật: tải lại trang chi tiết buổi luyện bị đá về /auth/login, còn trang danh sách thì
+ * không — vì trang chi tiết gọi `/speech` mất ~6,4s lúc cache lạnh, dễ đứt giữa chừng.
+ */
+describe('authInterceptor — retry hỏng KHÔNG được xoá phiên', () => {
+  let http: HttpClient;
+  let httpMock: HttpTestingController;
+  let store: FakeAuthStore;
+
+  beforeEach(() => {
+    store = new FakeAuthStore();
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(withInterceptors([authInterceptor])),
+        provideHttpClientTesting(),
+        { provide: AuthStore, useValue: store },
+      ],
+    });
+    http = TestBed.inject(HttpClient);
+    httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => httpMock.verify());
+
+  it('refresh OK nhưng request gửi lại lỗi 502 → GIỮ phiên, chỉ trả lỗi', () => {
+    let caught: unknown;
+    http.get(`${API}/interview/practice/sessions/x/questions/y/speech`).subscribe({
+      error: (e) => (caught = e),
+    });
+
+    // Lượt đầu 401 → kích hoạt refresh.
+    httpMock.expectOne(`${API}/interview/practice/sessions/x/questions/y/speech`)
+      .flush(null, { status: 401, statusText: 'Unauthorized' });
+    store.refreshSubject.next('new-token');
+    store.refreshSubject.complete();
+
+    // Request gửi lại chết vì hạ tầng, KHÔNG phải vì auth.
+    httpMock.expectOne(`${API}/interview/practice/sessions/x/questions/y/speech`)
+      .flush(null, { status: 502, statusText: 'Bad Gateway' });
+
+    expect((caught as { status: number }).status).toBe(502);
+    // Cốt lõi: phiên phải còn nguyên. Trước khi sửa, dòng này đỏ.
+    expect(store.clearSession).not.toHaveBeenCalled();
+  });
+
+  it('chính refresh hỏng → XOÁ phiên (hành vi đúng, không được nới)', () => {
+    let caught: unknown;
+    http.get(`${API}/interview/practice/sessions`).subscribe({ error: (e) => (caught = e) });
+
+    httpMock.expectOne(`${API}/interview/practice/sessions`)
+      .flush(null, { status: 401, statusText: 'Unauthorized' });
+    store.refreshSubject.error(new Error('refresh token đã bị thu hồi'));
+
+    expect(caught).toBeInstanceOf(Error);
+    expect(store.clearSession).toHaveBeenCalledTimes(1);
+  });
+});
