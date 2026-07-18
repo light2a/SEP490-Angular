@@ -8,6 +8,7 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
+import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSelectModule } from '@angular/material/select';
 import { CvAnalysisApi } from '../../../core/api/cv-analysis.api';
@@ -27,6 +28,7 @@ import { Spinner } from '../../../shared/ui/spinner';
     MatCardModule,
     MatFormFieldModule,
     MatSelectModule,
+    MatInputModule,
     MatButtonModule,
     MatIconModule,
     MatChipsModule,
@@ -55,9 +57,20 @@ export class CvAnalysis {
     cvId: ['', [Validators.required]],
     jobCategory: ['BA', [Validators.required]],
     jdId: [''],
+    jdText: [''],
   });
 
+  /** Đang dán JD tay → BE bỏ file JD (C11 "text ưu tiên file"); mirror lên UI cho khỏi bất ngờ. */
+  readonly usingJdText = signal(false);
+
   constructor() {
+    this.form.controls.jdText.valueChanges.subscribe((v) => {
+      const using = v.trim().length > 0;
+      this.usingJdText.set(using);
+      // Khoá dropdown file bằng CODE (không dùng [disabled] template — reactive form cảnh báo).
+      if (using) this.form.controls.jdId.disable({ emitEvent: false });
+      else this.form.controls.jdId.enable({ emitEvent: false });
+    });
     this.load();
   }
 
@@ -85,11 +98,14 @@ export class CvAnalysis {
     }
     const v = this.form.getRawValue();
     this.submitting.set(true);
+    // Có jdText → gửi text và bỏ jdId (đúng thứ tự ưu tiên C11, khỏi để BE phải đoán).
+    const jdText = v.jdText.trim();
     this.api
       .create({
         cvId: v.cvId,
         jobCategory: v.jobCategory as CvAnalysisResponse['jobCategory'],
-        jdId: v.jdId || null,
+        jdId: jdText ? null : v.jdId || null,
+        jdText: jdText || null,
       })
       .subscribe({
         next: (res) => {

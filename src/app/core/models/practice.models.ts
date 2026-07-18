@@ -4,6 +4,11 @@ export interface CreatePracticeSessionRequest {
   cvId?: string | null;
   jdId?: string | null;
   jobCategory: JobCategory;
+  /**
+   * JD dán thẳng dạng text — khỏi phải upload PDF trước (quy ước C11 của B2B).
+   * Gửi cả jdText lẫn jdId → BE dùng TEXT, bỏ file (và không lưu jdId).
+   */
+  jdText?: string | null;
 }
 
 export interface AnswerScore {
