@@ -16,6 +16,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatDialog } from '@angular/material/dialog';
 import { extractErrorMessage } from '../../../core/api/http-utils';
 import { CampaignApi } from '../../../core/api/campaign.api';
 import { NotifyService } from '../../../core/notify.service';
@@ -25,8 +26,10 @@ import {
   CriterionItem,
   JD_TEXT_MAX_CHARS,
   QuestionItem,
+  QuestionSource,
   UpdateCampaignRequest,
 } from '../../../core/models';
+import { ConfirmDialog, ConfirmDialogData } from '../../../shared/ui/confirm-dialog';
 import { Spinner } from '../../../shared/ui/spinner';
 
 /** ISO → giá trị datetime-local (theo giờ máy). */
@@ -214,11 +217,57 @@ function toIso(local: string | null | undefined): string | null {
           <h2>Câu hỏi phỏng vấn *</h2>
           <p class="hint">Cần ít nhất 1 câu hỏi.</p>
 
+          @if (!readOnly()) {
+            <div class="ai-gen">
+              <div class="ai-gen-row">
+                <mat-form-field appearance="outline" class="ai-count">
+                  <mat-label>Số câu</mat-label>
+                  <!-- Input thuần (không ngModel) để không trộn template-driven vào form reactive. -->
+                  <input
+                    matInput
+                    type="number"
+                    min="1"
+                    max="20"
+                    placeholder="Tự động"
+                    [value]="aiCount() ?? ''"
+                    (input)="onAiCountInput($any($event.target).value)"
+                  />
+                </mat-form-field>
+                <button
+                  mat-stroked-button
+                  type="button"
+                  (click)="generateQuestions()"
+                  [disabled]="!canGenerate()"
+                >
+                  @if (generating()) {
+                    <mat-icon class="spin">progress_activity</mat-icon>
+                  } @else {
+                    <mat-icon>auto_awesome</mat-icon>
+                  }
+                  {{ generating() ? 'Đang sinh...' : 'Nhờ AI sinh từ JD' }}
+                </button>
+              </div>
+              <p class="hint">
+                @if (!campaignId()) {
+                  Hãy tạo chiến dịch trước — AI đọc JD <strong>đã lưu</strong> để sinh câu hỏi.
+                } @else {
+                  AI đọc JD <strong>đã lưu</strong> của chiến dịch. Mỗi lần sinh sẽ
+                  <strong>thay các câu AI trước đó</strong> nhưng <strong>giữ nguyên câu bạn tự gõ</strong>.
+                }
+              </p>
+            </div>
+          }
+
           <div formArrayName="questions">
             @for (g of questions.controls; track $index; let i = $index) {
               <div class="q-row" [formGroupName]="i">
                 <mat-form-field appearance="outline" class="q-text">
-                  <mat-label>Câu hỏi #{{ i + 1 }} *</mat-label>
+                  <mat-label>
+                    Câu hỏi #{{ i + 1 }} *
+                    @if (isAiQuestion(i)) {
+                      <span class="ai-badge">AI sinh</span>
+                    }
+                  </mat-label>
                   <textarea matInput formControlName="questionText" rows="2"></textarea>
                 </mat-form-field>
                 <mat-checkbox formControlName="isRequired">Bắt buộc</mat-checkbox>
@@ -270,6 +319,29 @@ function toIso(local: string | null | undefined): string | null {
       h2 {
         margin: 0 0 12px;
         font-size: 18px;
+      }
+      .ai-gen {
+        margin-bottom: 12px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        background: var(--mat-sys-surface-variant);
+      }
+      .ai-gen-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .ai-count {
+        width: 120px;
+      }
+      .ai-badge {
+        margin-left: 6px;
+        padding: 1px 8px;
+        border-radius: 8px;
+        font-size: 11px;
+        background: var(--mat-sys-primary-container);
+        color: var(--mat-sys-on-primary-container);
       }
       .section {
         padding: 20px;
@@ -370,6 +442,7 @@ export class CampaignForm implements OnInit {
   private api = inject(CampaignApi);
   private notify = inject(NotifyService);
   private router = inject(Router);
+  private dialog = inject(MatDialog);
 
   /** Có param → chế độ sửa. */
   readonly campaignId = input<string>();
@@ -377,6 +450,10 @@ export class CampaignForm implements OnInit {
   readonly loading = signal(false);
   readonly saving = signal(false);
   readonly readOnly = signal(false);
+  /** Đang gọi AI sinh câu hỏi (F9) — khoá nút để không bắn 2 lần. */
+  readonly generating = signal(false);
+  /** Số câu muốn AI sinh (1..20); null = để backend tự quyết. */
+  readonly aiCount = signal<number | null>(null);
   private original = signal<CampaignResponse | null>(null);
 
   /** Giới hạn ký tự JD nhập tay — khớp hằng số BE (vượt → 400). */
@@ -471,7 +548,9 @@ export class CampaignForm implements OnInit {
       this.criteria.push(this.critRow(cr.name, cr.weight, cr.maxScore, cr.description ?? '')),
     );
     this.questions.clear();
-    c.questions.forEach((q) => this.questions.push(this.questionRow(q.questionText, q.isRequired)));
+    c.questions.forEach((q) =>
+      this.questions.push(this.questionRow(q.questionText, q.isRequired, q.source)),
+    );
     if (this.questions.length === 0) this.addQuestion();
   }
 
@@ -499,17 +578,116 @@ export class CampaignForm implements OnInit {
   }
 
   // ── Questions ────────────────────────────────────────────────────────────────
-  private questionRow(questionText = '', isRequired = true): FormGroup {
+  /**
+   * `source` được MANG THEO trong form chứ không phải hằng số lúc gửi đi: trước đây
+   * `buildQuestions()` gán cứng `'CustomHr'` cho mọi câu, nên chỉ cần HR bấm "Lưu thay đổi"
+   * một lần là toàn bộ dấu vết `AiGenerated` bị xoá sạch — badge "AI sinh" biến mất và lần
+   * sinh lại kế tiếp không còn biết câu nào của AI để thay (F9/F10).
+   */
+  private questionRow(questionText = '', isRequired = true, source: QuestionSource = 'CustomHr'): FormGroup {
     return this.fb.group({
       questionText: [questionText, [Validators.required]],
       isRequired: [isRequired],
+      source: [source],
     });
+  }
+
+  /** Câu do AI sinh (để hiện badge). */
+  isAiQuestion(i: number): boolean {
+    return this.questions.at(i)?.get('source')?.value === 'AiGenerated';
   }
   addQuestion(): void {
     this.questions.push(this.questionRow());
   }
   removeQuestion(i: number): void {
     this.questions.removeAt(i);
+  }
+
+  // ── Sinh câu hỏi bằng AI (F9) ────────────────────────────────────────────────
+  /**
+   * Backend đọc JD **đã lưu trong DB**, không phải chữ đang gõ trong form. Nên nếu HR vừa dán JD
+   * mà chưa bấm Lưu thì AI sẽ đọc JD cũ (hoặc rỗng → 400) — im lặng làm sai chứ không báo lỗi gì
+   * rõ ràng. Chặn trước ở đây và nói thẳng lý do.
+   */
+  canGenerate(): boolean {
+    return !!this.campaignId() && !this.readOnly() && !this.generating();
+  }
+
+  /** Ô trống = để backend tự quyết số câu (null), không phải 0. */
+  onAiCountInput(raw: string): void {
+    const t = (raw ?? '').trim();
+    this.aiCount.set(t === '' ? null : Number(t));
+  }
+
+  generateQuestions(): void {
+    const id = this.campaignId();
+    if (!id) {
+      this.notify.warn('Hãy tạo (lưu) chiến dịch trước — AI cần JD đã lưu để sinh câu hỏi.');
+      return;
+    }
+    if (this.readOnly()) {
+      this.notify.warn('Chiến dịch đã xuất bản — không sửa được câu hỏi nữa.');
+      return;
+    }
+
+    const jdCtrl = this.form.get('jdText');
+    if (!jdCtrl?.value?.trim()) {
+      this.notify.warn('Chiến dịch chưa có JD. Hãy nhập JD và lưu lại trước khi nhờ AI sinh câu hỏi.');
+      return;
+    }
+
+    const count = this.aiCount();
+    if (count != null && (count < 1 || count > 20)) {
+      this.notify.warn('Số câu cần sinh phải trong khoảng 1–20.');
+      return;
+    }
+
+    const aiCount = this.questions.controls.filter(
+      (g) => g.get('source')?.value === 'AiGenerated',
+    ).length;
+    const hrCount = this.questions.length - aiCount;
+
+    const bullets = [
+      aiCount > 0
+        ? `${aiCount} câu do AI sinh trước đó sẽ bị THAY bằng câu mới.`
+        : 'Hiện chưa có câu nào do AI sinh.',
+      hrCount > 0
+        ? `${hrCount} câu bạn tự gõ được GIỮ NGUYÊN.`
+        : 'Bạn chưa tự gõ câu nào.',
+      'Danh sách câu hỏi sẽ được tải lại từ máy chủ sau khi sinh.',
+    ];
+
+    const dirty = this.form.dirty;
+    const data: ConfirmDialogData = {
+      title: 'Nhờ AI sinh câu hỏi từ JD?',
+      message:
+        'AI đọc JD đã lưu của chiến dịch để sinh bộ câu hỏi phỏng vấn. Gọi lại nhiều lần không cộng dồn câu hỏi.',
+      bullets,
+      warning: dirty
+        ? 'Biểu mẫu đang có thay đổi CHƯA LƯU (kể cả JD vừa sửa). AI đọc bản đã lưu trên máy chủ, và các thay đổi chưa lưu sẽ bị bỏ khi danh sách tải lại. Nên bấm Huỷ, lưu lại, rồi sinh.'
+        : undefined,
+      confirmLabel: 'Sinh câu hỏi',
+    };
+
+    this.dialog
+      .open(ConfirmDialog, { data, width: '520px' })
+      .afterClosed()
+      .subscribe((ok) => {
+        if (!ok) return;
+        this.generating.set(true);
+        this.api.generateQuestions(id, count).subscribe({
+          next: (c) => {
+            this.generating.set(false);
+            this.hydrate(c);
+            const n = c.questions.filter((q) => q.source === 'AiGenerated').length;
+            this.notify.success(`AI đã sinh ${n} câu hỏi.`);
+          },
+          error: (e: HttpErrorResponse) => {
+            this.generating.set(false);
+            this.notify.error(extractErrorMessage(e) ?? 'Sinh câu hỏi bằng AI thất bại.');
+          },
+        });
+      });
   }
 
   // ── Submit ───────────────────────────────────────────────────────────────────
@@ -524,7 +702,8 @@ export class CampaignForm implements OnInit {
   private buildQuestions(): QuestionItem[] {
     return this.questions.controls.map((g) => ({
       questionText: g.get('questionText')!.value,
-      source: 'CustomHr' as const,
+      // Giữ nguồn gốc thật của câu hỏi (xem ghi chú ở questionRow) — KHÔNG gán cứng 'CustomHr'.
+      source: (g.get('source')!.value ?? 'CustomHr') as QuestionSource,
       isRequired: !!g.get('isRequired')!.value,
     }));
   }
