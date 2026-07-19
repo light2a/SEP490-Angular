@@ -33,6 +33,11 @@ export interface AnswerResponse {
   transcript?: string | null;
   needsReview: boolean;
   scores: AnswerScore[];
+  /**
+   * F13 (FR07) — câu trả lời mẫu mức tối đa cho ĐÚNG câu hỏi này, AI sinh cùng lượt chấm.
+   * Optional: buổi chấm TRƯỚC F13 (và ca AI không trả) không có → chỉ không hiện mục gợi ý.
+   */
+  sampleAnswer?: string | null;
 }
 
 export interface QuestionResponse {

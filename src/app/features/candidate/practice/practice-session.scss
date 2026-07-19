@@ -64,6 +64,35 @@
 .review-chip {
   margin-bottom: 8px;
 }
+/* F13 — gợi ý câu trả lời mẫu (thu gọn mặc định). */
+.sample {
+  margin-top: 12px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  padding: 8px 12px;
+
+  summary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--mat-sys-primary);
+  }
+}
+.sample-body {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+.sample-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--mat-sys-on-surface-variant);
+}
 .timer {
   display: flex;
   align-items: center;

@@ -64,6 +64,20 @@
               }
             </div>
           }
+          <!--
+            F13 — gợi ý câu trả lời mẫu. Đặt SAU điểm + nhận xét có chủ đích: người luyện đọc
+            mình thiếu ở đâu trước, rồi mới tới "đáng lẽ nên trả lời thế này". Mặc định thu gọn
+            để không che mất bản ghi và điểm của chính họ.
+          -->
+          @if (q.answer.sampleAnswer) {
+            <details class="sample">
+              <summary><mat-icon>lightbulb</mat-icon> Gợi ý câu trả lời mẫu</summary>
+              <p class="sample-body">{{ q.answer.sampleAnswer }}</p>
+              <p class="sample-note">
+                AI soạn theo rubric của buổi này — tham khảo cách triển khai ý, đừng học thuộc.
+              </p>
+            </details>
+          }
         } @else if (isLocked(q.id)) {
           <p class="locked">
             <mat-icon>lock_clock</mat-icon> Hết giờ — câu này đã đóng.

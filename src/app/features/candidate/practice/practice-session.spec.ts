@@ -167,6 +167,7 @@ describe('PracticeSession — khoá ghi âm khi avatar đọc câu hỏi', () =>
     const scoredSession = (
       scores: unknown[],
       needsReview = false,
+      sampleAnswer: string | null = null,
     ): SessionData =>
       ({
         ...session(),
@@ -184,6 +185,7 @@ describe('PracticeSession — khoá ghi âm khi avatar đọc câu hỏi', () =>
               transcript: 'Tôi là ứng viên.',
               needsReview,
               scores,
+              sampleAnswer,
             },
           },
         ],
@@ -254,6 +256,64 @@ describe('PracticeSession — khoá ghi âm khi avatar đọc câu hỏi', () =>
       );
 
       expect(render().nativeElement.textContent).not.toContain('cần xem lại');
+    });
+  });
+
+  /**
+   * F13 (FR07) — gợi ý câu trả lời mẫu. Nội dung do AI sinh cùng lượt chấm; phần FE phải khoá là
+   * "chỉ hiện khi CÓ" — buổi chấm trước F13 (và ca AI bỏ field) trả null, mà một khối rỗng có tiêu
+   * đề "Gợi ý câu trả lời mẫu" thì tệ hơn là không có gì.
+   */
+  describe('gợi ý câu trả lời mẫu (F13)', () => {
+    const withSample = (sampleAnswer: string | null) =>
+      of({
+        ...session(),
+        status: 'Scored',
+        questions: [
+          {
+            id: 'q1',
+            orderNo: 1,
+            content: 'Giới thiệu bản thân?',
+            timeLimitSec: 120,
+            answer: {
+              id: 'a1',
+              status: 'Scored',
+              durationSec: 30,
+              transcript: 'Tôi là ứng viên.',
+              needsReview: false,
+              scores: [
+                {
+                  criterionId: 'c1',
+                  criterionName: 'Giao tiếp',
+                  score: 7,
+                  reasoning: 'ok',
+                  rubricVersion: 1,
+                },
+              ],
+              sampleAnswer,
+            },
+          },
+        ],
+      } as SessionData);
+
+    it('có sampleAnswer → hiện nội dung mẫu kèm cảnh báo tham khảo', () => {
+      api.get.mockReturnValue(withSample('Theo tôi, DI là kỹ thuật tiêm phụ thuộc...'));
+
+      const el = render().nativeElement;
+
+      expect(el.querySelector('.sample')).toBeTruthy();
+      expect(el.textContent).toContain('Theo tôi, DI là kỹ thuật tiêm phụ thuộc...');
+      // Không được trình bày như đáp án chuẩn để học thuộc.
+      expect(el.textContent).toContain('đừng học thuộc');
+    });
+
+    it('sampleAnswer null → KHÔNG render khối gợi ý', () => {
+      api.get.mockReturnValue(withSample(null));
+
+      const el = render().nativeElement;
+
+      expect(el.querySelector('.sample')).toBeNull();
+      expect(el.textContent).not.toContain('Gợi ý câu trả lời mẫu');
     });
   });
 });
