@@ -218,6 +218,15 @@ export class CampaignInterview implements OnInit {
   }
 
   /**
+   * F4 — `WebcamCapture` báo camera không bật được → ghi cờ `camera_blocked` cho HR.
+   * Đặt ở CHA (không inject ProctorService vào component con) để con giữ thuần I/O, test độc lập được.
+   * KHÔNG chặn bài thi: cờ chỉ là gợi ý cho HR (D13/CAMP-12).
+   */
+  onCameraBlocked(reason: string): void {
+    this.proctor.reportCameraBlocked(reason);
+  }
+
+  /**
    * Giám sát chống gian lận (SEC): xin đồng ý 1 lần TRƯỚC khi bật webcam/listener (SEC-5).
    * Đồng ý → start proctor + mount webcam. Từ chối → rời trang (không thể tiếp tục bài giám sát).
    * Không bao giờ chặn bài vì lý do kỹ thuật (camera denied / face fail = cờ cho HR — D13).

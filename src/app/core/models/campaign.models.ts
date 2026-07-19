@@ -1,7 +1,34 @@
 import { CampaignStatus, CandidateInterviewStatus, QuestionKind } from './enums';
 
-/** Tín hiệu proctoring (anti-cheat B2B) gửi lên backend — flag cho HR, KHÔNG auto-hủy. */
-export type ProctorSignalType = 'tab_switch' | 'paste' | 'focus_lost';
+/**
+ * Tín hiệu proctoring (anti-cheat B2B) gửi lên backend — flag cho HR, KHÔNG auto-hủy.
+ * `camera_blocked` (F4): OS/trình duyệt từ chối quyền camera ⇒ buổi thi KHÔNG được giám sát mặt.
+ * Trước F4 lỗi này bị nuốt lặng lẽ, HR không phân biệt được "sạch" với "camera chưa từng bật".
+ */
+export type ProctorSignalType = 'tab_switch' | 'paste' | 'focus_lost' | 'camera_blocked';
+
+/**
+ * Nhãn tiếng Việt cho cờ gian lận hiện cho HR (bảng kết quả). Phủ CẢ 8 loại backend chấp nhận:
+ * 4 cờ FE (`FeSignals`) + 5 cờ AIService (`AiSignals`).
+ * Giá trị lạ (backend thêm signal mới trước khi FE kịp cập nhật) → `proctorSignalLabel` fallback
+ * về chuỗi thô, KHÔNG hiện ô trống (thà HR thấy `foo_bar` còn hơn mất cảnh báo).
+ */
+export const PROCTOR_SIGNAL_LABEL: Record<string, string> = {
+  tab_switch: 'Chuyển tab',
+  paste: 'Dán nội dung',
+  focus_lost: 'Rời cửa sổ thi',
+  camera_blocked: 'Camera bị chặn',
+  face_mismatch: 'Khuôn mặt không khớp',
+  no_face: 'Không thấy khuôn mặt',
+  multiple_faces: 'Nhiều khuôn mặt',
+  multi_voice: 'Nhiều giọng nói',
+  identity_unverified: 'Chưa xác minh danh tính',
+};
+
+/** Nhãn hiển thị của 1 cờ; không có trong bảng → trả nguyên `type`. */
+export function proctorSignalLabel(type: string): string {
+  return PROCTOR_SIGNAL_LABEL[type] ?? type;
+}
 
 /** Tiêu chí đánh giá của campaign (name/weight/maxScore — CAMP-5). */
 export interface CampaignCriterion {

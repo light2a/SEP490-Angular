@@ -70,6 +70,17 @@ export class ProctorService {
     this.report('paste', 'Dán nội dung vào trang thi');
   };
 
+  /**
+   * F4 — camera không bật được (OS/trình duyệt từ chối). Gọi từ `campaign-interview` khi
+   * `WebcamCapture` phát `cameraBlocked`. KHÔNG debounce ở đây: chống-trùng nằm ở phía component
+   * phát (cờ report-once mỗi buổi) vì đây là sự kiện một-lần, không phải burst.
+   * ⚠ `report()` bỏ qua khi chưa có sessionId — camera bật rất sớm nên đường gọi PHẢI đảm bảo
+   * session đã tồn tại (template mount webcam sau `@if (sessionId())`); có test khoá điều này.
+   */
+  reportCameraBlocked(reason: string): void {
+    this.report('camera_blocked', `Không truy cập được camera (${reason})`);
+  }
+
   /** blur + visibilitychange thường bắn cùng lúc khi đổi tab → gộp thành 1 flag. */
   private reportAway(signalType: ProctorSignalType, note: string): void {
     const now = Date.now();
