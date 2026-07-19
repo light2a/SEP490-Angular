@@ -114,6 +114,31 @@ describe('AdminRevenue — báo cáo doanh thu (F19)', () => {
     expect(notify['warn']).toHaveBeenCalled();
   });
 
+  /**
+   * FE gửi 'yyyy-MM-dd' còn backend hiểu timestamp trần là UTC ⇒ admin +07:00 thấy biên kỳ lệch
+   * 7 giờ. Chưa sửa được sạch ở FE (việc gom bucket nằm phía server và cắt theo ngày UTC — xem
+   * docblock của `load()`), nên tối thiểu phải làm cho độ lệch NHÌN THẤY ĐƯỢC: hiện kỳ thật mà
+   * backend đã tính.
+   *
+   * Mốc render bằng DatePipe có tham số 'UTC' chứ KHÔNG để mặc định: mặc định là giờ máy người
+   * xem, tức là hiện một con số khác với con số backend đã dùng để cộng — đúng kiểu "hiển thị cho
+   * có" khiến người đọc yên tâm nhầm. Vì thế test khoá luôn tham số múi giờ.
+   */
+  it('hiện KỲ THẬT backend trả về, quy chiếu UTC tường minh', () => {
+    const fixture = setup();
+    httpMock
+      .expectOne((r) => r.url === URL)
+      .flush(report({ from: '2026-06-30T17:00:00Z', to: '2026-07-31T17:00:00Z' }));
+
+    fixture.detectChanges();
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+
+    // 17:00Z phải hiện đúng 17:00, KHÔNG bị quy đổi sang giờ máy chạy test.
+    expect(text).toContain('30/06/2026 17:00');
+    expect(text).toContain('31/07/2026 17:00');
+    expect(text).toContain('UTC');
+  });
+
   it('byKind dùng nhãn tiếng Việt theo enum SỐ của Payment', () => {
     const fixture = setup();
     httpMock.expectOne((r) => r.url === URL).flush(report());
