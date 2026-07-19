@@ -58,16 +58,9 @@
         <p class="comment">{{ rep.overallComment }}</p>
       }
 
-      @if (rep.radar.length) {
+      @if (radarPoints().length) {
         <h3>Năng lực theo tiêu chí</h3>
-        @for (c of rep.radar; track c.criterionId) {
-          <div class="crit">
-            <div class="crit-top">
-              <span>{{ c.name }}</span><b>{{ c.percentage | number: '1.0-0' }}%</b>
-            </div>
-            <div class="bar"><div class="fill" [style.width.%]="c.percentage"></div></div>
-          </div>
-        }
+        <app-radar-chart [points]="radarPoints()" />
       }
 
       @if (rep.levelEvaluation.length) {

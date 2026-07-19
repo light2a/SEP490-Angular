@@ -1,6 +1,6 @@
 import { DecimalPipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, OnInit, inject, input, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, input, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -12,6 +12,7 @@ import { extractErrorMessage } from '../../../core/api/http-utils';
 import { RoadmapApi } from '../../../core/api/roadmap.api';
 import { NotifyService } from '../../../core/notify.service';
 import { LessonResponse, RoadmapReport, RoadmapResponse } from '../../../core/models';
+import { RadarChart, RadarPoint } from '../../../shared/charts/radar-chart';
 import { JobCategoryPipe } from '../../../shared/pipes';
 import { Spinner } from '../../../shared/ui/spinner';
 
@@ -27,6 +28,7 @@ import { Spinner } from '../../../shared/ui/spinner';
     MatDividerModule,
     MatExpansionModule,
     JobCategoryPipe,
+    RadarChart,
     Spinner,
   ],
   templateUrl: './roadmap-detail.html',
@@ -43,6 +45,22 @@ export class RoadmapDetail implements OnInit {
   readonly loading = signal(true);
   readonly theories = signal<Record<string, string>>({});
   readonly startingLesson = signal<string | null>(null);
+
+  /**
+   * Trục radar = tiêu chí trong `report.radar`, ngưỡng lấy từ `levelEvaluation` khớp theo TÊN
+   * (BE trả `levelEvaluation[].criterionName`, không trả criterionId nên tên là khoá nối duy nhất).
+   * Tiêu chí không tìm được ngưỡng → `null`; cả bộ không có ngưỡng nào → radar chỉ vẽ 1 đa giác.
+   */
+  readonly radarPoints = computed<RadarPoint[]>(() => {
+    const rep = this.report();
+    if (!rep) return [];
+    const thresholds = new Map(rep.levelEvaluation.map((le) => [le.criterionName, le.levelThreshold]));
+    return rep.radar.map((c) => ({
+      name: c.name,
+      percentage: c.percentage,
+      threshold: thresholds.get(c.name) ?? null,
+    }));
+  });
 
   ngOnInit(): void {
     this.api.get(this.id()).subscribe({
