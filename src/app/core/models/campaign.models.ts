@@ -169,10 +169,24 @@ export interface CriterionItem {
   description?: string | null;
 }
 
-/** Câu hỏi HR khai (ghi). */
+/** Câu hỏi campaign (ghi) — F10. */
 export interface QuestionItem {
+  /**
+   * F10 — id của câu hỏi ĐANG CÓ (echo lại từ `CampaignQuestionResponse.id`).
+   * Có id  → BE sửa đúng row đó, GIỮ NGUYÊN `source` (câu AI không mất nhãn `AiGenerated`) + thứ tự.
+   * Không id → câu mới; BE luôn ghi `source = CustomHr`.
+   * ⚠ Bỏ id khi gửi lại một câu đang có = BE hiểu "xoá câu cũ + thêm câu mới" ⇒ mất provenance, mất id.
+   */
+  id?: string;
+
   questionText: string;
-  source: QuestionSource;
+
+  /**
+   * ⚠ BE KHÔNG đọc field này — nguồn gốc do server quyết (F9 = AiGenerated, HR gõ tay = CustomHr).
+   * Giữ optional cho tương thích ngược; đừng gửi 'CustomHr' cho mọi câu như bản trước F10.
+   */
+  source?: QuestionSource;
+
   isRequired: boolean;
 }
 
