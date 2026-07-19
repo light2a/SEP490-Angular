@@ -37,6 +37,45 @@
                 <app-spinner [diameter]="24" />
               }
             </div>
+
+            <!--
+              F15 — tài liệu học gợi ý. Chỉ render KHI ĐÃ nạp (lessonResources()[l.id] khác
+              undefined) và có ít nhất 1 mục; "đã nạp nhưng rỗng" thì không hiện gì cả — đỡ
+              phải giải thích với người dùng vì sao mục tài liệu trống trơn.
+            -->
+            @if (lessonResources()[l.id]?.length) {
+              <div class="resources" data-testid="lesson-resources">
+                <h4>Tài liệu tham khảo</h4>
+                <ul>
+                  @for (r of lessonResources()[l.id]; track r.title) {
+                    <li>
+                      <span class="res-type">{{ r.type }}</span>
+                      @if (r.url) {
+                        <!--
+                          Link do AI gợi ý: BE đã lọc theo allowlist tên miền nên host là nguồn
+                          chính chủ có thật, NHƯNG đường dẫn thì không ai xác minh → phải nói rõ
+                          "chưa kiểm chứng" thay vì để người dùng tưởng đã được kiểm.
+                          rel=noopener chặn tab đích với tới window.opener.
+                        -->
+                        <a [href]="r.url" target="_blank" rel="noopener noreferrer">{{ r.title }}</a>
+                        <mat-icon
+                          class="unverified"
+                          aria-label="Liên kết do AI gợi ý, chưa được kiểm chứng"
+                          matTooltip="Liên kết do AI gợi ý, chưa được kiểm chứng — hãy tự đối chiếu trước khi tin."
+                          >info_outline</mat-icon
+                        >
+                      } @else {
+                        <span>{{ r.title }}</span>
+                      }
+                      @if (r.publisher) {
+                        <span class="res-publisher">— {{ r.publisher }}</span>
+                      }
+                    </li>
+                  }
+                </ul>
+                <p class="res-note">Tài liệu do AI gợi ý, chưa được kiểm chứng.</p>
+              </div>
+            }
             <button
               mat-flat-button
               color="primary"
