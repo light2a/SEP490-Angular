@@ -132,6 +132,20 @@ export class CampaignApi {
     return this.http.put<CampaignResponse>(`${this.base}/${id}/questions`, questions);
   }
 
+  /**
+   * POST /campaign/{id}/questions/generate?count= — AI đọc JD ĐÃ LƯU rồi sinh câu hỏi (F9).
+   * Backend chỉ xoá câu `AiGenerated` cũ, GIỮ NGUYÊN câu HR tự gõ (`CustomHr`) ⇒ gọi nhiều lần
+   * không cộng dồn. Chỉ chạy khi campaign `Draft` (CAMP-2 → 409) và JD đã lưu (rỗng → 400).
+   * Trả CampaignResponse đầy đủ (đã gồm danh sách câu hỏi sau khi sinh).
+   */
+  generateQuestions(id: string, count?: number | null): Observable<CampaignResponse> {
+    let params = new HttpParams();
+    if (count != null) params = params.set('count', String(count));
+    return this.http.post<CampaignResponse>(`${this.base}/${id}/questions/generate`, null, {
+      params,
+    });
+  }
+
   /** POST /campaign/{id}/publish → Active (sinh campaign_criteria từ text/structured). */
   publishCampaign(id: string): Observable<CampaignResponse> {
     return this.http.post<CampaignResponse>(`${this.base}/${id}/publish`, {});

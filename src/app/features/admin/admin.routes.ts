@@ -28,6 +28,14 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () => import('./campaigns/admin-campaigns').then((m) => m.AdminCampaigns),
   },
   {
+    path: 'credits',
+    loadComponent: () => import('./credits/grant-credits').then((m) => m.GrantCredits),
+  },
+  {
+    path: 'revenue',
+    loadComponent: () => import('./revenue/admin-revenue').then((m) => m.AdminRevenue),
+  },
+  {
     path: 'orders',
     loadComponent: () => import('./orders/admin-orders').then((m) => m.AdminOrders),
   },

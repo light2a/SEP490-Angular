@@ -48,4 +48,21 @@ export interface AdminUserResponse {
   orgName?: string | null;
   orgRole?: string | null;
   createdAt: string;
+  /**
+   * F20 — có giá trị = đang bị cấm. Cột RIÊNG chứ không tái dùng lockout của Identity
+   * (lockout là khoá tự động do sai mật khẩu và bị Identity tự xoá, gộp vào thì một lần
+   * đăng nhập thành công sẽ vô tình gỡ lệnh cấm).
+   */
+  bannedAt?: string | null;
+  banReason?: string | null;
+}
+
+/** POST /auth/admin/users/{id}/ban — lý do tuỳ chọn, tối đa 500 ký tự. */
+export interface BanUserRequest {
+  reason?: string | null;
+}
+
+/** POST /auth/admin/users/{id}/reset-password — trả 204, KHÔNG echo lại mật khẩu. */
+export interface AdminResetPasswordRequest {
+  newPassword: string;
 }

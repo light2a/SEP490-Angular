@@ -1,10 +1,5 @@
-import {
-  JobCategoryPipe,
-  OrderStatusPipe,
-  PackageTypePipe,
-  SessionStatusPipe,
-  VndPipe,
-} from './pipes';
+import { PackageType } from '../core/models';
+import { JobCategoryPipe, OrderStatusPipe, PackageOfferPipe, PackageTypePipe, SessionStatusPipe, VndPipe } from './pipes';
 
 describe('VndPipe', () => {
   const pipe = new VndPipe();
@@ -64,5 +59,38 @@ describe('PackageTypePipe', () => {
   it('returns empty for null and String(v) fallback for unknown', () => {
     expect(pipe.transform(null)).toBe('');
     expect(pipe.transform(7)).toBe('7');
+  });
+});
+
+describe('PackageOfferPipe — mô tả gói (F25)', () => {
+  const pipe = new PackageOfferPipe();
+
+  // Trước đây gói định kỳ dùng chung khuôn với gói mua lẻ nên hiện ra "— credit":
+  // người mua thấy giá mà không biết mình nhận được gì.
+  it('gói định kỳ mô tả theo THỜI HẠN, không phải số credit', () => {
+    const out = pipe.transform({
+      type: PackageType.Subscription,
+      interviewCredits: null,
+      durationDays: 30,
+    });
+    expect(out).toContain('30 ngày');
+    expect(out).not.toContain('—');
+  });
+
+  it('gói mua lẻ vẫn mô tả theo số credit', () => {
+    expect(
+      pipe.transform({ type: PackageType.OneTime, interviewCredits: 10, durationDays: null }),
+    ).toBe('10 credit');
+  });
+
+  // Backend từ chối mua gói định kỳ thiếu thời hạn (400) — UI phải nói ra thay vì
+  // hiện "— credit" rồi để người dùng bấm Mua và ăn lỗi khó hiểu.
+  it('gói định kỳ thiếu thời hạn → nói rõ chưa cấu hình', () => {
+    const out = pipe.transform({
+      type: PackageType.Subscription,
+      interviewCredits: null,
+      durationDays: null,
+    });
+    expect(out).toContain('chưa cấu hình');
   });
 });

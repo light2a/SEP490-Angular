@@ -15,9 +15,10 @@ import {
   OrderStatus,
   PackageResponse,
 } from '../../../core/models';
-import { OrderStatusPipe, PackageTypePipe, VndPipe } from '../../../shared/pipes';
+import { OrderStatusPipe, PackageOfferPipe, PackageTypePipe, VndPipe } from '../../../shared/pipes';
 import { EmptyState } from '../../../shared/ui/empty-state';
 import { Spinner } from '../../../shared/ui/spinner';
+import { CreditHistory } from '../../../shared/credit-history/credit-history';
 
 /** Mua credit cho tổ chức (B2B). Chỉ OrgAdmin được mua (HrMember → 403). */
 @Component({
@@ -31,6 +32,8 @@ import { Spinner } from '../../../shared/ui/spinner';
     VndPipe,
     OrderStatusPipe,
     PackageTypePipe,
+    PackageOfferPipe,
+    CreditHistory,
     Spinner,
     EmptyState,
   ],
@@ -68,7 +71,7 @@ import { Spinner } from '../../../shared/ui/spinner';
           <mat-card class="pkg">
             <h3>{{ p.name }}</h3>
             <div class="type">{{ p.type | packageType }}</div>
-            <div class="credits">{{ p.interviewCredits ?? '—' }} credit</div>
+            <div class="credits">{{ p | packageOffer }}</div>
             <div class="price">{{ p.priceVnd | vnd }}</div>
             @if (canBuy()) {
               <button
@@ -107,6 +110,8 @@ import { Spinner } from '../../../shared/ui/spinner';
           </mat-list>
         </mat-card>
       }
+
+      <app-credit-history />
     }
   `,
   styles: [
