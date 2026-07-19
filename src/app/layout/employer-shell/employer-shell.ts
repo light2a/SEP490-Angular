@@ -45,6 +45,7 @@ export class EmployerShell {
     { path: 'dashboard', icon: 'dashboard', label: 'Tổng quan' },
     { path: 'campaigns', icon: 'work', label: 'Chiến dịch' },
     { path: 'members', icon: 'group', label: 'Thành viên', orgAdminOnly: true },
+    { path: 'api-keys', icon: 'vpn_key', label: 'API key', orgAdminOnly: true },
     { path: 'credits', icon: 'account_balance_wallet', label: 'Credit & Thanh toán', orgAdminOnly: true },
     { path: 'invoices', icon: 'receipt_long', label: 'Hoá đơn', orgAdminOnly: true },
   ];
