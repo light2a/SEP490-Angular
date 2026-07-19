@@ -44,6 +44,7 @@ export class AdminShell {
     { path: 'campaigns', icon: 'work', label: 'Chiến dịch' },
     { path: 'orders', icon: 'receipt_long', label: 'Đơn hàng' },
     { path: 'revenue', icon: 'payments', label: 'Doanh thu' },
+    { path: 'ai-usage', icon: 'smart_toy', label: 'Chi phí AI' },
     { path: 'credits', icon: 'card_giftcard', label: 'Cấp credit' },
     { path: 'packages', icon: 'inventory_2', label: 'Gói credit' },
     { path: 'billing', icon: 'event_repeat', label: 'Chốt kỳ postpaid' },

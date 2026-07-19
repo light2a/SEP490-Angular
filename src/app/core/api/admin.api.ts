@@ -13,6 +13,7 @@ import {
   OrganizationResponse,
   RefundOrderRequest,
   RefundOrderResponse,
+  AiUsageReportResponse,
   RevenueReportResponse,
 } from '../models';
 
@@ -98,6 +99,22 @@ export class AdminApi {
     if (opts?.to) params = params.set('to', opts.to);
     if (opts?.groupBy) params = params.set('groupBy', opts.groupBy);
     return this.http.get<RevenueReportResponse>(`${this.base}/payment/admin/revenue`, { params });
+  }
+
+  /**
+   * GET /payment/admin/ai-usage — tiêu thụ token + chi phí AI, kỳ nửa mở [from, to) (F22).
+   * Cùng hợp đồng tham số với `revenue()`; `groupBy` chỉ nhận 'day' | 'month' (khác → 400).
+   */
+  aiUsage(opts?: {
+    from?: string | null;
+    to?: string | null;
+    groupBy?: 'day' | 'month';
+  }): Observable<AiUsageReportResponse> {
+    let params = new HttpParams();
+    if (opts?.from) params = params.set('from', opts.from);
+    if (opts?.to) params = params.set('to', opts.to);
+    if (opts?.groupBy) params = params.set('groupBy', opts.groupBy);
+    return this.http.get<AiUsageReportResponse>(`${this.base}/payment/admin/ai-usage`, { params });
   }
 
   /**
