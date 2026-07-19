@@ -8,10 +8,23 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTableModule } from '@angular/material/table';
+import { MatDialog } from '@angular/material/dialog';
 import { AdminApi } from '../../../core/api/admin.api';
 import { extractErrorMessage } from '../../../core/api/http-utils';
 import { NotifyService } from '../../../core/notify.service';
-import { ORDER_STATUS_LABEL, OrderKind, OrderResponse, OrderStatus, OwnerType } from '../../../core/models';
+import {
+  ORDER_STATUS_LABEL,
+  OrderKind,
+  OrderResponse,
+  OrderStatus,
+  OwnerType,
+  RefundConflictBody,
+} from '../../../core/models';
+import {
+  RefundOrderDialog,
+  RefundOrderDialogData,
+  RefundOrderDialogResult,
+} from './refund-order-dialog';
 import { EmptyState } from '../../../shared/ui/empty-state';
 import { Spinner } from '../../../shared/ui/spinner';
 import { VndPipe } from '../../../shared/pipes';
@@ -90,6 +103,22 @@ import { VndPipe } from '../../../shared/pipes';
                 <th mat-header-cell *matHeaderCellDef>Tạo lúc</th>
                 <td mat-cell *matCellDef="let o">{{ o.createdAt | date: 'short' }}</td>
               </ng-container>
+              <ng-container matColumnDef="actions">
+                <th mat-header-cell *matHeaderCellDef>Thao tác</th>
+                <td mat-cell *matCellDef="let o">
+                  @if (canRefund(o)) {
+                    <button
+                      mat-icon-button
+                      title="Hoàn tiền đơn"
+                      aria-label="Hoàn tiền đơn"
+                      [disabled]="busy() === o.id"
+                      (click)="refund(o)"
+                    >
+                      <mat-icon>currency_exchange</mat-icon>
+                    </button>
+                  }
+                </td>
+              </ng-container>
               <tr mat-header-row *matHeaderRowDef="cols"></tr>
               <tr mat-row *matRowDef="let row; columns: cols"></tr>
             </table>
@@ -148,8 +177,18 @@ import { VndPipe } from '../../../shared/pipes';
 export class AdminOrders implements OnInit {
   private api = inject(AdminApi);
   private notify = inject(NotifyService);
+  private dialog = inject(MatDialog);
 
-  readonly cols = ['payosOrderCode', 'owner', 'kind', 'amountVnd', 'status', 'paidAt', 'createdAt'];
+  readonly cols = [
+    'payosOrderCode',
+    'owner',
+    'kind',
+    'amountVnd',
+    'status',
+    'paidAt',
+    'createdAt',
+    'actions',
+  ];
 
   readonly statusOptions: OrderStatus[] = [
     OrderStatus.Pending,
@@ -168,6 +207,8 @@ export class AdminOrders implements OnInit {
 
   readonly items = signal<OrderResponse[]>([]);
   readonly loading = signal(true);
+  /** Id đơn đang có request hoàn — khoá nút đúng dòng đó. */
+  readonly busy = signal<string | null>(null);
 
   status: OrderStatus | null = null;
 
@@ -193,6 +234,61 @@ export class AdminOrders implements OnInit {
 
   short(id: string): string {
     return id ? id.slice(0, 8) : '—';
+  }
+
+  /** Chỉ đơn mua credit đã thanh toán mới hoàn được (kind khác → 400, chưa Paid → 409). */
+  canRefund(o: OrderResponse): boolean {
+    return o.status === OrderStatus.Paid && o.kind === OrderKind.CreditPack;
+  }
+
+  /**
+   * Hoàn tiền 1 đơn (F18). Khi ví đã tiêu bớt credit, backend trả **409 KÈM SỐ thu hồi được**
+   * — đó là thông tin để quyết định, không phải lỗi kỹ thuật. Nên 409 dạng đó được mở lại hộp
+   * thoại với con số cụ thể để admin xác nhận lần hai (`allowPartialClawback`), thay vì nuốt
+   * thành "lỗi không xác định".
+   */
+  refund(o: OrderResponse, partial: RefundOrderDialogData['partial'] = null): void {
+    this.dialog
+      .open(RefundOrderDialog, {
+        data: {
+          orderCode: o.payosOrderCode,
+          amountVnd: o.amountVnd,
+          partial,
+        } satisfies RefundOrderDialogData,
+        width: '560px',
+      })
+      .afterClosed()
+      .subscribe((res?: RefundOrderDialogResult) => {
+        if (!res) return;
+        this.busy.set(o.id);
+        this.api.refundOrder(o.id, res).subscribe({
+          next: (r) => {
+            this.busy.set(null);
+            const short =
+              r.creditsClawedBack < r.creditsPurchased
+                ? ` (thu hồi ${r.creditsClawedBack}/${r.creditsPurchased} credit)`
+                : '';
+            this.notify.success(
+              `Đã ghi nhận hoàn tiền đơn${short}. Nhớ hoàn tiền thật trên dashboard PayOS nếu chưa làm.`,
+            );
+            this.load();
+          },
+          error: (e: HttpErrorResponse) => {
+            this.busy.set(null);
+            const body = e.error as RefundConflictBody | undefined;
+            // 409 "ví không đủ credit để thu hồi" — nhận ra bằng SỰ CÓ MẶT của con số, vì 409
+            // còn dùng cho ca khác (đơn chưa Paid, ví vừa đổi) vốn không kèm số nào.
+            if (e.status === 409 && typeof body?.clawbackPossible === 'number') {
+              this.refund(o, {
+                creditsPurchased: body.creditsPurchased ?? 0,
+                clawbackPossible: body.clawbackPossible,
+              });
+              return;
+            }
+            this.notify.error(extractErrorMessage(e) ?? 'Không hoàn được đơn.');
+          },
+        });
+      });
   }
 
   load(): void {
