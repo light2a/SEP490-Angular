@@ -89,6 +89,53 @@ describe('WebcamCapture', () => {
     expect(campaignApi.faceEnroll).not.toHaveBeenCalled();
   });
 
+  // ── F4 — camera bị chặn phải PHÁT SỰ KIỆN, không nuốt lỗi ────────────────────
+
+  it('start() emits cameraBlocked with the DOMException name when permission is refused', async () => {
+    getUserMedia.mockRejectedValue(new DOMException('denied', 'NotAllowedError'));
+    const cmp = make();
+    const seen: string[] = [];
+    cmp.cameraBlocked.subscribe((r) => seen.push(r));
+
+    await cmp.start();
+
+    expect(seen).toEqual(['NotAllowedError']);
+  });
+
+  // 🔴 Report-once: debounce 1200ms của ProctorService KHÔNG đỡ được ca này — camera-denied là
+  // sự kiện một-lần-mỗi-buổi, mà start() có thể được gọi lại cách nhau > 1200ms.
+  it('start() emits cameraBlocked only ONCE across repeated failing retries', async () => {
+    getUserMedia.mockRejectedValue(new DOMException('denied', 'NotAllowedError'));
+    const cmp = make();
+    const seen: string[] = [];
+    cmp.cameraBlocked.subscribe((r) => seen.push(r));
+
+    await cmp.start();
+    await cmp.start();
+    await cmp.start();
+
+    expect(seen).toHaveLength(1);
+  });
+
+  // Chặn → mở được → bị chặn LẠI = sự kiện MỚI, phải báo lại (cờ chỉ reset khi camera chạy thật).
+  it('start() emits again after a successful start resets the once-flag', async () => {
+    getUserMedia.mockRejectedValue(new DOMException('denied', 'NotAllowedError'));
+    const cmp = make();
+    const seen: string[] = [];
+    cmp.cameraBlocked.subscribe((r) => seen.push(r));
+
+    await cmp.start();
+    getUserMedia.mockResolvedValue({
+      getTracks: () => [{ stop: trackStop }],
+    } as unknown as MediaStream);
+    await cmp.start();
+    cmp.stop();
+    getUserMedia.mockRejectedValue(new DOMException('gone', 'NotFoundError'));
+    await cmp.start();
+
+    expect(seen).toEqual(['NotAllowedError', 'NotFoundError']);
+  });
+
   it('start() with enrollRequired captures once and calls faceEnroll', async () => {
     getUserMedia.mockResolvedValue({
       getTracks: () => [{ stop: trackStop }],

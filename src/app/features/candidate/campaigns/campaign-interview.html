@@ -64,6 +64,7 @@
       [campaignId]="campaignId()"
       [sessionId]="sid"
       [enrollRequired]="faceEnrollRequired()"
+      (cameraBlocked)="onCameraBlocked($event)"
     />
   }
 

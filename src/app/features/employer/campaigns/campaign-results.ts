@@ -15,7 +15,11 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatDialog } from '@angular/material/dialog';
 import { CampaignApi } from '../../../core/api/campaign.api';
 import { extractErrorMessage } from '../../../core/api/http-utils';
-import { CampaignResultRow, CampaignResultsResponse } from '../../../core/models';
+import {
+  CampaignResultRow,
+  CampaignResultsResponse,
+  proctorSignalLabel,
+} from '../../../core/models';
 import { NotifyService } from '../../../core/notify.service';
 import { EmptyState } from '../../../shared/ui/empty-state';
 import { Spinner } from '../../../shared/ui/spinner';
@@ -88,7 +92,15 @@ import {
             <ng-container matColumnDef="candidate">
               <th mat-header-cell *matHeaderCellDef>Ứng viên</th>
               <td mat-cell *matCellDef="let r">
-                <span class="mono" [matTooltip]="r.candidateId">{{ short(r.candidateId) }}</span>
+                <!-- F5: ưu tiên tên/email đọc được; chưa có (membership đường-1 cũ) → về UUID như trước. -->
+                @if (r.fullName || r.email) {
+                  <span>{{ r.fullName || r.email }}</span>
+                  @if (r.fullName && r.email) {
+                    <span class="sub">{{ r.email }}</span>
+                  }
+                } @else {
+                  <span class="mono" [matTooltip]="r.candidateId">{{ short(r.candidateId) }}</span>
+                }
                 <span class="mono sub" [matTooltip]="r.sessionId">buổi {{ short(r.sessionId) }}</span>
               </td>
             </ng-container>
@@ -134,9 +146,14 @@ import {
                 } @else {
                   <div class="flags">
                     @for (f of r.flags; track f.type) {
-                      <mat-chip class="chip-flag" [matTooltip]="f.note || f.type" highlighted>
+                      <!-- F4: nhãn tiếng Việt; tooltip giữ mã thô để HR đối chiếu với log/BE. -->
+                      <mat-chip
+                        class="chip-flag"
+                        [matTooltip]="f.note || f.type"
+                        highlighted
+                      >
                         <mat-icon matChipAvatar>warning</mat-icon>
-                        {{ f.type }} ×{{ f.count }}
+                        {{ flagLabel(f.type) }} ×{{ f.count }}
                       </mat-chip>
                     }
                   </div>
@@ -313,6 +330,11 @@ export class CampaignResults implements OnInit {
   readonly loading = signal(true);
   readonly exporting = signal(false);
   readonly cols = ['rank', 'candidate', 'score', 'result', 'scoredAt', 'flags', 'actions'];
+
+  /** F4 — nhãn tiếng Việt của cờ gian lận; loại lạ → giữ nguyên mã thô. */
+  flagLabel(type: string): string {
+    return proctorSignalLabel(type);
+  }
 
   // E11b — override inline form state
   readonly editing = signal<string | null>(null);
