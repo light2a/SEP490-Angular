@@ -220,3 +220,55 @@ export interface InvoiceResponse {
   status: InvoiceStatus;
   createdAt: string;
 }
+
+// ── Tiêu thụ token / chi phí AI (F22, Admin) ────────────────────────────────
+/**
+ * Báo cáo tiêu thụ token + chi phí AI theo kỳ (`GET /payment/admin/ai-usage`).
+ *
+ * Nguồn số liệu: AIService đo token mỗi lượt gọi Gemini rồi ĐẨY về Payment qua callback
+ * nội bộ (GEN-4 cấm AIService ghi DB). Bảng nằm ở Payment vì chi phí AI chỉ có nghĩa khi
+ * đọc cạnh doanh thu (F19) — "tháng này thu bao nhiêu, đốt bao nhiêu".
+ *
+ * ⚠ Tiền ở đây là **USD**, không phải VND như mọi số tiền khác của Payment (Google tính
+ * giá bằng USD) — đừng dùng `VndPipe` cho `totalCostUsd`.
+ */
+export interface AiUsageReportResponse {
+  from: string;
+  to: string;
+  /** CHUỖI ('Day' | 'Month') — ngoại lệ enum-số của Payment, giống `RevenueReportResponse`. */
+  granularity: string;
+  totalCalls: number;
+  promptTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  totalCostUsd: number;
+  byOperation: AiUsageByOperation[];
+  buckets: AiUsageBucket[];
+  /** F15 — null khi kỳ KHÔNG có lượt sinh tài liệu học. null ≠ 0/0: hiện "0% bị loại" là
+   *  một khẳng định không có cơ sở. */
+  resourceUrls?: AiResourceUrlStats | null;
+}
+
+export interface AiUsageByOperation {
+  /** Tên đường gọi phía AIService: score · generate_questions · decide_next · text_to_speech … */
+  operation: string;
+  calls: number;
+  promptTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  costUsd: number;
+}
+
+export interface AiUsageBucket {
+  periodStart: string;
+  calls: number;
+  totalTokens: number;
+  costUsd: number;
+}
+
+export interface AiResourceUrlStats {
+  proposed: number;
+  rejected: number;
+  /** Tỉ lệ [0,1]. */
+  rejectedRate: number;
+}
