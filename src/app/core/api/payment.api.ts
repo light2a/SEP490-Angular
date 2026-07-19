@@ -1,12 +1,15 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   CloseBillingPeriodRequest,
   CreateOrderRequest,
   CreatePackageRequest,
   CreditAccountResponse,
+  CreditTransactionPage,
+  CreditTransactionReason,
+  CreditTransactionResponse,
   InvoiceResponse,
   OrderResponse,
   OrderStatusResponse,
@@ -24,6 +27,35 @@ export class PaymentApi {
   myAccount(): Observable<CreditAccountResponse> {
     return this.http.get<CreditAccountResponse>(`${this.base}/me/account`);
   }
+  /**
+   * GET /payment/me/credit-transactions — sổ biến động credit của CHÍNH chủ ví (F19).
+   * Chủ ví suy từ JWT (thuộc org → ví Org, không → ví cá nhân); không đọc được ví người khác.
+   *
+   * Phân trang keyset: body là mảng, con trỏ trang kế nằm ở header `X-Next-Cursor`
+   * (vắng mặt = đã hết trang) ⇒ phải đọc cả response chứ không chỉ body.
+   */
+  myCreditTransactions(opts?: {
+    cursor?: string | null;
+    limit?: number;
+    reason?: CreditTransactionReason | null;
+  }): Observable<CreditTransactionPage> {
+    let params = new HttpParams();
+    if (opts?.cursor) params = params.set('cursor', opts.cursor);
+    if (opts?.limit != null) params = params.set('limit', String(opts.limit));
+    if (opts?.reason != null) params = params.set('reason', String(opts.reason));
+    return this.http
+      .get<CreditTransactionResponse[]>(`${this.base}/me/credit-transactions`, {
+        params,
+        observe: 'response',
+      })
+      .pipe(
+        map((res) => ({
+          items: res.body ?? [],
+          nextCursor: res.headers.get('X-Next-Cursor'),
+        })),
+      );
+  }
+
   packages(): Observable<PackageResponse[]> {
     return this.http.get<PackageResponse[]>(`${this.base}/package`);
   }

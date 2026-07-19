@@ -99,6 +99,12 @@ export enum OrderStatus {
   Failed = 3,
   Expired = 4,
   Cancelled = 5,
+  /**
+   * F18 — đơn đã Paid rồi được admin hoàn tiền. Trạng thái RIÊNG chứ không tái dùng
+   * `Cancelled` ("đơn chết trước khi có tiền"): báo cáo doanh thu phải phân biệt được
+   * "chưa bao giờ thu" với "đã thu rồi trả lại".
+   */
+  Refunded = 6,
 }
 export enum OrderKind {
   CreditPack = 0,
@@ -130,12 +136,34 @@ export enum InvoiceStatus {
   Void = 3,
 }
 
+/**
+ * Lý do 1 bút toán credit. Ba loại "được cộng" KHÁC NHAU VỀ BẢN CHẤT — gộp chung một nhãn
+ * là nói dối người dùng: FreeGrant là suất tặng lúc mở ví (F7), PromoGrant là quà admin cấp
+ * tay (F20), còn Purchase mới là credit họ bỏ tiền mua.
+ */
+export enum CreditTransactionReason {
+  Purchase = 0,
+  Consume = 1,
+  Refund = 2,
+  FreeGrant = 3,
+  PromoGrant = 4,
+}
+
+export const CREDIT_REASON_LABEL: Record<number, string> = {
+  [CreditTransactionReason.Purchase]: 'Mua credit',
+  [CreditTransactionReason.Consume]: 'Đã dùng',
+  [CreditTransactionReason.Refund]: 'Hoàn tiền',
+  [CreditTransactionReason.FreeGrant]: 'Suất dùng thử',
+  [CreditTransactionReason.PromoGrant]: 'Quà khuyến mãi',
+};
+
 export const ORDER_STATUS_LABEL: Record<number, string> = {
   [OrderStatus.Pending]: 'Đang chờ thanh toán',
   [OrderStatus.Paid]: 'Đã thanh toán',
   [OrderStatus.Failed]: 'Thất bại',
   [OrderStatus.Expired]: 'Hết hạn',
   [OrderStatus.Cancelled]: 'Đã huỷ',
+  [OrderStatus.Refunded]: 'Đã hoàn tiền',
 };
 export const PACKAGE_TYPE_LABEL: Record<number, string> = {
   [PackageType.OneTime]: 'Mua lẻ',

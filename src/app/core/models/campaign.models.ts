@@ -169,10 +169,24 @@ export interface CriterionItem {
   description?: string | null;
 }
 
-/** Câu hỏi HR khai (ghi). */
+/** Câu hỏi campaign (ghi) — F10. */
 export interface QuestionItem {
+  /**
+   * F10 — id của câu hỏi ĐANG CÓ (echo lại từ `CampaignQuestionResponse.id`).
+   * Có id  → BE sửa đúng row đó, GIỮ NGUYÊN `source` (câu AI không mất nhãn `AiGenerated`) + thứ tự.
+   * Không id → câu mới; BE luôn ghi `source = CustomHr`.
+   * ⚠ Bỏ id khi gửi lại một câu đang có = BE hiểu "xoá câu cũ + thêm câu mới" ⇒ mất provenance, mất id.
+   */
+  id?: string;
+
   questionText: string;
-  source: QuestionSource;
+
+  /**
+   * ⚠ BE KHÔNG đọc field này — nguồn gốc do server quyết (F9 = AiGenerated, HR gõ tay = CustomHr).
+   * Giữ optional cho tương thích ngược; đừng gửi 'CustomHr' cho mọi câu như bản trước F10.
+   */
+  source?: QuestionSource;
+
   isRequired: boolean;
 }
 
@@ -408,4 +422,51 @@ export interface FailedInviteItem {
 export interface InviteShortlistResponse {
   invited: InvitedCandidateItem[];
   failed: FailedInviteItem[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// API key cho bên thứ ba (F17) — chỉ OrgAdmin. Nguồn: docs/services/campaign.md
+// §"Public API + API key cho bên thứ ba".
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** POST /campaign/api-keys — `expiresInDays` ngoài `1..MaxExpiryDays` → 400; vượt trần key active/org → 400. */
+export interface CreateApiKeyRequest {
+  name: string;
+  expiresInDays?: number | null;
+  /** Mặc định false — PII (họ tên/email ứng viên) deny-by-default. */
+  includePii?: boolean | null;
+}
+
+/**
+ * Response của POST /campaign/api-keys — **thể duy nhất mang `key` thô**.
+ *
+ * Backend chỉ lưu hash nên không endpoint nào đọc lại được `key`: đóng hộp thoại mà chưa sao chép
+ * là mất vĩnh viễn, phải thu hồi rồi tạo key khác. Vì thế kiểu này KHÁC `ApiKeyListItem` — tách
+ * hai kiểu để không chỗ nào lỡ tay bind `key` vào bảng danh sách (danh sách không bao giờ có
+ * trường đó, nên bind nhầm là lỗi biên dịch chứ không phải lỗi rò dữ liệu lúc chạy).
+ */
+export interface CreateApiKeyResponse {
+  id: string;
+  name: string;
+  /** Chuỗi bí mật thô `isas_ak_…` — CHỈ xuất hiện ở đây, đúng một lần. */
+  key: string;
+  keyPrefix: string;
+  includePii: boolean;
+  expiresAt?: string | null;
+  createdAt: string;
+}
+
+/**
+ * GET /campaign/api-keys — 1 dòng danh sách. **Không bao giờ có `key` thô hoặc hash.**
+ * `lastUsedAt` là tín hiệu để org dám thu hồi key (không có nó thì không ai biết key nào còn ai dùng).
+ */
+export interface ApiKeyListItem {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  includePii: boolean;
+  isActive: boolean;
+  lastUsedAt?: string | null;
+  expiresAt?: string | null;
+  createdAt: string;
 }

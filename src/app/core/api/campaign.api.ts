@@ -3,8 +3,11 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
+  ApiKeyListItem,
   CampaignResponse,
   CampaignResultsResponse,
+  CreateApiKeyRequest,
+  CreateApiKeyResponse,
   CandidateDetailResponse,
   CandidateListItem,
   CreateCampaignRequest,
@@ -132,6 +135,20 @@ export class CampaignApi {
     return this.http.put<CampaignResponse>(`${this.base}/${id}/questions`, questions);
   }
 
+  /**
+   * POST /campaign/{id}/questions/generate?count= — AI đọc JD ĐÃ LƯU rồi sinh câu hỏi (F9).
+   * Backend chỉ xoá câu `AiGenerated` cũ, GIỮ NGUYÊN câu HR tự gõ (`CustomHr`) ⇒ gọi nhiều lần
+   * không cộng dồn. Chỉ chạy khi campaign `Draft` (CAMP-2 → 409) và JD đã lưu (rỗng → 400).
+   * Trả CampaignResponse đầy đủ (đã gồm danh sách câu hỏi sau khi sinh).
+   */
+  generateQuestions(id: string, count?: number | null): Observable<CampaignResponse> {
+    let params = new HttpParams();
+    if (count != null) params = params.set('count', String(count));
+    return this.http.post<CampaignResponse>(`${this.base}/${id}/questions/generate`, null, {
+      params,
+    });
+  }
+
   /** POST /campaign/{id}/publish → Active (sinh campaign_criteria từ text/structured). */
   publishCampaign(id: string): Observable<CampaignResponse> {
     return this.http.post<CampaignResponse>(`${this.base}/${id}/publish`, {});
@@ -245,5 +262,28 @@ export class CampaignApi {
     body: InviteShortlistRequest,
   ): Observable<InviteShortlistResponse> {
     return this.http.post<InviteShortlistResponse>(`${this.base}/${id}/candidates/invite`, body);
+  }
+
+  // ── API key cho bên thứ ba / ATS (F17) — JWT, CHỈ OrgAdmin ──────────────────
+  /**
+   * POST /campaign/api-keys → 201. **Response duy nhất mang key thô** (`CreateApiKeyResponse.key`);
+   * DB chỉ giữ hash nên không có đường đọc lại. 400 = `expiresInDays` ngoài dải cho phép hoặc
+   * vượt trần số key active của org.
+   */
+  createApiKey(body: CreateApiKeyRequest): Observable<CreateApiKeyResponse> {
+    return this.http.post<CreateApiKeyResponse>(`${this.base}/api-keys`, body);
+  }
+
+  /** GET /campaign/api-keys — key của org. Trả `ApiKeyListItem` (KHÔNG có key thô/hash). */
+  listApiKeys(): Observable<ApiKeyListItem[]> {
+    return this.http.get<ApiKeyListItem[]>(`${this.base}/api-keys`);
+  }
+
+  /**
+   * DELETE /campaign/api-keys/{id} — thu hồi (soft), **idempotent** → 204.
+   * Key của org khác → 404 (backend cố ý không xác nhận hộ là key đó tồn tại).
+   */
+  revokeApiKey(id: string): Observable<unknown> {
+    return this.http.delete(`${this.base}/api-keys/${id}`);
   }
 }

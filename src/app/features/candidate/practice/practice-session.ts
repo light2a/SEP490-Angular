@@ -30,10 +30,12 @@ import {
   UploadAnswerResult,
 } from '../../../core/models';
 import { InterviewAvatar } from '../../../shared/avatar/interview-avatar';
+import { RadarChart, RadarPoint } from '../../../shared/charts/radar-chart';
 import { AnswerStatusPipe, JobCategoryPipe, SessionStatusPipe } from '../../../shared/pipes';
 import { createCountdown } from '../../../shared/timing/countdown';
 import { Spinner } from '../../../shared/ui/spinner';
 import { AudioRecorder, RecordedAudio } from './audio-recorder';
+import { DeliveryMetricsPanel } from './delivery-metrics';
 
 const POLL_STATUS = ['GeneratingQuestions', 'Scoring', 'Completed'];
 const ANSWER_PENDING = ['Uploaded', 'Transcribing', 'Scoring'];
@@ -50,7 +52,9 @@ const ANSWER_PENDING = ['Uploaded', 'Transcribing', 'Scoring'];
     MatDividerModule,
     MatProgressBarModule,
     AudioRecorder,
+    DeliveryMetricsPanel,
     InterviewAvatar,
+    RadarChart,
     Spinner,
     SessionStatusPipe,
     AnswerStatusPipe,
@@ -178,6 +182,37 @@ export class PracticeSession implements OnInit {
 
     this.lockedIds.update((s) => new Set(s).add(qid));
     this.notify.warn('Hết giờ — câu này đã bị khoá, mời bạn sang câu tiếp theo.');
+  }
+
+  /**
+   * F14 (FR08) — dữ liệu radar: điểm của người luyện + (nếu có) mốc đối chiếu chồng lên.
+   *
+   * Ghép mốc theo `criterionId` chứ không theo thứ tự mảng — hai mảng do BE dựng độc lập, dựa
+   * vào vị trí là kiểu lỗi im lặng (mốc gắn nhầm trục, biểu đồ vẫn vẽ đẹp).
+   */
+  readonly radarPoints = computed<RadarPoint[]>(() => {
+    const r = this.result();
+    if (!r) return [];
+    const targets = new Map(
+      (r.benchmark?.criteria ?? []).map((b) => [b.criterionId, b.targetPercentage]),
+    );
+    return r.criteriaScores.map((c) => ({
+      name: c.name,
+      percentage: c.percentage,
+      threshold: targets.get(c.criterionId) ?? null,
+    }));
+  });
+
+  /**
+   * Radar dưới 3 trục là hình thoi/đường thẳng — vô nghĩa về mặt đọc hiểu. Ít tiêu chí thì các
+   * thanh ngang bên dưới đã nói đủ, khỏi vẽ.
+   */
+  readonly showRadar = computed(() => this.radarPoints().length >= 3);
+
+  /** Mốc của 1 tiêu chí (hiện cạnh thanh ngang, cho cả ca radar không vẽ). */
+  targetOf(criterionId: string): number | null {
+    const b = this.result()?.benchmark;
+    return b?.criteria.find((x) => x.criterionId === criterionId)?.targetPercentage ?? null;
   }
 
   /**

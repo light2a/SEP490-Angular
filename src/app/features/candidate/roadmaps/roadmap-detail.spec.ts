@@ -34,7 +34,9 @@ describe('RoadmapDetail', () => {
           title: 'Nền tảng',
           status: 'Pending',
           focusCriteria: ['Kiến thức'],
-          lessons: [{ id: 'l1', orderNo: 1, title: 'Bài 1', status: 'Theory', theoryContent: null }],
+          lessons: [
+            { id: 'l1', orderNo: 1, title: 'Bài 1', status: 'Theory', theoryContent: null, resources: [] },
+          ],
         },
       ],
     }) as unknown as RoadmapResponse;
@@ -60,7 +62,7 @@ describe('RoadmapDetail', () => {
     api = {
       get: vi.fn().mockReturnValue(of(roadmap())),
       report: vi.fn().mockReturnValue(of(report())),
-      lesson: vi.fn().mockReturnValue(of({ id: 'l1', theoryContent: null })),
+      lesson: vi.fn().mockReturnValue(of({ id: 'l1', theoryContent: null, resources: [] })),
       startLesson: vi.fn(),
     };
 
@@ -147,7 +149,7 @@ describe('RoadmapDetail', () => {
   describe('F6b — markdown lý thuyết', () => {
     /** Mở panel bài học = nạp lý thuyết; trước đây chuỗi Markdown bị đổ thô vào một thẻ <p>. */
     function openLesson(theoryContent: string) {
-      api.lesson.mockReturnValue(of({ id: 'l1', theoryContent }));
+      api.lesson.mockReturnValue(of({ id: 'l1', theoryContent, resources: [] }));
       const fixture = render();
       fixture.componentInstance.loadTheory({ id: 'l1' } as never);
       fixture.detectChanges();
@@ -173,6 +175,66 @@ describe('RoadmapDetail', () => {
       expect(view.querySelector('script')).toBeNull();
       expect(view.textContent).toContain('<script>alert(1)</script>');
       expect(view.textContent).toContain('a < b && c');
+    });
+  });
+  describe('F15 — tài liệu học gợi ý', () => {
+    /** Mở panel bài học với danh sách tài liệu cho sẵn. */
+    function openWithResources(resources: unknown[]) {
+      api.lesson.mockReturnValue(of({ id: 'l1', theoryContent: '# Bài', resources }));
+      const fixture = render();
+      fixture.componentInstance.loadTheory({ id: 'l1' } as never);
+      fixture.detectChanges();
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    it('hiện tên + link cho tài liệu có url', () => {
+      const el = openWithResources([
+        { title: 'MDN: Event loop', type: 'Doc', publisher: 'Mozilla', url: 'https://developer.mozilla.org/x' },
+      ]);
+
+      const link = el.querySelector('[data-testid="lesson-resources"] a') as HTMLAnchorElement;
+      expect(link.textContent).toContain('MDN: Event loop');
+      expect(link.getAttribute('href')).toBe('https://developer.mozilla.org/x');
+      expect(el.textContent).toContain('Mozilla');
+    });
+
+    // 🔴 Link do AI gợi ý: người dùng PHẢI thấy nó chưa được kiểm chứng TRƯỚC khi bấm.
+    it('luôn kèm cảnh báo "chưa được kiểm chứng" khi có link', () => {
+      const el = openWithResources([
+        { title: 'MDN', type: 'Doc', publisher: null, url: 'https://developer.mozilla.org/' },
+      ]);
+
+      expect(el.querySelector('[data-testid="lesson-resources"]')?.textContent)
+        .toContain('chưa được kiểm chứng');
+    });
+
+    // 🔑 url null KHÔNG phải dữ liệu hỏng — đó là kết quả bình thường khi BE loại link ngoài
+    //    allowlist tên miền. Mục vẫn phải hiện (chỉ tên), không được biến mất.
+    it('tài liệu không có url vẫn hiện tên, không render thẻ <a>', () => {
+      const el = openWithResources([
+        { title: 'Designing Data-Intensive Applications', type: 'Book', publisher: "O'Reilly", url: null },
+      ]);
+
+      const box = el.querySelector('[data-testid="lesson-resources"]') as HTMLElement;
+      expect(box.textContent).toContain('Designing Data-Intensive Applications');
+      expect(box.querySelector('a')).toBeNull();
+    });
+
+    it('mở link ở tab mới với rel=noopener (chặn với tới window.opener)', () => {
+      const el = openWithResources([
+        { title: 'MDN', type: 'Doc', publisher: null, url: 'https://developer.mozilla.org/' },
+      ]);
+
+      const link = el.querySelector('[data-testid="lesson-resources"] a') as HTMLAnchorElement;
+      expect(link.getAttribute('target')).toBe('_blank');
+      expect(link.getAttribute('rel')).toContain('noopener');
+    });
+
+    it('không có tài liệu nào → không hiện mục "Tài liệu tham khảo" trống', () => {
+      const el = openWithResources([]);
+
+      expect(el.querySelector('[data-testid="lesson-resources"]')).toBeNull();
+      expect(el.textContent).not.toContain('Tài liệu tham khảo');
     });
   });
 });

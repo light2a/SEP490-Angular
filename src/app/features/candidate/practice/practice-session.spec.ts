@@ -167,6 +167,7 @@ describe('PracticeSession — khoá ghi âm khi avatar đọc câu hỏi', () =>
     const scoredSession = (
       scores: unknown[],
       needsReview = false,
+      sampleAnswer: string | null = null,
     ): SessionData =>
       ({
         ...session(),
@@ -184,6 +185,7 @@ describe('PracticeSession — khoá ghi âm khi avatar đọc câu hỏi', () =>
               transcript: 'Tôi là ứng viên.',
               needsReview,
               scores,
+              sampleAnswer,
             },
           },
         ],
@@ -254,6 +256,201 @@ describe('PracticeSession — khoá ghi âm khi avatar đọc câu hỏi', () =>
       );
 
       expect(render().nativeElement.textContent).not.toContain('cần xem lại');
+    });
+  });
+
+  /**
+   * F13 (FR07) — gợi ý câu trả lời mẫu. Nội dung do AI sinh cùng lượt chấm; phần FE phải khoá là
+   * "chỉ hiện khi CÓ" — buổi chấm trước F13 (và ca AI bỏ field) trả null, mà một khối rỗng có tiêu
+   * đề "Gợi ý câu trả lời mẫu" thì tệ hơn là không có gì.
+   */
+  describe('gợi ý câu trả lời mẫu (F13)', () => {
+    const withSample = (sampleAnswer: string | null) =>
+      of({
+        ...session(),
+        status: 'Scored',
+        questions: [
+          {
+            id: 'q1',
+            orderNo: 1,
+            content: 'Giới thiệu bản thân?',
+            timeLimitSec: 120,
+            answer: {
+              id: 'a1',
+              status: 'Scored',
+              durationSec: 30,
+              transcript: 'Tôi là ứng viên.',
+              needsReview: false,
+              scores: [
+                {
+                  criterionId: 'c1',
+                  criterionName: 'Giao tiếp',
+                  score: 7,
+                  reasoning: 'ok',
+                  rubricVersion: 1,
+                },
+              ],
+              sampleAnswer,
+            },
+          },
+        ],
+      } as SessionData);
+
+    it('có sampleAnswer → hiện nội dung mẫu kèm cảnh báo tham khảo', () => {
+      api.get.mockReturnValue(withSample('Theo tôi, DI là kỹ thuật tiêm phụ thuộc...'));
+
+      const el = render().nativeElement;
+
+      expect(el.querySelector('.sample')).toBeTruthy();
+      expect(el.textContent).toContain('Theo tôi, DI là kỹ thuật tiêm phụ thuộc...');
+      // Không được trình bày như đáp án chuẩn để học thuộc.
+      expect(el.textContent).toContain('đừng học thuộc');
+    });
+
+    it('sampleAnswer null → KHÔNG render khối gợi ý', () => {
+      api.get.mockReturnValue(withSample(null));
+
+      const el = render().nativeElement;
+
+      expect(el.querySelector('.sample')).toBeNull();
+      expect(el.textContent).not.toContain('Gợi ý câu trả lời mẫu');
+    });
+
+    /**
+     * Chuỗi toàn khoảng trắng lọt qua phép kiểm truthiness: khối `<details>` vẫn dựng, mở ra thấy
+     * tiêu đề + phần thân RỖNG + lời dặn "đừng học thuộc" — đúng cái khung rỗng mà ca `null` ở
+     * trên sinh ra để chặn. AI trả `"\n"` thay vì `null` là chuyện hoàn toàn có thể xảy ra.
+     */
+    it('sampleAnswer toàn khoảng trắng → cũng KHÔNG render khung rỗng', () => {
+      api.get.mockReturnValue(withSample('   \n  '));
+
+      const el = render().nativeElement;
+
+      expect(el.querySelector('.sample')).toBeNull();
+      expect(el.textContent).not.toContain('Gợi ý câu trả lời mẫu');
+    });
+  });
+
+  /**
+   * F14 (FR08) — radar 2 lớp trên màn kết quả: điểm của người luyện vs mốc đối chiếu.
+   *
+   * ⚠ Phần dễ hỏng ÂM THẦM và được khoá ở đây: mốc phải ghép theo `criterionId`, không theo thứ
+   * tự mảng (ghép nhầm trục thì biểu đồ vẫn vẽ đẹp, không ai biết), và nhãn phải là nguyên văn
+   * của BE — hệ thống không có dữ liệu chuẩn ngành, gọi nó là "chuẩn ngành" là nói dối người xem.
+   */
+  describe('radar đối chiếu (F14)', () => {
+    const crit = (criterionId: string, name: string, percentage: number) => ({
+      criterionId,
+      name,
+      averageScore: percentage / 20,
+      maxScore: 5,
+      percentage,
+      weight: 1,
+    });
+
+    const scoredWithBenchmark = (benchmark: unknown, criteriaScores = 3) =>
+      of({
+        ...session(),
+        status: 'Scored',
+        questions: [],
+        result: {
+          overallScore: 50,
+          answeredCount: 1,
+          totalQuestions: 1,
+          criteriaScores: [
+            crit('c1', 'Kiến thức', 30),
+            crit('c2', 'Giao tiếp', 40),
+            crit('c3', 'Tư duy', 50),
+          ].slice(0, criteriaScores),
+          needsImprovement: [],
+          benchmark,
+        },
+      } as unknown as SessionData);
+
+    it('ghép mốc theo criterionId, KHÔNG theo thứ tự mảng', () => {
+      // BE cố tình trả `criteria` ĐẢO thứ tự so với criteriaScores — ghép theo index sẽ gắn 90
+      // vào "Kiến thức" thay vì "Tư duy", và biểu đồ vẫn trông hoàn toàn bình thường.
+      api.get.mockReturnValue(
+        scoredWithBenchmark({
+          source: 'PeerAverage',
+          label: 'Trung bình người luyện cùng vị trí (n=7)',
+          sampleSize: 7,
+          criteria: [
+            { criterionId: 'c3', name: 'Tư duy', targetPercentage: 90 },
+            { criterionId: 'c2', name: 'Giao tiếp', targetPercentage: 70 },
+            { criterionId: 'c1', name: 'Kiến thức', targetPercentage: 50 },
+          ],
+        }),
+      );
+
+      const points = render().componentInstance.radarPoints();
+
+      expect(points.map((p) => p.name)).toEqual(['Kiến thức', 'Giao tiếp', 'Tư duy']);
+      expect(points.map((p) => p.threshold)).toEqual([50, 70, 90]);
+    });
+
+    it('nhãn lớp mốc lấy NGUYÊN VĂN từ BE', () => {
+      api.get.mockReturnValue(
+        scoredWithBenchmark({
+          source: 'PeerAverage',
+          label: 'Trung bình người luyện cùng vị trí (n=7)',
+          sampleSize: 7,
+          criteria: [{ criterionId: 'c1', name: 'Kiến thức', targetPercentage: 50 }],
+        }),
+      );
+
+      const el = render().nativeElement;
+
+      expect(el.textContent).toContain('Trung bình người luyện cùng vị trí (n=7)');
+      expect(el.textContent).not.toContain('chuẩn ngành');
+    });
+
+    it('nguồn PassThreshold → nói rõ đây là ngưỡng hệ thống, không phải chuẩn ngành', () => {
+      api.get.mockReturnValue(
+        scoredWithBenchmark({
+          source: 'PassThreshold',
+          label: 'Ngưỡng đạt nội bộ (50%)',
+          sampleSize: 0,
+          criteria: [{ criterionId: 'c1', name: 'Kiến thức', targetPercentage: 50 }],
+        }),
+      );
+
+      const text = render().nativeElement.textContent;
+
+      expect(text).toContain('Ngưỡng đạt nội bộ (50%)');
+      expect(text).toContain('không phải chuẩn ngành');
+    });
+
+    it('không có benchmark → radar chỉ 1 lớp (threshold null), không vỡ', () => {
+      api.get.mockReturnValue(scoredWithBenchmark(null));
+
+      const points = render().componentInstance.radarPoints();
+
+      expect(points.length).toBe(3);
+      expect(points.every((p) => p.threshold === null)).toBe(true);
+    });
+
+    it('dưới 3 tiêu chí → KHÔNG vẽ radar (hình thoi vô nghĩa), thanh ngang vẫn có mốc', () => {
+      api.get.mockReturnValue(
+        scoredWithBenchmark(
+          {
+            source: 'PassThreshold',
+            label: 'Ngưỡng đạt nội bộ (50%)',
+            sampleSize: 0,
+            criteria: [{ criterionId: 'c1', name: 'Kiến thức', targetPercentage: 50 }],
+          },
+          1,
+        ),
+      );
+
+      const el = render().nativeElement;
+
+      expect(el.querySelector('app-radar-chart')).toBeNull();
+      expect(el.querySelector('.bar .target')).not.toBeNull();
+      // Mốc vẫn hiện thì chú thích nguồn PHẢI hiện theo: một cái mốc không nói rõ là mốc gì sẽ
+      // được người xem tự gán cho một nguồn uy tín hơn sự thật.
+      expect(el.textContent).toContain('Ngưỡng đạt nội bộ (50%)');
+      expect(el.textContent).toContain('không phải chuẩn ngành');
     });
   });
 });

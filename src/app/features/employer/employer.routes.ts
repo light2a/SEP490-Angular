@@ -40,6 +40,10 @@ export const EMPLOYER_ROUTES: Routes = [
     loadComponent: () => import('./members/members').then((m) => m.Members),
   },
   {
+    path: 'api-keys',
+    loadComponent: () => import('./api-keys/api-keys').then((m) => m.ApiKeys),
+  },
+  {
     path: 'credits',
     loadComponent: () => import('./credits/employer-credits').then((m) => m.EmployerCredits),
   },

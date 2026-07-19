@@ -23,7 +23,8 @@
     @for (p of packages(); track p.id) {
       <mat-card class="pkg">
         <h3>{{ p.name }}</h3>
-        <div class="credits">{{ p.interviewCredits ?? '—' }} credit</div>
+        <div class="type">{{ p.type | packageType }}</div>
+        <div class="credits">{{ p | packageOffer }}</div>
         <div class="price">{{ p.priceVnd | vnd }}</div>
         <button
           mat-flat-button
@@ -60,4 +61,6 @@
       </mat-list>
     </mat-card>
   }
+
+  <app-credit-history />
 }

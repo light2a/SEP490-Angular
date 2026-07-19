@@ -8,10 +8,11 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatIconModule } from '@angular/material/icon';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { extractErrorMessage } from '../../../core/api/http-utils';
 import { RoadmapApi } from '../../../core/api/roadmap.api';
 import { NotifyService } from '../../../core/notify.service';
-import { LessonResponse, RoadmapReport, RoadmapResponse } from '../../../core/models';
+import { LessonResource, LessonResponse, RoadmapReport, RoadmapResponse } from '../../../core/models';
 import { RadarChart, RadarPoint } from '../../../shared/charts/radar-chart';
 import { MarkdownView } from '../../../shared/markdown/markdown-view';
 import { JobCategoryPipe } from '../../../shared/pipes';
@@ -28,6 +29,7 @@ import { Spinner } from '../../../shared/ui/spinner';
     MatChipsModule,
     MatDividerModule,
     MatExpansionModule,
+    MatTooltipModule,
     JobCategoryPipe,
     MarkdownView,
     RadarChart,
@@ -46,6 +48,12 @@ export class RoadmapDetail implements OnInit {
   readonly report = signal<RoadmapReport | null>(null);
   readonly loading = signal(true);
   readonly theories = signal<Record<string, string>>({});
+  /**
+   * F15 — tài liệu học theo lessonId, nạp cùng lúc với lý thuyết (BE trả chung 1 response).
+   * Khoá riêng với `theories` để phân biệt "chưa nạp" (undefined) với "nạp rồi, AI không gợi ý
+   * được tài liệu nào" ([]) — hai trạng thái đó hiển thị khác nhau.
+   */
+  readonly lessonResources = signal<Record<string, LessonResource[]>>({});
   readonly startingLesson = signal<string | null>(null);
 
   /**
@@ -78,8 +86,11 @@ export class RoadmapDetail implements OnInit {
   loadTheory(lesson: LessonResponse): void {
     if (this.theories()[lesson.id]) return;
     this.api.lesson(this.id(), lesson.id).subscribe({
-      next: (l) =>
-        this.theories.update((t) => ({ ...t, [lesson.id]: l.theoryContent ?? '(Chưa có nội dung)' })),
+      next: (l) => {
+        this.theories.update((t) => ({ ...t, [lesson.id]: l.theoryContent ?? '(Chưa có nội dung)' }));
+        // BE luôn trả mảng; `?? []` chỉ để phòng response cũ (field additive) không làm vỡ @for.
+        this.lessonResources.update((r) => ({ ...r, [lesson.id]: l.resources ?? [] }));
+      },
       error: () => this.notify.error('Không tải được lý thuyết.'),
     });
   }
