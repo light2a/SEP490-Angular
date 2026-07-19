@@ -88,7 +88,15 @@ import {
             <ng-container matColumnDef="candidate">
               <th mat-header-cell *matHeaderCellDef>Ứng viên</th>
               <td mat-cell *matCellDef="let r">
-                <span class="mono" [matTooltip]="r.candidateId">{{ short(r.candidateId) }}</span>
+                <!-- F5: ưu tiên tên/email đọc được; chưa có (membership đường-1 cũ) → về UUID như trước. -->
+                @if (r.fullName || r.email) {
+                  <span>{{ r.fullName || r.email }}</span>
+                  @if (r.fullName && r.email) {
+                    <span class="sub">{{ r.email }}</span>
+                  }
+                } @else {
+                  <span class="mono" [matTooltip]="r.candidateId">{{ short(r.candidateId) }}</span>
+                }
                 <span class="mono sub" [matTooltip]="r.sessionId">buổi {{ short(r.sessionId) }}</span>
               </td>
             </ng-container>

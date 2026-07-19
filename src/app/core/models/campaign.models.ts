@@ -223,6 +223,12 @@ export interface FlagDto {
 export interface CampaignResultRow {
   rank: number;
   candidateId: string;
+  /**
+   * F5 — danh tính người-đọc-được. Có thể null: membership "đường-1" (mời thẳng qua email) tạo
+   * trước F5 không có nguồn dữ liệu để suy ra, và BE cố ý KHÔNG đoán (email sai còn tệ hơn trống).
+   */
+  fullName?: string | null;
+  email?: string | null;
   sessionId: string;
   /** Điểm effective (đã áp override HR nếu có). */
   totalScore: number;
