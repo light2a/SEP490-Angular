@@ -25,6 +25,7 @@ import {
   CriterionItem,
   JD_TEXT_MAX_CHARS,
   QuestionItem,
+  QuestionSource,
   UpdateCampaignRequest,
 } from '../../../core/models';
 import { Spinner } from '../../../shared/ui/spinner';
@@ -221,6 +222,10 @@ function toIso(local: string | null | undefined): string | null {
                   <mat-label>Câu hỏi #{{ i + 1 }} *</mat-label>
                   <textarea matInput formControlName="questionText" rows="2"></textarea>
                 </mat-form-field>
+                <!-- F10: nguồn gốc câu hỏi do BE giữ — HR thấy được câu nào AI sinh (F9). -->
+                @if (questionSource(i) === 'AiGenerated') {
+                  <span class="q-src" title="Câu hỏi do AI sinh từ JD">AI sinh</span>
+                }
                 <mat-checkbox formControlName="isRequired">Bắt buộc</mat-checkbox>
                 <button
                   mat-icon-button
@@ -348,6 +353,17 @@ function toIso(local: string | null | undefined): string | null {
       .q-text {
         flex: 1;
       }
+      /* F10 — nhãn "AI sinh" (F9). */
+      .q-src {
+        flex: none;
+        margin-top: 18px;
+        padding: 2px 8px;
+        border-radius: 10px;
+        background: #ede7f6;
+        color: #4527a0;
+        font-size: 12px;
+        white-space: nowrap;
+      }
       .actions {
         display: flex;
         justify-content: flex-end;
@@ -471,7 +487,10 @@ export class CampaignForm implements OnInit {
       this.criteria.push(this.critRow(cr.name, cr.weight, cr.maxScore, cr.description ?? '')),
     );
     this.questions.clear();
-    c.questions.forEach((q) => this.questions.push(this.questionRow(q.questionText, q.isRequired)));
+    // F10 — mang theo id + source của câu đang có; thiếu id thì lần Lưu kế sẽ xoá-và-tạo-lại.
+    c.questions.forEach((q) =>
+      this.questions.push(this.questionRow(q.questionText, q.isRequired, q.id, q.source)),
+    );
     if (this.questions.length === 0) this.addQuestion();
   }
 
@@ -499,11 +518,25 @@ export class CampaignForm implements OnInit {
   }
 
   // ── Questions ────────────────────────────────────────────────────────────────
-  private questionRow(questionText = '', isRequired = true): FormGroup {
+  // F10 — id + source đi kèm mỗi dòng câu hỏi (không hiện trên form, nhưng phải sống sót qua
+  // vòng đọc→sửa→lưu): id để BE sửa đúng row, source để badge hiển thị câu nào do AI sinh.
+  private questionRow(
+    questionText = '',
+    isRequired = true,
+    id: string | null = null,
+    source: QuestionSource | null = null,
+  ): FormGroup {
     return this.fb.group({
+      id: [id],
+      source: [source],
       questionText: [questionText, [Validators.required]],
       isRequired: [isRequired],
     });
+  }
+
+  /** F10 — nhãn nguồn để HR phân biệt câu AI sinh (F9) với câu mình gõ. Câu mới → chưa có nguồn. */
+  questionSource(i: number): QuestionSource | null {
+    return this.questions.at(i).get('source')!.value ?? null;
   }
   addQuestion(): void {
     this.questions.push(this.questionRow());
@@ -522,11 +555,17 @@ export class CampaignForm implements OnInit {
     }));
   }
   private buildQuestions(): QuestionItem[] {
-    return this.questions.controls.map((g) => ({
-      questionText: g.get('questionText')!.value,
-      source: 'CustomHr' as const,
-      isRequired: !!g.get('isRequired')!.value,
-    }));
+    return this.questions.controls.map((g) => {
+      const id: string | null = g.get('id')!.value;
+      return {
+        // F10 — echo id để BE sửa TẠI CHỖ. Trước F10 chỗ này gửi `source:'CustomHr'` cứng và
+        // không gửi id ⇒ mỗi lần Lưu là BE xoá sạch rồi tạo lại: câu do AI sinh mất nhãn
+        // `AiGenerated` và đổi id. `source` nay không gửi — nguồn gốc do BE giữ.
+        ...(id ? { id } : {}),
+        questionText: g.get('questionText')!.value,
+        isRequired: !!g.get('isRequired')!.value,
+      };
+    });
   }
 
   submit(): void {
