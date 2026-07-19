@@ -52,6 +52,17 @@
       }
     </mat-form-field>
 
+    <!-- F2 — thời lượng mỗi câu. Hết giờ sẽ tự nộp, nên nói trước để không bị bất ngờ. -->
+    <div class="field-block">
+      <span class="field-label">Thời gian trả lời mỗi câu</span>
+      <mat-button-toggle-group formControlName="timeLimitSec" aria-label="Thời gian mỗi câu">
+        @for (opt of timeLimitOptions; track opt.value) {
+          <mat-button-toggle [value]="opt.value">{{ opt.label }}</mat-button-toggle>
+        }
+      </mat-button-toggle-group>
+      <span class="field-hint">Hết giờ sẽ tự nộp câu trả lời đang ghi.</span>
+    </div>
+
     <button mat-flat-button color="primary" type="submit" [disabled]="creating()">
       <mat-icon>mic</mat-icon> Bắt đầu luyện (−1 credit)
     </button>

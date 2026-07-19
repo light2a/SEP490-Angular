@@ -64,10 +64,24 @@
               }
             </div>
           }
+        } @else if (isLocked(q.id)) {
+          <p class="locked">
+            <mat-icon>lock_clock</mat-icon> Hết giờ — câu này đã đóng.
+          </p>
         } @else if (!scored()) {
-          <!-- Khoá ghi âm khi avatar đang đọc: mic mở lúc loa kêu sẽ làm transcript lẫn câu hỏi. -->
+          <!-- F2: đồng hồ chỉ hiện ở câu đang tới lượt (trang hiện tất cả câu cùng lúc). -->
+          @if (q.id === currentQuestionId() && q.timeLimitSec > 0) {
+            <div class="timer">
+              <mat-progress-bar mode="determinate" [value]="countdown.timePct()" />
+              <span class="remain">Còn {{ countdown.remainingSec() }}s</span>
+            </div>
+          }
+          <!--
+            Khoá ghi âm khi avatar đang đọc (mic mở lúc loa kêu sẽ làm transcript lẫn câu hỏi) VÀ khi
+            chưa tới lượt câu này — đồng hồ đếm ngược chỉ có nghĩa nếu trả lời tuần tự.
+          -->
           <app-audio-recorder
-            [disabled]="avatarSpeaking()"
+            [disabled]="avatarSpeaking() || q.id !== currentQuestionId()"
             (recorded)="onRecorded(q.id, $event)"
             (startRequested)="onRecorderStart()"
             (recordingChange)="recordingActive.set($event)"
@@ -77,7 +91,9 @@
             color="primary"
             class="upload-btn"
             (click)="upload(q)"
-            [disabled]="uploadingQid() === q.id || !hasRecording(q.id)"
+            [disabled]="
+              uploadingQid() === q.id || !hasRecording(q.id) || q.id !== currentQuestionId()
+            "
           >
             <mat-icon>cloud_upload</mat-icon> Nộp câu này
           </button>

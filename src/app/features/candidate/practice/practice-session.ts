@@ -4,10 +4,12 @@ import {
   DestroyRef,
   OnInit,
   computed,
+  effect,
   inject,
   input,
   signal,
   viewChild,
+  viewChildren,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -29,6 +31,7 @@ import {
 } from '../../../core/models';
 import { InterviewAvatar } from '../../../shared/avatar/interview-avatar';
 import { AnswerStatusPipe, JobCategoryPipe, SessionStatusPipe } from '../../../shared/pipes';
+import { createCountdown } from '../../../shared/timing/countdown';
 import { Spinner } from '../../../shared/ui/spinner';
 import { AudioRecorder, RecordedAudio } from './audio-recorder';
 
@@ -86,13 +89,96 @@ export class PracticeSession implements OnInit {
   private avatarRef = viewChild(InterviewAvatar);
 
   /**
-   * Câu avatar sẽ đọc: câu chưa trả lời đầu tiên. Trang B2C hiện hết câu cùng lúc, nên phải chọn
-   * đúng một câu để đọc — chọn câu kế tiếp cần trả lời là sát với luồng làm bài nhất.
+   * F2 — câu đã hết giờ mà ứng viên chưa ghi gì: khoá vĩnh viễn trong phiên xem này.
+   *
+   * State phía CLIENT, nên F5/reload là đồng hồ chạy lại. CHẤP NHẬN CÓ CHỦ Ý: B2C là *luyện tập*,
+   * không phải thi — chống reload là bài toán của B2B (đã có proctoring). Ép chặt hơn ở đây sẽ phải
+   * trả giá bằng state server cho một luồng mà gian lận không có ý nghĩa gì.
+   */
+  private readonly lockedIds = signal<ReadonlySet<string>>(new Set());
+  isLocked(qid: string): boolean {
+    return this.lockedIds().has(qid);
+  }
+
+  /**
+   * Câu avatar sẽ đọc + câu đang tính giờ: câu chưa trả lời đầu tiên CHƯA BỊ KHOÁ.
+   *
+   * ⚠ Điều kiện `!isLocked` là bắt buộc, không phải cho đẹp: câu bị khoá vĩnh viễn không có answer,
+   * nên nếu chỉ lọc `!q.answer` thì con trỏ đứng mãi ở câu vừa khoá ⇒ đồng hồ không bao giờ sang câu
+   * kế và cả buổi luyện chết đứng sau câu đầu tiên hết giờ.
    */
   readonly currentQuestionId = computed(() => {
     if (this.generating() || this.scored()) return null;
-    return this.questions().find((q) => !q.answer)?.id ?? null;
+    const locked = this.lockedIds();
+    return this.questions().find((q) => !q.answer && !locked.has(q.id))?.id ?? null;
   });
+
+  /** F2 — đồng hồ đếm ngược của câu hiện tại; đứng yên khi avatar đang đọc đề. */
+  readonly countdown = createCountdown({
+    paused: () => this.avatarSpeaking(),
+    onExpire: () => this.onTimeUp(),
+  });
+
+  /**
+   * B2C render MỘT recorder cho MỖI câu chưa trả lời (khác B2B chỉ có 1) → `viewChild` số ít sẽ luôn
+   * trả cái ĐẦU TIÊN trong DOM, trùng câu hiện tại chỉ do may mắn thứ tự. Phải lấy theo index.
+   */
+  private recorders = viewChildren(AudioRecorder);
+  private currentRecorder(): AudioRecorder | undefined {
+    const qid = this.currentQuestionId();
+    if (!qid) return undefined;
+    const idx = this.questions()
+      .filter((q) => !q.answer)
+      .findIndex((q) => q.id === qid);
+    return idx >= 0 ? this.recorders()[idx] : undefined;
+  }
+
+  /** Câu đang chờ bản ghi để tự nộp (hết giờ lúc đang ghi → `stop()` bất đồng bộ). */
+  private autoUploadQid: string | null = null;
+  /** Câu mà đồng hồ đã được khởi động — tránh poll 4s reset đồng hồ về đầu. */
+  private timerStartedFor: string | null = null;
+
+  constructor() {
+    effect(() => {
+      const qid = this.currentQuestionId();
+      // `refresh()` chạy mỗi 4s → effect này chạy lại liên tục. Chỉ (re)start khi ĐỔI câu, nếu không
+      // đồng hồ bị đặt lại về đầu mỗi vòng poll và không bao giờ hết giờ.
+      if (qid === this.timerStartedFor) return;
+      this.timerStartedFor = qid;
+
+      if (!qid) {
+        this.countdown.stop();
+        return;
+      }
+      const q = this.questions().find((x) => x.id === qid);
+      this.countdown.start(q?.timeLimitSec ?? 0);
+    });
+  }
+
+  /**
+   * Hết giờ. Đang ghi → `stop()` rồi để `onRecorded` nộp (MediaRecorder.stop() BẤT ĐỒNG BỘ, blob chưa
+   * có ở đây nên upload thẳng sẽ nộp rỗng). Đã có bản ghi → nộp luôn. Chưa ghi gì → khoá câu.
+   */
+  private onTimeUp(): void {
+    const qid = this.currentQuestionId();
+    if (!qid) return;
+
+    const rec = this.currentRecorder();
+    if (rec?.recording()) {
+      this.autoUploadQid = qid;
+      rec.stop();
+      return;
+    }
+
+    const q = this.questions().find((x) => x.id === qid);
+    if (q && this.recordings.has(qid)) {
+      this.upload(q);
+      return;
+    }
+
+    this.lockedIds.update((s) => new Set(s).add(qid));
+    this.notify.warn('Hết giờ — câu này đã bị khoá, mời bạn sang câu tiếp theo.');
+  }
 
   /**
    * Dự phòng cho buổi chấm TRƯỚC 2026-07-18: hồi đó điểm per-answer không mang tên tiêu chí nên
@@ -115,7 +201,10 @@ export class PracticeSession implements OnInit {
 
   ngOnInit(): void {
     this.load();
-    this.destroyRef.onDestroy(() => this.stopPoll());
+    this.destroyRef.onDestroy(() => {
+      this.stopPoll();
+      this.countdown.stop();
+    });
   }
 
   private load(): void {
@@ -166,6 +255,12 @@ export class PracticeSession implements OnInit {
 
   onRecorded(qid: string, rec: RecordedAudio): void {
     this.recordings.set(qid, rec);
+    // Hết giờ lúc đang ghi: đây mới là thời điểm blob thực sự sẵn sàng để nộp.
+    if (this.autoUploadQid === qid) {
+      this.autoUploadQid = null;
+      const q = this.questions().find((x) => x.id === qid);
+      if (q) this.upload(q);
+    }
   }
 
   /**

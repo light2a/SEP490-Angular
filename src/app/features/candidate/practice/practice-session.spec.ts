@@ -1,9 +1,11 @@
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { Subject, of, throwError } from 'rxjs';
 import { PracticeApi } from '../../../core/api/practice.api';
 import { PracticeSession as SessionData } from '../../../core/models';
 import { NotifyService } from '../../../core/notify.service';
+import { AudioRecorder } from './audio-recorder';
 import { PracticeSession } from './practice-session';
 
 /**
@@ -93,6 +95,68 @@ describe('PracticeSession — khoá ghi âm khi avatar đọc câu hỏi', () =>
     render();
 
     expect(api.speech).not.toHaveBeenCalled();
+  });
+
+  /**
+   * F2 — đồng hồ đếm ngược mỗi câu. Dùng fake timer + `api.speech` lỗi để `avatarSpeaking()` = false
+   * (avatar đang đọc thì đồng hồ ĐỨNG YÊN theo thiết kế, sẽ không bao giờ hết giờ).
+   */
+  describe('hết giờ mỗi câu', () => {
+    const twoQuestions = (): SessionData => ({
+      ...session(),
+      questions: [
+        { id: 'q1', orderNo: 1, content: 'Câu một?', timeLimitSec: 60, answer: null },
+        { id: 'q2', orderNo: 2, content: 'Câu hai?', timeLimitSec: 60, answer: null },
+      ],
+    });
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      api.speech.mockReturnValue(throwError(() => ({ status: 502 })));
+      api.get.mockReturnValue(of(twoQuestions()));
+    });
+    afterEach(() => vi.useRealTimers());
+
+    /**
+     * Ca dễ hỏng nhất: khoá câu làm nó vĩnh viễn `!answer`, nên nếu con trỏ chỉ lọc `!q.answer` thì nó
+     * đứng mãi ở câu vừa khoá ⇒ đồng hồ không bao giờ sang câu kế, cả buổi luyện chết đứng.
+     */
+    it('chưa ghi gì → khoá câu VÀ con trỏ nhảy sang câu kế', () => {
+      const fixture = render();
+      const c = fixture.componentInstance;
+      expect(c.currentQuestionId()).toBe('q1');
+
+      vi.advanceTimersByTime(60_000);
+      fixture.detectChanges();
+
+      expect(c.isLocked('q1')).toBe(true);
+      expect(c.currentQuestionId()).toBe('q2');
+    });
+
+    it('đang ghi âm → gọi stop() chứ KHÔNG upload thẳng (blob chưa sẵn sàng)', () => {
+      const fixture = render();
+      const recorder = fixture.debugElement.query(By.directive(AudioRecorder))
+        .componentInstance as AudioRecorder;
+      recorder.recording.set(true);
+      const stopSpy = vi.spyOn(recorder, 'stop');
+
+      vi.advanceTimersByTime(60_000);
+
+      expect(stopSpy).toHaveBeenCalledTimes(1);
+      expect(api.uploadAnswer).not.toHaveBeenCalled();
+      // Câu KHÔNG bị khoá — người dùng có ghi, chỉ là đang chờ blob.
+      expect(fixture.componentInstance.isLocked('q1')).toBe(false);
+    });
+
+    it('chưa hết giờ → không khoá gì cả', () => {
+      const fixture = render();
+
+      vi.advanceTimersByTime(30_000);
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.isLocked('q1')).toBe(false);
+      expect(fixture.componentInstance.currentQuestionId()).toBe('q1');
+    });
   });
 
   /**

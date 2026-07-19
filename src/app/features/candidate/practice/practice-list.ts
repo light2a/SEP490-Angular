@@ -4,6 +4,7 @@ import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -38,6 +39,7 @@ import { Spinner } from '../../../shared/ui/spinner';
     MatSelectModule,
     MatInputModule,
     MatButtonModule,
+    MatButtonToggleModule,
     MatIconModule,
     MatListModule,
     MatProgressBarModule,
@@ -47,6 +49,24 @@ import { Spinner } from '../../../shared/ui/spinner';
     EmptyState,
   ],
   templateUrl: './practice-list.html',
+  // Component chưa có file .scss riêng; vài class của F2 nên khai tại chỗ thay vì dựng file mới.
+  styles: `
+    .field-block {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 16px;
+      align-items: flex-start;
+    }
+    .field-label {
+      font-size: 14px;
+      color: var(--mat-sys-on-surface-variant);
+    }
+    .field-hint {
+      font-size: 12px;
+      color: var(--mat-sys-on-surface-variant);
+    }
+  `,
 })
 export class PracticeList {
   private fb = inject(FormBuilder);
@@ -62,11 +82,19 @@ export class PracticeList {
   readonly loading = signal(true);
   readonly creating = signal(false);
 
+  /** F2 — 3 mốc thời lượng mỗi câu (giây); phải khớp tập BE chấp nhận, lệch là 400. */
+  readonly timeLimitOptions = [
+    { value: 60, label: '1 phút' },
+    { value: 120, label: '2 phút' },
+    { value: 240, label: '4 phút' },
+  ];
+
   readonly form = this.fb.nonNullable.group({
     jobCategory: ['BA', [Validators.required]],
     cvId: [''],
     jdId: [''],
     jdText: ['', [Validators.maxLength(JD_TEXT_MAX_CHARS)]],
+    timeLimitSec: [120, [Validators.required]],
   });
 
   /**
@@ -121,6 +149,7 @@ export class PracticeList {
         cvId: v.cvId || null,
         jdId: jdText ? null : v.jdId || null,
         jdText: jdText || null,
+        timeLimitSec: v.timeLimitSec,
       })
       .subscribe({
         next: (s) => {
