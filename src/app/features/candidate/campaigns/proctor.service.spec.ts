@@ -74,6 +74,44 @@ describe('ProctorService', () => {
     expect(service.warnings()).toBe(0);
   });
 
+  // ── F4 — camera_blocked ──────────────────────────────────────────────────────
+
+  it('reportCameraBlocked sends the camera_blocked signal', () => {
+    service.start('c1', () => 's1');
+
+    service.reportCameraBlocked('NotAllowedError');
+
+    expect(reportFlag).toHaveBeenCalledWith(
+      'c1',
+      's1',
+      'camera_blocked',
+      expect.stringContaining('NotAllowedError'),
+    );
+    expect(service.warnings()).toBe(1);
+  });
+
+  // 🔴 KHÔNG suy đoán: report() return sớm khi sessionId null, mà camera bật RẤT sớm.
+  // Test này khoá thành hợp đồng — mount webcam trước khi có session ⇒ cờ bị nuốt lặng lẽ, đúng
+  // cái lỗi F4 đang đi sửa. Template hiện gác `@if (webcamEnabled() && sessionId())` nên an toàn.
+  it('reportCameraBlocked is swallowed when sessionId is not available yet', () => {
+    service.start('c1', () => null);
+
+    service.reportCameraBlocked('NotAllowedError');
+
+    expect(reportFlag).not.toHaveBeenCalled();
+  });
+
+  // Camera-denied KHÔNG dùng chung debounce với tab_switch/blur (khác bản chất sự kiện):
+  // gọi sát nhau vẫn phải gửi — chống-trùng nằm ở WebcamCapture (cờ report-once).
+  it('reportCameraBlocked is not swallowed by the away-event debounce', () => {
+    service.start('c1', () => 's1');
+
+    window.dispatchEvent(new Event('blur'));
+    service.reportCameraBlocked('NotAllowedError');
+
+    expect(reportFlag).toHaveBeenCalledTimes(2);
+  });
+
   it('stop() removes listeners so later events do not report', () => {
     service.start('c1', () => 's1');
     service.stop();

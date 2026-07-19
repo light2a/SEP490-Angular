@@ -9,6 +9,10 @@ export interface CreatePracticeSessionRequest {
    * Gửi cả jdText lẫn jdId → BE dùng TEXT, bỏ file (và không lưu jdId).
    */
   jdText?: string | null;
+  /** F2 — thời lượng mỗi câu (giây). BE chỉ nhận 60/120/240; bỏ trống = 120. */
+  timeLimitSec?: number | null;
+  /** F2b — số câu hỏi, 1..20. Bỏ trống = mặc định của AIService (5). */
+  questionCount?: number | null;
 }
 
 export interface AnswerScore {

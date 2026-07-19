@@ -5,6 +5,7 @@ import {
   OnInit,
   inject,
   input,
+  output,
   signal,
   viewChild,
 } from '@angular/core';
@@ -81,10 +82,25 @@ export class WebcamCapture implements OnInit {
   readonly sessionId = input.required<string>();
   readonly enrollRequired = input(false);
 
+  /**
+   * F4 — camera không bật được (OS/trình duyệt từ chối, không có thiết bị…).
+   * Component này CỐ Ý thuần I/O: KHÔNG inject ProctorService, chỉ phát sự kiện để component cha
+   * (`campaign-interview`) quyết định gửi cờ ⇒ test được độc lập, không cần dựng cả pipeline proctor.
+   * Payload = tên lỗi DOMException (`NotAllowedError`/`NotFoundError`…) để HR có ngữ cảnh.
+   */
+  readonly cameraBlocked = output<string>();
+
   readonly active = signal(false);
   readonly denied = signal(false);
   /** Số lần đối chiếu khuôn mặt đã gửi — surface cho UI nếu cần. */
   readonly checks = signal(0);
+
+  /**
+   * Cờ báo-một-lần cho `cameraBlocked`. KHÔNG dựa được vào debounce 1200ms của ProctorService:
+   * camera-denied là sự kiện MỘT-LẦN-MỖI-BUỔI, nhưng `start()` có thể được gọi lại cách nhau
+   * hơn 1200ms (retry / remount) ⇒ debounce sẽ cho lọt cờ trùng. Reset trong `start()`.
+   */
+  private blockedReported = false;
 
   private previewHost = viewChild<ElementRef<HTMLDivElement>>('preview');
   private stream?: MediaStream;
@@ -114,11 +130,24 @@ export class WebcamCapture implements OnInit {
         // Autoplay có thể bị chặn — vẫn chụp được frame từ stream.
       }
       this.active.set(true);
+      // Camera đã chạy → mở lại cửa cho lần chặn SAU (nếu người dùng rút quyền giữa buổi thì đó là
+      // một sự kiện MỚI, đáng gửi cờ mới). Reset ở đây chứ KHÔNG ở đầu start(): start() có thể được
+      // gọi lại khi vẫn đang bị chặn, reset đầu hàm sẽ làm cờ bắn trùng — đúng cái debounce không đỡ được.
+      this.blockedReported = false;
+      this.denied.set(false);
 
       if (this.enrollRequired()) await this.enroll();
       this.interval = setInterval(() => void this.runCheck(), FACE_CHECK_INTERVAL_MS);
-    } catch {
+    } catch (err: unknown) {
       this.denied.set(true);
+      // F4 — KHÔNG nuốt lỗi nữa: báo lên cha để ghi cờ `camera_blocked` cho HR.
+      if (!this.blockedReported) {
+        this.blockedReported = true;
+        // Duck-type thay vì `instanceof Error`: DOMException KHÔNG kế thừa Error trên mọi môi trường
+        // (jsdom là một ví dụ) → instanceof sẽ nuốt mất tên lỗi thật, HR nhận cờ vô nghĩa.
+        const name = (err as { name?: unknown } | null)?.name;
+        this.cameraBlocked.emit(typeof name === 'string' && name ? name : 'CameraError');
+      }
     }
   }
 

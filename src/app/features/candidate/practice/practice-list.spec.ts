@@ -101,4 +101,53 @@ describe('PracticeList — JD dạng text', () => {
 
     fixture.destroy();
   });
+
+  // F2 + F2b — lựa chọn thời lượng/số câu phải THỰC SỰ đi lên BE, không chỉ nằm trên form.
+  it('gửi kèm timeLimitSec và questionCount đã chọn', () => {
+    const fixture = render();
+    const cmp = fixture.componentInstance;
+
+    cmp.form.patchValue({ jobCategory: 'BE', timeLimitSec: 240, questionCount: 8 });
+    cmp.create();
+
+    expect(practiceApi.create).toHaveBeenCalledWith(
+      expect.objectContaining({ timeLimitSec: 240, questionCount: 8 }),
+    );
+    fixture.destroy();
+  });
+
+  it('mặc định 2 phút / 5 câu (giữ hành vi cũ cho người không đụng tới)', () => {
+    const fixture = render();
+    const cmp = fixture.componentInstance;
+
+    cmp.form.patchValue({ jobCategory: 'BE' });
+    cmp.create();
+
+    expect(practiceApi.create).toHaveBeenCalledWith(
+      expect.objectContaining({ timeLimitSec: 120, questionCount: 5 }),
+    );
+    fixture.destroy();
+  });
+
+  it('số câu ngoài 1..20 → form invalid, KHÔNG gọi API', () => {
+    const fixture = render();
+    const cmp = fixture.componentInstance;
+
+    for (const bad of [0, 21, -1]) {
+      practiceApi.create.mockClear();
+      cmp.form.patchValue({ jobCategory: 'BE', questionCount: bad });
+
+      expect(cmp.form.controls.questionCount.valid).toBe(false);
+      cmp.create();
+      expect(practiceApi.create).not.toHaveBeenCalled();
+    }
+
+    // Đúng biên → hợp lệ (trần là "tối đa 20", không phải "dưới 20").
+    cmp.form.patchValue({ questionCount: 20 });
+    expect(cmp.form.controls.questionCount.valid).toBe(true);
+    cmp.form.patchValue({ questionCount: 1 });
+    expect(cmp.form.controls.questionCount.valid).toBe(true);
+
+    fixture.destroy();
+  });
 });
