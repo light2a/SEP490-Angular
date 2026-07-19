@@ -23,8 +23,9 @@
 .lessons {
   margin-top: 12px;
 }
+// Bỏ `white-space: pre-wrap`: cấu trúc xuống dòng nay do MarkdownView dựng bằng thẻ thật,
+// giữ pre-wrap sẽ cộng thêm khoảng trắng giữa các block.
 .theory {
-  white-space: pre-wrap;
   margin-bottom: 12px;
 }
 .report {

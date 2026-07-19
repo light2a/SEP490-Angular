@@ -31,8 +31,8 @@
             </mat-expansion-panel-header>
 
             <div class="theory">
-              @if (theories()[l.id]) {
-                <p>{{ theories()[l.id] }}</p>
+              @if (theories()[l.id]; as theory) {
+                <app-markdown-view [text]="theory" />
               } @else {
                 <app-spinner [diameter]="24" />
               }

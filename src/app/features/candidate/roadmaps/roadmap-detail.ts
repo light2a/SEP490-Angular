@@ -13,6 +13,7 @@ import { RoadmapApi } from '../../../core/api/roadmap.api';
 import { NotifyService } from '../../../core/notify.service';
 import { LessonResponse, RoadmapReport, RoadmapResponse } from '../../../core/models';
 import { RadarChart, RadarPoint } from '../../../shared/charts/radar-chart';
+import { MarkdownView } from '../../../shared/markdown/markdown-view';
 import { JobCategoryPipe } from '../../../shared/pipes';
 import { Spinner } from '../../../shared/ui/spinner';
 
@@ -28,6 +29,7 @@ import { Spinner } from '../../../shared/ui/spinner';
     MatDividerModule,
     MatExpansionModule,
     JobCategoryPipe,
+    MarkdownView,
     RadarChart,
     Spinner,
   ],

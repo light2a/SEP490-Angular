@@ -144,4 +144,35 @@ describe('RoadmapDetail', () => {
     });
   });
 
+  describe('F6b — markdown lý thuyết', () => {
+    /** Mở panel bài học = nạp lý thuyết; trước đây chuỗi Markdown bị đổ thô vào một thẻ <p>. */
+    function openLesson(theoryContent: string) {
+      api.lesson.mockReturnValue(of({ id: 'l1', theoryContent }));
+      const fixture = render();
+      fixture.componentInstance.loadTheory({ id: 'l1' } as never);
+      fixture.detectChanges();
+      return fixture.nativeElement.querySelector('app-markdown-view') as HTMLElement;
+    }
+
+    it('Markdown thành thẻ thật, không còn lộ ký tự cú pháp ra màn hình', () => {
+      const view = openLesson('# Tiêu đề\n\n- Ý một\n- Ý hai\n\nCần **kiên trì** với `git`.');
+
+      expect(view.querySelector('.md-h')?.textContent?.trim()).toBe('Tiêu đề');
+      expect(view.querySelectorAll('ul li').length).toBe(2);
+      expect(view.querySelector('strong')?.textContent).toBe('kiên trì');
+      expect(view.querySelector('code')?.textContent).toBe('git');
+      // Dấu cú pháp đã bị nuốt vào cấu trúc — đây chính là bug F6b đi sửa.
+      expect(view.textContent).not.toContain('#');
+      expect(view.textContent).not.toContain('**');
+    });
+
+    // 🔴 RÀNG BUỘC BẢO MẬT: nội dung do LLM sinh không được biến thành thẻ HTML.
+    it('thẻ HTML trong lý thuyết hiện thành CHỮ, không thành phần tử', () => {
+      const view = openLesson('Ví dụ <script>alert(1)</script> và a < b && c');
+
+      expect(view.querySelector('script')).toBeNull();
+      expect(view.textContent).toContain('<script>alert(1)</script>');
+      expect(view.textContent).toContain('a < b && c');
+    });
+  });
 });
