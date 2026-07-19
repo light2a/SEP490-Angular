@@ -65,6 +65,16 @@
             </div>
           }
           <!--
+            F11 — chỉ số cách nói. Hiện ngay khi ĐO ĐƯỢC (đường thích ứng có số ngay lúc upload),
+            còn nếu chưa có thì chỉ hiện sau khi câu đã chấm. Lý do của vế sau: lúc còn đang
+            transcribe/chấm mà đã báo "chưa đo được" thì đó là nói sai — sự thật lúc đó là "chưa
+            xong", không phải "không có". Chấm xong mà vẫn khuyết mới thật sự là không đo được
+            (câu có trước F11 · audio rỗng · đường degrade).
+          -->
+          @if (q.answer.deliveryMetrics || q.answer.scores.length) {
+            <app-delivery-metrics [metrics]="q.answer.deliveryMetrics" />
+          }
+          <!--
             F13 — gợi ý câu trả lời mẫu. Đặt SAU điểm + nhận xét có chủ đích: người luyện đọc
             mình thiếu ở đâu trước, rồi mới tới "đáng lẽ nên trả lời thế này". Mặc định thu gọn
             để không che mất bản ghi và điểm của chính họ.
