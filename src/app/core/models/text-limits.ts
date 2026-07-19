@@ -11,3 +11,14 @@
  * JD vào mỗi lời gọi Gemini ở mức bounded (chi phí token + chống lạm dụng).
  */
 export const JD_TEXT_MAX_CHARS = 20_000;
+
+/**
+ * F2b — số câu hỏi mỗi buổi luyện B2C. PHẢI khớp guard BE (`PracticeService.ValidateQuestionCount`);
+ * BE mới là nơi enforce thật, form chỉ chặn sớm để đỡ một round-trip 400.
+ *
+ * Vì sao có trần: chi phí tăng TUYẾN TÍNH theo số câu (Whisper + Gemini + TTS mỗi câu) trong khi
+ * doanh thu là hằng số 1 credit/buổi — không trần thì một người chọn 500 câu vừa ăn hết biên lãi
+ * vừa làm nghẽn hàng đợi chấm của mọi người khác.
+ */
+export const QUESTION_COUNT_MIN = 1;
+export const QUESTION_COUNT_MAX = 20;

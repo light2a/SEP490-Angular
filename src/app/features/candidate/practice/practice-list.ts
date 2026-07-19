@@ -22,6 +22,8 @@ import {
   JOB_CATEGORIES,
   JobCategory,
   PracticeSessionSummary,
+  QUESTION_COUNT_MAX,
+  QUESTION_COUNT_MIN,
 } from '../../../core/models';
 import { JobCategoryPipe, SessionStatusPipe } from '../../../shared/pipes';
 import { EmptyState } from '../../../shared/ui/empty-state';
@@ -95,7 +97,15 @@ export class PracticeList {
     jdId: [''],
     jdText: ['', [Validators.maxLength(JD_TEXT_MAX_CHARS)]],
     timeLimitSec: [120, [Validators.required]],
+    // F2b — trần 20 khớp guard BE; vượt là 400. Chặn ở form để khỏi tốn round-trip.
+    questionCount: [
+      5,
+      [Validators.required, Validators.min(QUESTION_COUNT_MIN), Validators.max(QUESTION_COUNT_MAX)],
+    ],
   });
+
+  readonly questionCountMin = QUESTION_COUNT_MIN;
+  readonly questionCountMax = QUESTION_COUNT_MAX;
 
   /**
    * Đang dán JD tay → BE sẽ BỎ file JD (quy ước C11 "text ưu tiên file"). Mirror lên UI để
@@ -150,6 +160,7 @@ export class PracticeList {
         jdId: jdText ? null : v.jdId || null,
         jdText: jdText || null,
         timeLimitSec: v.timeLimitSec,
+        questionCount: v.questionCount,
       })
       .subscribe({
         next: (s) => {
