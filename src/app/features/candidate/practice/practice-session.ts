@@ -35,6 +35,7 @@ import { AnswerStatusPipe, JobCategoryPipe, SessionStatusPipe } from '../../../s
 import { createCountdown } from '../../../shared/timing/countdown';
 import { Spinner } from '../../../shared/ui/spinner';
 import { AudioRecorder, RecordedAudio } from './audio-recorder';
+import { DeliveryMetricsPanel } from './delivery-metrics';
 
 const POLL_STATUS = ['GeneratingQuestions', 'Scoring', 'Completed'];
 const ANSWER_PENDING = ['Uploaded', 'Transcribing', 'Scoring'];
@@ -51,6 +52,7 @@ const ANSWER_PENDING = ['Uploaded', 'Transcribing', 'Scoring'];
     MatDividerModule,
     MatProgressBarModule,
     AudioRecorder,
+    DeliveryMetricsPanel,
     InterviewAvatar,
     RadarChart,
     Spinner,

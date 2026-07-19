@@ -26,6 +26,41 @@ export interface AnswerScore {
   levelMatched?: number | null;
 }
 
+/**
+ * F11 (FR06) — chỉ số CÁCH NÓI đo từ mốc thời gian Whisper (AIService `app/fluency.py`).
+ *
+ * ⚠ **Chỉ khai 6 field, và đó là cố ý.** DTO phía BE (`DeliveryMetricsDto`) có 9 field, nhưng DB
+ * chỉ lưu 6 cột. Đường đọc của màn kết quả (`GET /sessions/{id}` → `DeliveryMetricsMapper.Read()`)
+ * dựng lại DTO từ 6 cột đó và **không gán** `audioSec` / `speechSec` / `wordCount` /
+ * `fillerPer100Words` ⇒ về client chúng **luôn luôn là 0**. Chúng chỉ có giá trị thật ở đường
+ * prompt chấm (đo xong dùng ngay). Hiện chúng lên màn hình là bày một con số bịa với vẻ chính
+ * xác — đừng "bổ sung cho đủ 9 field".
+ *
+ * ⚠ Cả cụm `= null` nghĩa là **CHƯA ĐO ĐƯỢC** (answer có trước F11 · audio rỗng · đường degrade),
+ * KHÁC HẲN "đo ra 0". BE gộp null của TỪNG field về 0 (`?? 0`) và chỉ trả null khi cả 5 số cùng
+ * null ⇒ FE chỉ phân biệt được khuyết ở **mức cả cụm**.
+ */
+export interface DeliveryMetrics {
+  /**
+   * ÂM TIẾT/phút — tiếng Việt đơn âm tiết nên đây là nhịp nói, KHÔNG so trực tiếp được với
+   * "words per minute" của tiếng Anh. Tên field giữ nguyên `...Wpm` theo hợp đồng BE.
+   */
+  speechRateWpm: number;
+  longestPauseSec: number;
+  /** Số lần dừng vượt ngưỡng 0.7s (`PAUSE_THRESHOLD_SEC` của AIService). */
+  pauseCount: number;
+  /** 0–1. 0 = nói liên tục. */
+  silenceRatio: number;
+  /**
+   * ⚠ Mức **TỐI THIỂU**, không phải số thật: Whisper học trên transcript đã làm sạch nên thường
+   * nuốt bớt từ đệm. `0` KHÔNG phải lời khen — nó chỉ nghĩa là bộ nhận dạng không ghi lại từ
+   * đệm nào.
+   */
+  fillerCount: number;
+  /** Từ đệm nào × mấy lần. Rỗng là bình thường (xem cảnh báo ở `fillerCount`). */
+  fillerBreakdown: Record<string, number>;
+}
+
 export interface AnswerResponse {
   id: string;
   status: AnswerStatus;
@@ -38,6 +73,8 @@ export interface AnswerResponse {
    * Optional: buổi chấm TRƯỚC F13 (và ca AI không trả) không có → chỉ không hiện mục gợi ý.
    */
   sampleAnswer?: string | null;
+  /** F11 (FR06) — null = chưa đo được, KHÁC "đo ra 0". Xem `DeliveryMetrics`. */
+  deliveryMetrics?: DeliveryMetrics | null;
 }
 
 export interface QuestionResponse {
