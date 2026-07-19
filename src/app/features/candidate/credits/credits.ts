@@ -13,6 +13,7 @@ import {
   PackageResponse,
 } from '../../../core/models';
 import { OrderStatusPipe, VndPipe } from '../../../shared/pipes';
+import { CreditHistory } from '../../../shared/credit-history/credit-history';
 import { EmptyState } from '../../../shared/ui/empty-state';
 import { Spinner } from '../../../shared/ui/spinner';
 
@@ -26,6 +27,7 @@ import { Spinner } from '../../../shared/ui/spinner';
     MatListModule,
     VndPipe,
     OrderStatusPipe,
+    CreditHistory,
     Spinner,
     EmptyState,
   ],

@@ -1,5 +1,6 @@
 import {
   CreditAccountStatus,
+  CreditTransactionReason,
   InvoiceStatus,
   OrderKind,
   OrderStatus,
@@ -83,6 +84,29 @@ export interface OrderResponse {
   paidAt?: string | null;
   createdAt: string;
   checkoutUrl?: string | null;
+}
+
+/**
+ * 1 dòng sổ credit — GET /payment/me/credit-transactions (F19).
+ * `delta` có DẤU: dương = được cộng, âm = bị trừ. `reason` là SỐ (quy ước Payment).
+ * `grantedBy`/`note` chỉ có ở đường admin; ở endpoint /me chúng luôn null.
+ */
+export interface CreditTransactionResponse {
+  id: string;
+  delta: number;
+  reason: CreditTransactionReason;
+  orderId?: string | null;
+  sessionId?: string | null;
+  reversesTransactionId?: string | null;
+  createdAt: string;
+  grantedBy?: string | null;
+  note?: string | null;
+}
+
+/** 1 trang sổ credit + con trỏ trang kế (đọc từ header `X-Next-Cursor`; null = hết trang). */
+export interface CreditTransactionPage {
+  items: CreditTransactionResponse[];
+  nextCursor: string | null;
 }
 
 /** GET /payment/order/{id}/status — status là CHUỖI ở riêng endpoint này. */

@@ -18,6 +18,7 @@ import {
 import { OrderStatusPipe, PackageTypePipe, VndPipe } from '../../../shared/pipes';
 import { EmptyState } from '../../../shared/ui/empty-state';
 import { Spinner } from '../../../shared/ui/spinner';
+import { CreditHistory } from '../../../shared/credit-history/credit-history';
 
 /** Mua credit cho tổ chức (B2B). Chỉ OrgAdmin được mua (HrMember → 403). */
 @Component({
@@ -31,6 +32,7 @@ import { Spinner } from '../../../shared/ui/spinner';
     VndPipe,
     OrderStatusPipe,
     PackageTypePipe,
+    CreditHistory,
     Spinner,
     EmptyState,
   ],
@@ -107,6 +109,8 @@ import { Spinner } from '../../../shared/ui/spinner';
           </mat-list>
         </mat-card>
       }
+
+      <app-credit-history />
     }
   `,
   styles: [
