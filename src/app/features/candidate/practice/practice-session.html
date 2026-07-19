@@ -69,10 +69,10 @@
             mình thiếu ở đâu trước, rồi mới tới "đáng lẽ nên trả lời thế này". Mặc định thu gọn
             để không che mất bản ghi và điểm của chính họ.
           -->
-          @if (q.answer.sampleAnswer) {
+          @if (q.answer.sampleAnswer?.trim(); as sample) {
             <details class="sample">
               <summary><mat-icon>lightbulb</mat-icon> Gợi ý câu trả lời mẫu</summary>
-              <p class="sample-body">{{ q.answer.sampleAnswer }}</p>
+              <p class="sample-body">{{ sample }}</p>
               <p class="sample-note">
                 AI soạn theo rubric của buổi này — tham khảo cách triển khai ý, đừng học thuộc.
               </p>
@@ -156,16 +156,22 @@
           seriesLabel="Điểm của bạn"
           [thresholdLabel]="r.benchmark?.label ?? 'Mốc đối chiếu'"
         />
-        @if (r.benchmark; as b) {
-          <p class="bench-note">
-            <mat-icon>info</mat-icon>
-            Đường đứt nét: {{ b.label }}.
-            @if (b.source === 'PassThreshold') {
-              Chưa đủ dữ liệu người luyện cùng vị trí để so sánh, nên đây là ngưỡng của hệ thống —
-              không phải chuẩn ngành.
-            }
-          </p>
-        }
+      }
+      <!--
+        Chú thích nguồn nằm NGOÀI `showRadar()` có chủ đích: dưới 3 tiêu chí thì radar không vẽ,
+        nhưng các thanh ngang vẫn hiện mốc "Mốc X%" — để chú thích bên trong sẽ thành hiện một cái
+        mốc mà không nói nó là mốc gì. Mốc không kèm nguồn thì người xem tự suy ra một nguồn có uy
+        tín hơn sự thật.
+      -->
+      @if (r.benchmark; as b) {
+        <p class="bench-note">
+          <mat-icon>info</mat-icon>
+          {{ showRadar() ? 'Đường đứt nét' : 'Mốc trên mỗi thanh' }}: {{ b.label }}.
+          @if (b.source === 'PassThreshold') {
+            Chưa đủ dữ liệu người luyện cùng vị trí để so sánh, nên đây là ngưỡng của hệ thống —
+            không phải chuẩn ngành.
+          }
+        </p>
       }
 
       @for (c of r.criteriaScores; track c.criterionId) {

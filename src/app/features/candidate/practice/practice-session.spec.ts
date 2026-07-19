@@ -315,6 +315,20 @@ describe('PracticeSession — khoá ghi âm khi avatar đọc câu hỏi', () =>
       expect(el.querySelector('.sample')).toBeNull();
       expect(el.textContent).not.toContain('Gợi ý câu trả lời mẫu');
     });
+
+    /**
+     * Chuỗi toàn khoảng trắng lọt qua phép kiểm truthiness: khối `<details>` vẫn dựng, mở ra thấy
+     * tiêu đề + phần thân RỖNG + lời dặn "đừng học thuộc" — đúng cái khung rỗng mà ca `null` ở
+     * trên sinh ra để chặn. AI trả `"\n"` thay vì `null` là chuyện hoàn toàn có thể xảy ra.
+     */
+    it('sampleAnswer toàn khoảng trắng → cũng KHÔNG render khung rỗng', () => {
+      api.get.mockReturnValue(withSample('   \n  '));
+
+      const el = render().nativeElement;
+
+      expect(el.querySelector('.sample')).toBeNull();
+      expect(el.textContent).not.toContain('Gợi ý câu trả lời mẫu');
+    });
   });
 
   /**
@@ -433,6 +447,10 @@ describe('PracticeSession — khoá ghi âm khi avatar đọc câu hỏi', () =>
 
       expect(el.querySelector('app-radar-chart')).toBeNull();
       expect(el.querySelector('.bar .target')).not.toBeNull();
+      // Mốc vẫn hiện thì chú thích nguồn PHẢI hiện theo: một cái mốc không nói rõ là mốc gì sẽ
+      // được người xem tự gán cho một nguồn uy tín hơn sự thật.
+      expect(el.textContent).toContain('Ngưỡng đạt nội bộ (50%)');
+      expect(el.textContent).toContain('không phải chuẩn ngành');
     });
   });
 });
