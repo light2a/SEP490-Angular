@@ -43,6 +43,7 @@ export class AdminShell {
     { path: 'users', icon: 'group', label: 'Người dùng' },
     { path: 'campaigns', icon: 'work', label: 'Chiến dịch' },
     { path: 'orders', icon: 'receipt_long', label: 'Đơn hàng' },
+    { path: 'revenue', icon: 'payments', label: 'Doanh thu' },
     { path: 'packages', icon: 'inventory_2', label: 'Gói credit' },
     { path: 'billing', icon: 'event_repeat', label: 'Chốt kỳ postpaid' },
   ];
