@@ -94,4 +94,102 @@ describe('PracticeSession — khoá ghi âm khi avatar đọc câu hỏi', () =>
 
     expect(api.speech).not.toHaveBeenCalled();
   });
+
+  /**
+   * F1 — nhận xét của AI (`reasoning`) BE đã trả từ lâu nhưng trước đây chỉ view employer render;
+   * người luyện chỉ thấy con số trần, tức là mất hẳn phần dạy được của buổi luyện.
+   */
+  describe('hiện nhận xét AI dưới mỗi tiêu chí', () => {
+    const scoredSession = (
+      scores: unknown[],
+      needsReview = false,
+    ): SessionData =>
+      ({
+        ...session(),
+        status: 'Scored',
+        questions: [
+          {
+            id: 'q1',
+            orderNo: 1,
+            content: 'Giới thiệu bản thân?',
+            timeLimitSec: 120,
+            answer: {
+              id: 'a1',
+              status: 'Scored',
+              durationSec: 30,
+              transcript: 'Tôi là ứng viên.',
+              needsReview,
+              scores,
+            },
+          },
+        ],
+      }) as SessionData;
+
+    it('có reasoning → hiện chữ nhận xét kèm tên tiêu chí', () => {
+      api.get.mockReturnValue(
+        of(
+          scoredSession([
+            {
+              criterionId: 'c1',
+              criterionName: 'Giao tiếp',
+              score: 7,
+              reasoning: 'Trả lời rõ ràng nhưng thiếu ví dụ cụ thể.',
+              rubricVersion: 1,
+            },
+          ]),
+        ),
+      );
+
+      const text = render().nativeElement.textContent;
+
+      expect(text).toContain('Giao tiếp');
+      expect(text).toContain('Trả lời rõ ràng nhưng thiếu ví dụ cụ thể.');
+    });
+
+    it('reasoning null → hiện câu fallback, KHÔNG để trống trơ điểm', () => {
+      api.get.mockReturnValue(
+        of(
+          scoredSession([
+            { criterionId: 'c1', criterionName: 'Giao tiếp', score: 7, reasoning: null, rubricVersion: 1 },
+          ]),
+        ),
+      );
+
+      expect(render().nativeElement.textContent).toContain('AI không đưa ra lý do');
+    });
+
+    it('answer chưa có scores → không render khối điểm nào', () => {
+      api.get.mockReturnValue(of(scoredSession([])));
+
+      const el = render().nativeElement;
+
+      expect(el.querySelectorAll('.score-item').length).toBe(0);
+      expect(el.textContent).not.toContain('AI không đưa ra lý do');
+    });
+
+    it('needsReview → cảnh báo điểm cần xem lại', () => {
+      api.get.mockReturnValue(
+        of(
+          scoredSession(
+            [{ criterionId: 'c1', criterionName: 'Giao tiếp', score: 7, reasoning: 'ok', rubricVersion: 1 }],
+            true,
+          ),
+        ),
+      );
+
+      expect(render().nativeElement.textContent).toContain('cần xem lại');
+    });
+
+    it('needsReview=false → KHÔNG hiện cảnh báo', () => {
+      api.get.mockReturnValue(
+        of(
+          scoredSession([
+            { criterionId: 'c1', criterionName: 'Giao tiếp', score: 7, reasoning: 'ok', rubricVersion: 1 },
+          ]),
+        ),
+      );
+
+      expect(render().nativeElement.textContent).not.toContain('cần xem lại');
+    });
+  });
 });
