@@ -15,7 +15,7 @@ import {
   OrderStatus,
   PackageResponse,
 } from '../../../core/models';
-import { OrderStatusPipe, PackageTypePipe, VndPipe } from '../../../shared/pipes';
+import { OrderStatusPipe, PackageOfferPipe, PackageTypePipe, VndPipe } from '../../../shared/pipes';
 import { EmptyState } from '../../../shared/ui/empty-state';
 import { Spinner } from '../../../shared/ui/spinner';
 import { CreditHistory } from '../../../shared/credit-history/credit-history';
@@ -32,6 +32,7 @@ import { CreditHistory } from '../../../shared/credit-history/credit-history';
     VndPipe,
     OrderStatusPipe,
     PackageTypePipe,
+    PackageOfferPipe,
     CreditHistory,
     Spinner,
     EmptyState,
@@ -70,7 +71,7 @@ import { CreditHistory } from '../../../shared/credit-history/credit-history';
           <mat-card class="pkg">
             <h3>{{ p.name }}</h3>
             <div class="type">{{ p.type | packageType }}</div>
-            <div class="credits">{{ p.interviewCredits ?? '—' }} credit</div>
+            <div class="credits">{{ p | packageOffer }}</div>
             <div class="price">{{ p.priceVnd | vnd }}</div>
             @if (canBuy()) {
               <button
