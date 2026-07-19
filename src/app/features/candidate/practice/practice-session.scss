@@ -37,10 +37,54 @@
 .scores {
   margin-top: 8px;
 }
+.score-item {
+  padding: 6px 0;
+}
+.score-item + .score-item {
+  border-top: 1px solid var(--mat-sys-outline-variant);
+}
 .score-row {
   display: flex;
   justify-content: space-between;
   padding: 2px 0;
+  font-size: 14px;
+}
+.reasoning {
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: var(--mat-sys-on-surface-variant);
+  white-space: pre-wrap;
+}
+.no-reasoning {
+  margin: 6px 0 0;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--mat-sys-on-surface-variant);
+}
+.review-chip {
+  margin-bottom: 8px;
+}
+.timer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.timer mat-progress-bar {
+  flex: 1;
+}
+.remain {
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+  color: var(--mat-sys-on-surface-variant);
+  min-width: 72px;
+  text-align: right;
+}
+.locked {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--mat-sys-on-surface-variant);
   font-size: 14px;
 }
 .upload-btn {

@@ -43,18 +43,45 @@
           @if (q.answer.scores.length) {
             <mat-divider />
             <div class="scores">
+              <!-- E10/E11: AI tự nghi ngờ điểm của mình → nói thẳng, đừng để người luyện tin tuyệt đối. -->
+              @if (q.answer.needsReview) {
+                <mat-chip class="review-chip" highlighted>
+                  <mat-icon>flag</mat-icon> Điểm câu này cần xem lại
+                </mat-chip>
+              }
               @for (sc of q.answer.scores; track sc.criterionId) {
-                <div class="score-row">
-                  <span>{{ criterionName(sc) }}</span
-                  ><b>{{ sc.score | number: '1.0-1' }}</b>
+                <div class="score-item">
+                  <div class="score-row">
+                    <span>{{ criterionName(sc) }}</span
+                    ><b>{{ sc.score | number: '1.0-1' }}</b>
+                  </div>
+                  @if (sc.reasoning) {
+                    <p class="reasoning">{{ sc.reasoning }}</p>
+                  } @else {
+                    <p class="no-reasoning">AI không đưa ra lý do cho tiêu chí này.</p>
+                  }
                 </div>
               }
             </div>
           }
+        } @else if (isLocked(q.id)) {
+          <p class="locked">
+            <mat-icon>lock_clock</mat-icon> Hết giờ — câu này đã đóng.
+          </p>
         } @else if (!scored()) {
-          <!-- Khoá ghi âm khi avatar đang đọc: mic mở lúc loa kêu sẽ làm transcript lẫn câu hỏi. -->
+          <!-- F2: đồng hồ chỉ hiện ở câu đang tới lượt (trang hiện tất cả câu cùng lúc). -->
+          @if (q.id === currentQuestionId() && q.timeLimitSec > 0) {
+            <div class="timer">
+              <mat-progress-bar mode="determinate" [value]="countdown.timePct()" />
+              <span class="remain">Còn {{ countdown.remainingSec() }}s</span>
+            </div>
+          }
+          <!--
+            Khoá ghi âm khi avatar đang đọc (mic mở lúc loa kêu sẽ làm transcript lẫn câu hỏi) VÀ khi
+            chưa tới lượt câu này — đồng hồ đếm ngược chỉ có nghĩa nếu trả lời tuần tự.
+          -->
           <app-audio-recorder
-            [disabled]="avatarSpeaking()"
+            [disabled]="avatarSpeaking() || q.id !== currentQuestionId()"
             (recorded)="onRecorded(q.id, $event)"
             (startRequested)="onRecorderStart()"
             (recordingChange)="recordingActive.set($event)"
@@ -64,7 +91,9 @@
             color="primary"
             class="upload-btn"
             (click)="upload(q)"
-            [disabled]="uploadingQid() === q.id || !hasRecording(q.id)"
+            [disabled]="
+              uploadingQid() === q.id || !hasRecording(q.id) || q.id !== currentQuestionId()
+            "
           >
             <mat-icon>cloud_upload</mat-icon> Nộp câu này
           </button>
