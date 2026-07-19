@@ -98,6 +98,15 @@ export class RadarChart implements OnDestroy {
   readonly height = input(340);
   /** Nhãn của chuỗi dữ liệu chính (hiện ở tooltip). */
   readonly seriesLabel = input('Năng lực');
+  /**
+   * Nhãn của lớp mốc đối chiếu (đường đứt nét). Mặc định giữ chuỗi cũ để trang báo cáo lộ
+   * trình không đổi hành vi.
+   *
+   * ⚠ Nơi gọi PHẢI truyền đúng nguyên văn nhãn BE trả về. Mốc có thể là trung bình người dùng
+   * khác HOẶC ngưỡng đạt nội bộ — hai thứ độ tin cậy rất khác nhau. Tự đặt lại thành một cái
+   * tên nghe kêu hơn ("chuẩn ngành") là nói dối người xem về thứ họ đang so mình với.
+   */
+  readonly thresholdLabel = input('Ngưỡng cấp độ');
 
   /** Lazy-import hỏng → rơi về thanh ngang. */
   readonly failed = signal(false);
@@ -176,13 +185,14 @@ export class RadarChart implements OnDestroy {
     ];
 
     if (hasThreshold) {
+      const label = this.thresholdLabel();
       series.push({
-        name: 'Ngưỡng cấp độ',
+        name: label,
         type: 'radar',
         symbol: 'none',
         lineStyle: { width: 2, type: 'dashed', color: tertiary },
         itemStyle: { color: tertiary },
-        data: [{ value: pts.map((p) => p.threshold ?? 0), name: 'Ngưỡng cấp độ' }],
+        data: [{ value: pts.map((p) => p.threshold ?? 0), name: label }],
       });
     }
 
@@ -191,7 +201,11 @@ export class RadarChart implements OnDestroy {
       animation: false,
       tooltip: { trigger: 'item' },
       legend: hasThreshold
-        ? { bottom: 0, textStyle: { color: onSurface }, data: [this.seriesLabel(), 'Ngưỡng cấp độ'] }
+        ? {
+            bottom: 0,
+            textStyle: { color: onSurface },
+            data: [this.seriesLabel(), this.thresholdLabel()],
+          }
         : undefined,
       radar: {
         // max cố định 100: trục là PHẦN TRĂM, để ECharts tự co giãn thì hai lần xem cùng

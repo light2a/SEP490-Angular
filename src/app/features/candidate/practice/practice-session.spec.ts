@@ -316,4 +316,123 @@ describe('PracticeSession — khoá ghi âm khi avatar đọc câu hỏi', () =>
       expect(el.textContent).not.toContain('Gợi ý câu trả lời mẫu');
     });
   });
+
+  /**
+   * F14 (FR08) — radar 2 lớp trên màn kết quả: điểm của người luyện vs mốc đối chiếu.
+   *
+   * ⚠ Phần dễ hỏng ÂM THẦM và được khoá ở đây: mốc phải ghép theo `criterionId`, không theo thứ
+   * tự mảng (ghép nhầm trục thì biểu đồ vẫn vẽ đẹp, không ai biết), và nhãn phải là nguyên văn
+   * của BE — hệ thống không có dữ liệu chuẩn ngành, gọi nó là "chuẩn ngành" là nói dối người xem.
+   */
+  describe('radar đối chiếu (F14)', () => {
+    const crit = (criterionId: string, name: string, percentage: number) => ({
+      criterionId,
+      name,
+      averageScore: percentage / 20,
+      maxScore: 5,
+      percentage,
+      weight: 1,
+    });
+
+    const scoredWithBenchmark = (benchmark: unknown, criteriaScores = 3) =>
+      of({
+        ...session(),
+        status: 'Scored',
+        questions: [],
+        result: {
+          overallScore: 50,
+          answeredCount: 1,
+          totalQuestions: 1,
+          criteriaScores: [
+            crit('c1', 'Kiến thức', 30),
+            crit('c2', 'Giao tiếp', 40),
+            crit('c3', 'Tư duy', 50),
+          ].slice(0, criteriaScores),
+          needsImprovement: [],
+          benchmark,
+        },
+      } as unknown as SessionData);
+
+    it('ghép mốc theo criterionId, KHÔNG theo thứ tự mảng', () => {
+      // BE cố tình trả `criteria` ĐẢO thứ tự so với criteriaScores — ghép theo index sẽ gắn 90
+      // vào "Kiến thức" thay vì "Tư duy", và biểu đồ vẫn trông hoàn toàn bình thường.
+      api.get.mockReturnValue(
+        scoredWithBenchmark({
+          source: 'PeerAverage',
+          label: 'Trung bình người luyện cùng vị trí (n=7)',
+          sampleSize: 7,
+          criteria: [
+            { criterionId: 'c3', name: 'Tư duy', targetPercentage: 90 },
+            { criterionId: 'c2', name: 'Giao tiếp', targetPercentage: 70 },
+            { criterionId: 'c1', name: 'Kiến thức', targetPercentage: 50 },
+          ],
+        }),
+      );
+
+      const points = render().componentInstance.radarPoints();
+
+      expect(points.map((p) => p.name)).toEqual(['Kiến thức', 'Giao tiếp', 'Tư duy']);
+      expect(points.map((p) => p.threshold)).toEqual([50, 70, 90]);
+    });
+
+    it('nhãn lớp mốc lấy NGUYÊN VĂN từ BE', () => {
+      api.get.mockReturnValue(
+        scoredWithBenchmark({
+          source: 'PeerAverage',
+          label: 'Trung bình người luyện cùng vị trí (n=7)',
+          sampleSize: 7,
+          criteria: [{ criterionId: 'c1', name: 'Kiến thức', targetPercentage: 50 }],
+        }),
+      );
+
+      const el = render().nativeElement;
+
+      expect(el.textContent).toContain('Trung bình người luyện cùng vị trí (n=7)');
+      expect(el.textContent).not.toContain('chuẩn ngành');
+    });
+
+    it('nguồn PassThreshold → nói rõ đây là ngưỡng hệ thống, không phải chuẩn ngành', () => {
+      api.get.mockReturnValue(
+        scoredWithBenchmark({
+          source: 'PassThreshold',
+          label: 'Ngưỡng đạt nội bộ (50%)',
+          sampleSize: 0,
+          criteria: [{ criterionId: 'c1', name: 'Kiến thức', targetPercentage: 50 }],
+        }),
+      );
+
+      const text = render().nativeElement.textContent;
+
+      expect(text).toContain('Ngưỡng đạt nội bộ (50%)');
+      expect(text).toContain('không phải chuẩn ngành');
+    });
+
+    it('không có benchmark → radar chỉ 1 lớp (threshold null), không vỡ', () => {
+      api.get.mockReturnValue(scoredWithBenchmark(null));
+
+      const points = render().componentInstance.radarPoints();
+
+      expect(points.length).toBe(3);
+      expect(points.every((p) => p.threshold === null)).toBe(true);
+    });
+
+    it('dưới 3 tiêu chí → KHÔNG vẽ radar (hình thoi vô nghĩa), thanh ngang vẫn có mốc', () => {
+      api.get.mockReturnValue(
+        scoredWithBenchmark(
+          {
+            source: 'PassThreshold',
+            label: 'Ngưỡng đạt nội bộ (50%)',
+            sampleSize: 0,
+            criteria: [{ criterionId: 'c1', name: 'Kiến thức', targetPercentage: 50 }],
+          },
+          1,
+        ),
+      );
+
+      const el = render().nativeElement;
+
+      expect(el.querySelector('app-radar-chart')).toBeNull();
+      expect(el.querySelector('.bar .target')).not.toBeNull();
+    });
+  });
 });

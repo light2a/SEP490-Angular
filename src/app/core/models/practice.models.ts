@@ -80,6 +80,30 @@ export interface SessionResult {
   needsImprovement: string[];
   overallComment?: string | null;
   cvVsAnswer?: CvVsAnswerReport | null;
+  /** F14 — mốc đối chiếu (lớp 2 của radar); null khi BE tắt hoặc không dựng được. */
+  benchmark?: SessionBenchmark | null;
+}
+
+/** F14 — mốc của 1 tiêu chí, thang % để vẽ chung trục với `CriterionScore.percentage`. */
+export interface CriterionBenchmark {
+  criterionId: string;
+  name: string;
+  targetPercentage: number;
+}
+
+/**
+ * F14 (FR08) — mốc đối chiếu.
+ *
+ * ⚠ `label` là phần quan trọng nhất, KHÔNG phải `criteria`. Hệ thống không có dữ liệu chuẩn
+ * ngành; mốc chỉ đến từ trung bình người dùng khác trên chính hệ thống (`PeerAverage`) hoặc
+ * ngưỡng đạt nội bộ (`PassThreshold`). Hiển thị `label` đúng nguyên văn BE trả về — đừng đặt
+ * lại tên cho nó.
+ */
+export interface SessionBenchmark {
+  source: 'PeerAverage' | 'PassThreshold';
+  label: string;
+  sampleSize: number;
+  criteria: CriterionBenchmark[];
 }
 
 export interface PracticeSession {
