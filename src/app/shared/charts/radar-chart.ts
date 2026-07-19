@@ -38,6 +38,18 @@ function token(name: string, fallback: string): string {
   return v || fallback;
 }
 
+/**
+ * Giá trị lớp mốc gửi cho ECharts. Tách hàm thuần để khoá được bằng test: nằm trong `option()` thì
+ * nó là chi tiết private, mà đây lại đúng là chỗ sai sẽ KHÔNG ai thấy — biểu đồ vẫn vẽ đẹp, không
+ * lỗi nào, chỉ có kết luận người xem rút ra là sai.
+ *
+ * `'-'` là quy ước "khuyết" của ECharts (bỏ trống trục đó), khác hẳn `0`: mốc 0 nghĩa là mốc chạm
+ * đáy ⇒ nhìn như người dùng vượt mốc ở đúng tiêu chí vốn KHÔNG có mốc nào để so.
+ */
+export function thresholdSeriesValues(pts: RadarPoint[]): (number | string)[] {
+  return pts.map((p) => p.threshold ?? '-');
+}
+
 @Component({
   selector: 'app-radar-chart',
   imports: [DecimalPipe],
@@ -192,7 +204,7 @@ export class RadarChart implements OnDestroy {
         symbol: 'none',
         lineStyle: { width: 2, type: 'dashed', color: tertiary },
         itemStyle: { color: tertiary },
-        data: [{ value: pts.map((p) => p.threshold ?? 0), name: label }],
+        data: [{ value: thresholdSeriesValues(pts), name: label }],
       });
     }
 

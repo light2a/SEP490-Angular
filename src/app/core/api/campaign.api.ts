@@ -3,8 +3,11 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
+  ApiKeyListItem,
   CampaignResponse,
   CampaignResultsResponse,
+  CreateApiKeyRequest,
+  CreateApiKeyResponse,
   CandidateDetailResponse,
   CandidateListItem,
   CreateCampaignRequest,
@@ -259,5 +262,28 @@ export class CampaignApi {
     body: InviteShortlistRequest,
   ): Observable<InviteShortlistResponse> {
     return this.http.post<InviteShortlistResponse>(`${this.base}/${id}/candidates/invite`, body);
+  }
+
+  // ── API key cho bên thứ ba / ATS (F17) — JWT, CHỈ OrgAdmin ──────────────────
+  /**
+   * POST /campaign/api-keys → 201. **Response duy nhất mang key thô** (`CreateApiKeyResponse.key`);
+   * DB chỉ giữ hash nên không có đường đọc lại. 400 = `expiresInDays` ngoài dải cho phép hoặc
+   * vượt trần số key active của org.
+   */
+  createApiKey(body: CreateApiKeyRequest): Observable<CreateApiKeyResponse> {
+    return this.http.post<CreateApiKeyResponse>(`${this.base}/api-keys`, body);
+  }
+
+  /** GET /campaign/api-keys — key của org. Trả `ApiKeyListItem` (KHÔNG có key thô/hash). */
+  listApiKeys(): Observable<ApiKeyListItem[]> {
+    return this.http.get<ApiKeyListItem[]>(`${this.base}/api-keys`);
+  }
+
+  /**
+   * DELETE /campaign/api-keys/{id} — thu hồi (soft), **idempotent** → 204.
+   * Key của org khác → 404 (backend cố ý không xác nhận hộ là key đó tồn tại).
+   */
+  revokeApiKey(id: string): Observable<unknown> {
+    return this.http.delete(`${this.base}/api-keys/${id}`);
   }
 }

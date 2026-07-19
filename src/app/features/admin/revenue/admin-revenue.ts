@@ -70,12 +70,26 @@ import { Spinner } from '../../../shared/ui/spinner';
           </form>
           <p class="hint">
             Khoảng thời gian là nửa mở: tính từ "Từ ngày" đến trước "Đến ngày". Bỏ trống cả hai =
-            30 ngày gần nhất.
+            30 ngày gần nhất. <strong>Mốc ngày tính theo giờ UTC</strong>, không theo giờ máy bạn —
+            xem "Kỳ đã tính" bên dưới để biết chính xác khoảng nào được cộng.
           </p>
 
           @if (loading()) {
             <app-spinner [diameter]="32" message="Đang tính doanh thu..." />
           } @else if (report(); as r) {
+            <!--
+              Kỳ THẬT do backend chốt, hiện tường minh kèm cả giờ và múi giờ.
+              Backend vẫn echo from/to trong response nhưng trước đây FE không render — đó chính
+              là thứ khiến độ lệch múi giờ trở nên VÔ HÌNH: admin +07:00 gõ "01/07" rồi đọc một
+              con số không khớp sổ mà không có cách nào biết kỳ thực tế là khoảng nào.
+            -->
+            <p class="period" data-testid="resolved-period">
+              <mat-icon inline>schedule</mat-icon>
+              Kỳ đã tính: <strong>{{ r.from | date: 'dd/MM/yyyy HH:mm' : 'UTC' }}</strong> →
+              <strong>{{ r.to | date: 'dd/MM/yyyy HH:mm' : 'UTC' }}</strong> (UTC, không tính mốc
+              cuối).
+            </p>
+
             <div class="kpis">
               <div class="kpi">
                 <span class="k-label">Doanh thu gộp</span>
@@ -173,9 +187,13 @@ import { Spinner } from '../../../shared/ui/spinner';
         width: 140px;
       }
       .hint,
-      .note {
+      .note,
+      .period {
         color: var(--mat-sys-on-surface-variant);
         font-size: 13px;
+      }
+      .period {
+        margin: 4px 0 12px;
       }
       .note {
         margin: 12px 0 4px;
@@ -255,8 +273,20 @@ export class AdminRevenue implements OnInit {
     return this.kindLabels[k] ?? String(k);
   }
 
+  /**
+   * Ô ngày trả 'yyyy-MM-dd' và được gửi NGUYÊN VĂN — backend coi timestamp không múi giờ là UTC,
+   * nên admin ở +07:00 chọn "01/07" sẽ nhận kỳ lệch 7 giờ so với ngày làm việc của họ.
+   *
+   * CỐ Ý không tự chuyển sang mốc theo giờ địa phương ở FE, vì làm vậy chỉ đúng một nửa và tạo ra
+   * một cái sai tinh vi hơn: việc GOM NHÓM (`groupBy=day|month`) diễn ra phía server theo ngày UTC.
+   * Nắn biên ngoài về ngày địa phương trong khi các bucket vẫn cắt theo ngày UTC sẽ đẻ ra bucket
+   * đầu/cuối bị hụt, mà bảng "theo kỳ" thì trông vẫn bình thường.
+   *
+   * Chuyện này còn đổi CON SỐ DOANH THU báo cáo ⇒ là quyết định nghiệp vụ (kỳ kế toán tính theo
+   * giờ Việt Nam hay giờ UTC?), phải BE và team chốt cùng nhau, không phải việc FE lặng lẽ đổi.
+   * Trong lúc chờ: hiện rõ kỳ thật mà backend đã tính (khối `.period`) để độ lệch không còn vô hình.
+   */
   load(): void {
-    // Ô ngày trả 'yyyy-MM-dd'; để nguyên cho backend (nó coi timestamp không múi giờ là UTC).
     if (this.from && this.to && this.from >= this.to) {
       this.notify.warn('"Từ ngày" phải nhỏ hơn "Đến ngày".');
       return;
