@@ -64,6 +64,20 @@
               }
             </div>
           }
+          <!--
+            F13 — gợi ý câu trả lời mẫu. Đặt SAU điểm + nhận xét có chủ đích: người luyện đọc
+            mình thiếu ở đâu trước, rồi mới tới "đáng lẽ nên trả lời thế này". Mặc định thu gọn
+            để không che mất bản ghi và điểm của chính họ.
+          -->
+          @if (q.answer.sampleAnswer) {
+            <details class="sample">
+              <summary><mat-icon>lightbulb</mat-icon> Gợi ý câu trả lời mẫu</summary>
+              <p class="sample-body">{{ q.answer.sampleAnswer }}</p>
+              <p class="sample-note">
+                AI soạn theo rubric của buổi này — tham khảo cách triển khai ý, đừng học thuộc.
+              </p>
+            </details>
+          }
         } @else if (isLocked(q.id)) {
           <p class="locked">
             <mat-icon>lock_clock</mat-icon> Hết giờ — câu này đã đóng.
@@ -130,13 +144,43 @@
       }
 
       <h3>Điểm theo tiêu chí</h3>
+
+      <!--
+        F14 — radar 2 lớp: điểm của bạn vs mốc đối chiếu. Nhãn lớp mốc lấy NGUYÊN VĂN từ BE
+        (`benchmark.label`) vì nó có thể là trung bình người dùng khác HOẶC ngưỡng đạt nội bộ —
+        hai thứ tin cậy khác nhau, đặt lại tên là nói dối người xem.
+      -->
+      @if (showRadar()) {
+        <app-radar-chart
+          [points]="radarPoints()"
+          seriesLabel="Điểm của bạn"
+          [thresholdLabel]="r.benchmark?.label ?? 'Mốc đối chiếu'"
+        />
+        @if (r.benchmark; as b) {
+          <p class="bench-note">
+            <mat-icon>info</mat-icon>
+            Đường đứt nét: {{ b.label }}.
+            @if (b.source === 'PassThreshold') {
+              Chưa đủ dữ liệu người luyện cùng vị trí để so sánh, nên đây là ngưỡng của hệ thống —
+              không phải chuẩn ngành.
+            }
+          </p>
+        }
+      }
+
       @for (c of r.criteriaScores; track c.criterionId) {
         <div class="crit">
           <div class="crit-top">
             <span>{{ c.name }}</span
             ><b>{{ c.averageScore | number: '1.0-1' }}/{{ c.maxScore }}</b>
           </div>
-          <div class="bar"><div class="fill" [style.width.%]="c.percentage"></div></div>
+          <div class="bar">
+            <div class="fill" [style.width.%]="c.percentage"></div>
+            <!-- Vạch mốc trên thanh: ca ít hơn 3 tiêu chí (không vẽ radar) vẫn thấy được mốc. -->
+            @if (targetOf(c.criterionId); as target) {
+              <div class="target" [style.left.%]="target" [title]="'Mốc ' + target + '%'"></div>
+            }
+          </div>
         </div>
       }
     </mat-card>
