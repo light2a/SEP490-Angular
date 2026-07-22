@@ -13,18 +13,24 @@ import { AdminApi } from '../../../core/api/admin.api';
 import { extractErrorMessage } from '../../../core/api/http-utils';
 import { NotifyService } from '../../../core/notify.service';
 import {
+  AdminOrderListItem,
   ORDER_STATUS_LABEL,
   OrderKind,
-  OrderResponse,
   OrderStatus,
   OwnerType,
   RefundConflictBody,
+  RefundSettlementFilter,
 } from '../../../core/models';
 import {
   RefundOrderDialog,
   RefundOrderDialogData,
   RefundOrderDialogResult,
 } from './refund-order-dialog';
+import {
+  SettleRefundDialog,
+  SettleRefundDialogData,
+  SettleRefundDialogResult,
+} from './settle-refund-dialog';
 import { EmptyState } from '../../../shared/ui/empty-state';
 import { Spinner } from '../../../shared/ui/spinner';
 import { VndPipe } from '../../../shared/pipes';
@@ -62,6 +68,19 @@ import { VndPipe } from '../../../shared/pipes';
                 }
               </mat-select>
             </mat-form-field>
+
+            <mat-form-field appearance="outline" class="f-status">
+              <mat-label>Hoàn tiền</mat-label>
+              <mat-select
+                [(ngModel)]="refundSettlement"
+                name="refundSettlement"
+                (selectionChange)="load()"
+              >
+                <mat-option [value]="null">Tất cả</mat-option>
+                <mat-option [value]="RefundSettlementFilter.Pending">Chờ chuyển tiền</mat-option>
+                <mat-option [value]="RefundSettlementFilter.Settled">Đã chuyển tiền</mat-option>
+              </mat-select>
+            </mat-form-field>
           </form>
 
           @if (loading()) {
@@ -93,6 +112,20 @@ import { VndPipe } from '../../../shared/pipes';
                 <th mat-header-cell *matHeaderCellDef>Trạng thái</th>
                 <td mat-cell *matCellDef="let o">
                   <span class="chip" [class]="statusClass(o.status)">{{ statusLabel(o.status) }}</span>
+                  @if (o.status === OrderStatus.Refunded) {
+                    @if (o.refundSettledAt) {
+                      <span
+                        class="sub-chip settled"
+                        [title]="o.refundGatewayRef ? 'Mã: ' + o.refundGatewayRef : 'Đã chuyển tiền'"
+                      >
+                        <mat-icon inline>check_circle</mat-icon> đã chuyển
+                      </span>
+                    } @else {
+                      <span class="sub-chip pending" title="Chưa chuyển tiền thật cho khách">
+                        <mat-icon inline>schedule</mat-icon> chờ chuyển tiền
+                      </span>
+                    }
+                  }
                 </td>
               </ng-container>
               <ng-container matColumnDef="paidAt">
@@ -115,6 +148,17 @@ import { VndPipe } from '../../../shared/pipes';
                       (click)="refund(o)"
                     >
                       <mat-icon>currency_exchange</mat-icon>
+                    </button>
+                  }
+                  @if (canSettle(o)) {
+                    <button
+                      mat-icon-button
+                      title="Xác nhận đã chuyển tiền cho khách"
+                      aria-label="Xác nhận đã chuyển tiền cho khách"
+                      [disabled]="busy() === o.id"
+                      (click)="settle(o)"
+                    >
+                      <mat-icon>price_check</mat-icon>
                     </button>
                   }
                 </td>
@@ -171,6 +215,29 @@ import { VndPipe } from '../../../shared/pipes';
         background: var(--mat-sys-error-container);
         color: var(--mat-sys-on-error-container);
       }
+      .sub-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        margin-left: 6px;
+        padding: 1px 8px;
+        border-radius: 9px;
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .sub-chip mat-icon {
+        font-size: 13px;
+        width: 13px;
+        height: 13px;
+      }
+      .sub-chip.pending {
+        background: var(--mat-sys-error-container);
+        color: var(--mat-sys-on-error-container);
+      }
+      .sub-chip.settled {
+        background: var(--mat-sys-primary-container);
+        color: var(--mat-sys-on-primary-container);
+      }
     `,
   ],
 })
@@ -178,6 +245,10 @@ export class AdminOrders implements OnInit {
   private api = inject(AdminApi);
   private notify = inject(NotifyService);
   private dialog = inject(MatDialog);
+
+  // Lộ enum cho template (Angular không truy cập enum trực tiếp trong binding).
+  protected readonly OrderStatus = OrderStatus;
+  protected readonly RefundSettlementFilter = RefundSettlementFilter;
 
   readonly cols = [
     'payosOrderCode',
@@ -205,12 +276,13 @@ export class AdminOrders implements OnInit {
     [OrderKind.SubscriptionRenewal]: 'Gia hạn gói',
   };
 
-  readonly items = signal<OrderResponse[]>([]);
+  readonly items = signal<AdminOrderListItem[]>([]);
   readonly loading = signal(true);
-  /** Id đơn đang có request hoàn — khoá nút đúng dòng đó. */
+  /** Id đơn đang có request hoàn/xác nhận — khoá nút đúng dòng đó. */
   readonly busy = signal<string | null>(null);
 
   status: OrderStatus | null = null;
+  refundSettlement: RefundSettlementFilter | null = null;
 
   ngOnInit(): void {
     this.load();
@@ -237,8 +309,13 @@ export class AdminOrders implements OnInit {
   }
 
   /** Chỉ đơn mua credit đã thanh toán mới hoàn được (kind khác → 400, chưa Paid → 409). */
-  canRefund(o: OrderResponse): boolean {
+  canRefund(o: AdminOrderListItem): boolean {
     return o.status === OrderStatus.Paid && o.kind === OrderKind.CreditPack;
+  }
+
+  /** Đơn đã hoàn nhưng CHƯA chuyển tiền → hiện nút "xác nhận đã chuyển". */
+  canSettle(o: AdminOrderListItem): boolean {
+    return o.status === OrderStatus.Refunded && !o.refundSettledAt;
   }
 
   /**
@@ -247,7 +324,7 @@ export class AdminOrders implements OnInit {
    * thoại với con số cụ thể để admin xác nhận lần hai (`allowPartialClawback`), thay vì nuốt
    * thành "lỗi không xác định".
    */
-  refund(o: OrderResponse, partial: RefundOrderDialogData['partial'] = null): void {
+  refund(o: AdminOrderListItem, partial: RefundOrderDialogData['partial'] = null): void {
     this.dialog
       .open(RefundOrderDialog, {
         data: {
@@ -291,17 +368,50 @@ export class AdminOrders implements OnInit {
       });
   }
 
+  /**
+   * Xác nhận đã chuyển tiền hoàn thật cho khách (F18). Bước tay tách khỏi hoàn: đơn đã ở trạng thái
+   * "chờ chuyển tiền", admin chuyển tiền xong rồi đóng dấu ở đây. KHÔNG đụng credit/status.
+   */
+  settle(o: AdminOrderListItem): void {
+    this.dialog
+      .open(SettleRefundDialog, {
+        data: { orderCode: o.payosOrderCode, amountVnd: o.amountVnd } satisfies SettleRefundDialogData,
+        width: '480px',
+      })
+      .afterClosed()
+      .subscribe((res?: SettleRefundDialogResult) => {
+        if (!res) return;
+        this.busy.set(o.id);
+        this.api.settleRefund(o.id, { gatewayRef: res.gatewayRef }).subscribe({
+          next: () => {
+            this.busy.set(null);
+            this.notify.success('Đã ghi nhận chuyển tiền hoàn cho khách.');
+            this.load();
+          },
+          error: (e: HttpErrorResponse) => {
+            this.busy.set(null);
+            this.notify.error(extractErrorMessage(e) ?? 'Không xác nhận được.');
+          },
+        });
+      });
+  }
+
   load(): void {
     this.loading.set(true);
-    this.api.orders({ status: this.status ?? undefined }).subscribe({
-      next: (list) => {
-        this.items.set(list);
-        this.loading.set(false);
-      },
-      error: (e: HttpErrorResponse) => {
-        this.loading.set(false);
-        this.notify.error(extractErrorMessage(e) ?? 'Không tải được danh sách đơn hàng.');
-      },
-    });
+    this.api
+      .orders({
+        status: this.status ?? undefined,
+        refundSettlement: this.refundSettlement ?? undefined,
+      })
+      .subscribe({
+        next: (list) => {
+          this.items.set(list);
+          this.loading.set(false);
+        },
+        error: (e: HttpErrorResponse) => {
+          this.loading.set(false);
+          this.notify.error(extractErrorMessage(e) ?? 'Không tải được danh sách đơn hàng.');
+        },
+      });
   }
 }

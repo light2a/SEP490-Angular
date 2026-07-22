@@ -5,13 +5,19 @@ import { MatDialog } from '@angular/material/dialog';
 import { of } from 'rxjs';
 import { AdminOrders } from './admin-orders';
 import { NotifyService } from '../../../core/notify.service';
-import { OrderKind, OrderResponse, OrderStatus, OwnerType } from '../../../core/models';
+import {
+  AdminOrderListItem,
+  OrderKind,
+  OrderStatus,
+  OwnerType,
+  RefundSettlementFilter,
+} from '../../../core/models';
 import { environment } from '../../../../environments/environment';
 import { RefundOrderDialogData } from './refund-order-dialog';
 
 const ORDERS = `${environment.apiBase}/payment/admin/orders`;
 
-function order(partial: Partial<OrderResponse> = {}): OrderResponse {
+function order(partial: Partial<AdminOrderListItem> = {}): AdminOrderListItem {
   return {
     id: 'o1',
     ownerType: OwnerType.User,
@@ -34,7 +40,7 @@ describe('AdminOrders — hoàn tiền đơn (F18)', () => {
   let dialogResults: unknown[];
   let dialogData: RefundOrderDialogData[];
 
-  function setup(orders: OrderResponse[] = [order()]) {
+  function setup(orders: AdminOrderListItem[] = [order()]) {
     notify = { success: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn() };
     dialogData = [];
     TestBed.configureTestingModule({
@@ -72,8 +78,10 @@ describe('AdminOrders — hoàn tiền đơn (F18)', () => {
     expect(cmp.canRefund(order({ kind: OrderKind.InvoiceSettlement }))).toBe(false);
   });
 
-  it('POST refund kèm lý do + mã tham chiếu, lần đầu KHÔNG bật thu hồi một phần', () => {
-    dialogResults = [{ reason: 'mua nhầm', gatewayRef: 'PAYOS-1', allowPartialClawback: false }];
+  it('POST refund kèm lý do + mã + settledNow (từ hộp thoại)', () => {
+    dialogResults = [
+      { reason: 'mua nhầm', gatewayRef: 'PAYOS-1', allowPartialClawback: false, settledNow: true },
+    ];
     const fixture = setup();
     const cmp = fixture.componentInstance;
 
@@ -85,6 +93,7 @@ describe('AdminOrders — hoàn tiền đơn (F18)', () => {
       reason: 'mua nhầm',
       gatewayRef: 'PAYOS-1',
       allowPartialClawback: false,
+      settledNow: true,
     });
     req.flush({
       orderId: 'o1',
@@ -94,6 +103,7 @@ describe('AdminOrders — hoàn tiền đơn (F18)', () => {
       clawbackCeiling: 10,
       refundTransactionId: 'rt1',
       refundedAt: '2026-07-19T02:00:00Z',
+      refundSettledAt: '2026-07-19T02:00:00Z',
     });
     httpMock.expectOne((r) => r.url === ORDERS).flush([order({ status: OrderStatus.Refunded })]);
 
@@ -106,8 +116,8 @@ describe('AdminOrders — hoàn tiền đơn (F18)', () => {
   // là giấu mất đúng thông tin admin cần để quyết định.
   it('409 kèm số → hiện con số cho admin và hỏi lại, KHÔNG báo lỗi chung chung', () => {
     dialogResults = [
-      { reason: 'khách đòi hoàn', gatewayRef: null, allowPartialClawback: false },
-      { reason: 'khách đòi hoàn', gatewayRef: null, allowPartialClawback: true },
+      { reason: 'khách đòi hoàn', gatewayRef: null, allowPartialClawback: false, settledNow: false },
+      { reason: 'khách đòi hoàn', gatewayRef: null, allowPartialClawback: true, settledNow: false },
     ];
     const fixture = setup();
     const cmp = fixture.componentInstance;
@@ -149,7 +159,7 @@ describe('AdminOrders — hoàn tiền đơn (F18)', () => {
 
   it('admin huỷ ở lần xác nhận thứ hai → KHÔNG gọi lại API', () => {
     dialogResults = [
-      { reason: 'x1x', gatewayRef: null, allowPartialClawback: false },
+      { reason: 'x1x', gatewayRef: null, allowPartialClawback: false, settledNow: false },
       undefined,
     ];
     const fixture = setup();
@@ -170,7 +180,7 @@ describe('AdminOrders — hoàn tiền đơn (F18)', () => {
   // 409 còn dùng cho ca khác (đơn chưa Paid, ví vừa đổi) và KHÔNG kèm số — không được
   // mở lại hộp thoại "thu hồi một phần" cho những ca đó.
   it('409 KHÔNG kèm số → báo lỗi bình thường, không hỏi thu hồi một phần', () => {
-    dialogResults = [{ reason: 'x1x', gatewayRef: null, allowPartialClawback: false }];
+    dialogResults = [{ reason: 'x1x', gatewayRef: null, allowPartialClawback: false, settledNow: false }];
     const fixture = setup();
     const cmp = fixture.componentInstance;
 
@@ -191,5 +201,88 @@ describe('AdminOrders — hoàn tiền đơn (F18)', () => {
     const fixture = setup();
     fixture.componentInstance.refund(fixture.componentInstance.items()[0]);
     httpMock.expectNone(`${ORDERS}/o1/refund`);
+  });
+});
+
+describe('AdminOrders — xác nhận đã chuyển tiền hoàn (settle)', () => {
+  let httpMock: HttpTestingController;
+  let notify: Record<string, ReturnType<typeof vi.fn>>;
+  let dialogResults: unknown[];
+
+  function setup(orders: AdminOrderListItem[]) {
+    notify = { success: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn() };
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: NotifyService, useValue: notify },
+        {
+          provide: MatDialog,
+          useValue: { open: () => ({ afterClosed: () => of(dialogResults.shift()) }) },
+        },
+      ],
+    });
+    httpMock = TestBed.inject(HttpTestingController);
+    const fixture = TestBed.createComponent(AdminOrders);
+    fixture.detectChanges();
+    httpMock.expectOne((r) => r.url === ORDERS).flush(orders);
+    return fixture;
+  }
+
+  afterEach(() => httpMock.verify());
+
+  it('canSettle: chỉ đơn đã hoàn mà CHƯA chuyển tiền', () => {
+    dialogResults = [];
+    const cmp = setup([order()]).componentInstance;
+    expect(cmp.canSettle(order({ status: OrderStatus.Refunded, refundSettledAt: null }))).toBe(true);
+    expect(
+      cmp.canSettle(order({ status: OrderStatus.Refunded, refundSettledAt: '2026-07-19T02:00:00Z' })),
+    ).toBe(false);
+    expect(cmp.canSettle(order({ status: OrderStatus.Paid }))).toBe(false);
+  });
+
+  it('settle POST /refund/settle kèm mã, rồi tải lại', () => {
+    dialogResults = [{ gatewayRef: 'PAYOS-SETTLE-1' }];
+    const pending = order({ id: 'o9', status: OrderStatus.Refunded, refundSettledAt: null });
+    const cmp = setup([pending]).componentInstance;
+
+    cmp.settle(cmp.items()[0]);
+
+    const req = httpMock.expectOne(`${ORDERS}/o9/refund/settle`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ gatewayRef: 'PAYOS-SETTLE-1' });
+    req.flush({
+      orderId: 'o9',
+      refundedAt: '2026-07-19T01:00:00Z',
+      refundSettledAt: '2026-07-19T03:00:00Z',
+      refundGatewayRef: 'PAYOS-SETTLE-1',
+    });
+    // load() lại
+    httpMock
+      .expectOne((r) => r.url === ORDERS)
+      .flush([order({ id: 'o9', status: OrderStatus.Refunded, refundSettledAt: '2026-07-19T03:00:00Z' })]);
+
+    expect(notify['success']).toHaveBeenCalled();
+    expect(cmp.busy()).toBeNull();
+  });
+
+  it('huỷ hộp thoại settle → KHÔNG gọi API', () => {
+    dialogResults = [undefined];
+    const pending = order({ id: 'o9', status: OrderStatus.Refunded, refundSettledAt: null });
+    const cmp = setup([pending]).componentInstance;
+    cmp.settle(cmp.items()[0]);
+    httpMock.expectNone(`${ORDERS}/o9/refund/settle`);
+  });
+
+  it('lọc "chờ chuyển tiền" → gửi query refundSettlement=1', () => {
+    dialogResults = [];
+    const cmp = setup([order()]).componentInstance;
+
+    cmp.refundSettlement = RefundSettlementFilter.Pending;
+    cmp.load();
+
+    const req = httpMock.expectOne((r) => r.url === ORDERS && r.params.get('refundSettlement') === '1');
+    req.flush([]);
+    expect(req.request.params.get('refundSettlement')).toBe('1');
   });
 });

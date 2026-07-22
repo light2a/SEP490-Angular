@@ -149,6 +149,34 @@ export interface RevenueReportResponse {
   buckets: RevenueBucket[];
 }
 
+// ── Danh sách đơn cho MÀN ADMIN (kèm field refund admin-only) ───────────────
+export interface AdminOrderListItem {
+  id: string;
+  ownerType: OwnerType;
+  ownerId: string;
+  kind: OrderKind;
+  packageId?: string | null;
+  invoiceId?: string | null;
+  status: OrderStatus;
+  amountVnd: number;
+  payosOrderCode: number;
+  expiredAt: string;
+  paidAt?: string | null;
+  createdAt: string;
+  // Chỉ có giá trị với đơn Refunded.
+  refundedAt?: string | null;
+  refundReason?: string | null;
+  refundGatewayRef?: string | null;
+  /** NULL trên đơn đã Refunded = "chờ chuyển tiền cho khách"; có giá trị = "đã chuyển". */
+  refundSettledAt?: string | null;
+}
+
+/** Lọc đơn hoàn theo trạng thái chuyển tiền (số — quy ước enum Payment). */
+export enum RefundSettlementFilter {
+  Pending = 1,
+  Settled = 2,
+}
+
 // ── Hoàn tiền đơn (F18, Admin) ──────────────────────────────────────────────
 export interface RefundOrderRequest {
   /** Bắt buộc, 3..500 ký tự. */
@@ -157,6 +185,8 @@ export interface RefundOrderRequest {
   gatewayRef?: string | null;
   /** true = chấp nhận thu hồi ÍT hơn số credit đã bán (ví đã tiêu bớt). */
   allowPartialClawback?: boolean;
+  /** true = admin đã chuyển tiền thật cho khách ngay lúc hoàn → đánh dấu "đã chuyển" luôn. */
+  settledNow?: boolean;
 }
 
 export interface RefundOrderResponse {
@@ -167,6 +197,21 @@ export interface RefundOrderResponse {
   clawbackCeiling: number;
   refundTransactionId?: string | null;
   refundedAt?: string | null;
+  /** NULL = đã hoàn nhưng CHƯA chuyển tiền cho khách. */
+  refundSettledAt?: string | null;
+}
+
+// ── Xác nhận đã chuyển tiền hoàn (F18, Admin) ───────────────────────────────
+export interface SettleRefundRequest {
+  /** Mã giao dịch hoàn của PayOS (nếu có). Bỏ trống nếu chuyển khoản tay không mã. */
+  gatewayRef?: string | null;
+}
+
+export interface SettleRefundResponse {
+  orderId: string;
+  refundedAt?: string | null;
+  refundSettledAt?: string | null;
+  refundGatewayRef?: string | null;
 }
 
 /**
