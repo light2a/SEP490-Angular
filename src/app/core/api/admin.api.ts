@@ -4,15 +4,17 @@ import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   AdminCampaignListItem,
+  AdminOrderListItem,
   AdminResetPasswordRequest,
   AdminUserResponse,
   BanUserRequest,
   GrantCreditRequest,
   GrantCreditResponse,
-  OrderResponse,
   OrganizationResponse,
   RefundOrderRequest,
   RefundOrderResponse,
+  SettleRefundRequest,
+  SettleRefundResponse,
   AiUsageReportResponse,
   RevenueReportResponse,
 } from '../models';
@@ -77,12 +79,21 @@ export class AdminApi {
     return this.http.get<AdminCampaignListItem[]>(`${this.base}/campaign/admin/campaigns`, { params });
   }
 
-  /** GET /payment/admin/orders */
-  orders(opts?: { status?: number; ownerType?: number }): Observable<OrderResponse[]> {
+  /**
+   * GET /payment/admin/orders — mảng đơn (kèm field refund admin-only).
+   * `refundSettlement` (1=Pending chờ chuyển tiền, 2=Settled đã chuyển) lọc đơn hoàn theo trạng thái chuyển tiền.
+   */
+  orders(opts?: {
+    status?: number;
+    ownerType?: number;
+    refundSettlement?: number;
+  }): Observable<AdminOrderListItem[]> {
     let params = new HttpParams();
     if (opts?.status != null) params = params.set('status', String(opts.status));
     if (opts?.ownerType != null) params = params.set('ownerType', String(opts.ownerType));
-    return this.http.get<OrderResponse[]>(`${this.base}/payment/admin/orders`, { params });
+    if (opts?.refundSettlement != null)
+      params = params.set('refundSettlement', String(opts.refundSettlement));
+    return this.http.get<AdminOrderListItem[]>(`${this.base}/payment/admin/orders`, { params });
   }
 
   /**
@@ -131,6 +142,20 @@ export class AdminApi {
   refundOrder(orderId: string, body: RefundOrderRequest): Observable<RefundOrderResponse> {
     return this.http.post<RefundOrderResponse>(
       `${this.base}/payment/admin/orders/${orderId}/refund`,
+      body,
+    );
+  }
+
+  /**
+   * POST /payment/admin/orders/{id}/refund/settle — XÁC NHẬN đã chuyển tiền hoàn thật cho khách (F18).
+   *
+   * PayOS không có API refund → tiền về bank làm tay; endpoint này chỉ đóng dấu mốc đối soát +
+   * ghi mã tham chiếu, KHÔNG đụng credit/status. Chỉ hợp lệ trên đơn đã Refunded (409 nếu chưa).
+   * Idempotent: đơn đã xác nhận rồi → trả nguyên trạng.
+   */
+  settleRefund(orderId: string, body: SettleRefundRequest): Observable<SettleRefundResponse> {
+    return this.http.post<SettleRefundResponse>(
+      `${this.base}/payment/admin/orders/${orderId}/refund/settle`,
       body,
     );
   }

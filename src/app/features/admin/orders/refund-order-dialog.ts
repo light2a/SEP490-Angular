@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -20,6 +21,8 @@ export interface RefundOrderDialogResult {
   reason: string;
   gatewayRef: string | null;
   allowPartialClawback: boolean;
+  /** Admin đã chuyển tiền thật cho khách rồi → đánh dấu "đã chuyển" luôn (mặc định false = chờ). */
+  settledNow: boolean;
 }
 
 /**
@@ -36,6 +39,7 @@ export interface RefundOrderDialogResult {
     FormsModule,
     MatDialogModule,
     MatButtonModule,
+    MatCheckboxModule,
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
@@ -80,9 +84,22 @@ export interface RefundOrderDialogResult {
 
       <mat-form-field appearance="outline" class="full">
         <mat-label>Mã giao dịch hoàn của PayOS (nếu có)</mat-label>
-        <input matInput maxlength="100" [(ngModel)]="gatewayRef" name="gatewayRef" />
+        <input
+          matInput
+          maxlength="100"
+          [(ngModel)]="gatewayRef"
+          name="gatewayRef"
+          (ngModelChange)="onGatewayRefChange()"
+        />
         <mat-hint>Bỏ trống nếu hoàn bằng chuyển khoản tay (không có mã).</mat-hint>
       </mat-form-field>
+
+      <mat-checkbox [(ngModel)]="settledNow" name="settledNow" class="settled-box">
+        Tôi đã chuyển tiền cho khách rồi
+      </mat-checkbox>
+      <p class="note-sm">
+        Bỏ trống nếu chưa chuyển — đơn sẽ vào danh sách <strong>“chờ chuyển tiền”</strong> để không quên.
+      </p>
 
       @if (error(); as e) {
         <p class="warn">{{ e }}</p>
@@ -123,6 +140,15 @@ export interface RefundOrderDialogResult {
         color: var(--mat-sys-on-error-container);
         font-size: 13px;
       }
+      .settled-box {
+        display: block;
+        margin-top: 4px;
+      }
+      .note-sm {
+        margin: 2px 0 4px 34px;
+        font-size: 12px;
+        color: var(--mat-sys-on-surface-variant);
+      }
     `,
   ],
 })
@@ -132,7 +158,13 @@ export class RefundOrderDialog {
 
   reason = '';
   gatewayRef = '';
+  settledNow = false;
   readonly error = signal<string | null>(null);
+
+  /** Nhập mã hoàn = đã làm trên dashboard PayOS → tự tick "đã chuyển tiền". */
+  onGatewayRefChange(): void {
+    if (this.gatewayRef.trim()) this.settledNow = true;
+  }
 
   confirm(): void {
     const reason = this.reason.trim();
@@ -147,6 +179,7 @@ export class RefundOrderDialog {
       gatewayRef: this.gatewayRef.trim() || null,
       // Chỉ bật khi admin đã nhìn thấy con số thu hồi được và xác nhận lần hai.
       allowPartialClawback: !!this.data.partial,
+      settledNow: this.settledNow,
     });
   }
 }
