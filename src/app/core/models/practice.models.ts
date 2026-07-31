@@ -77,6 +77,19 @@ export interface AnswerResponse {
   deliveryMetrics?: DeliveryMetrics | null;
 }
 
+/**
+ * RAG grounding (Contract 2/CITATION) — 1 nguồn uy tín mà câu hỏi được sinh dựa trên.
+ * `chunkId` map ở InterviewService sang `{sourceUrl, sourceTitle}` (payload Qdrant).
+ *
+ * ⚠ Nhãn luôn là "DỰA TRÊN nguồn" (model tự khai), KHÔNG phải "được nguồn chứng minh" — mức mạnh đó
+ * là con số faithfulness đo ở Phase 2, không hứa per-request. `sourceUrl` có thể chưa kiểm chứng.
+ */
+export interface QuestionCitation {
+  chunkId: string;
+  sourceUrl: string;
+  sourceTitle: string;
+}
+
 export interface QuestionResponse {
   id: string;
   orderNo: number;
@@ -85,6 +98,14 @@ export interface QuestionResponse {
   answer?: AnswerResponse | null;
   /** Phỏng vấn THÍCH ỨNG (INT-17): Seed | FollowUp | Clarify | NewQuestion. Optional (client cũ). */
   kind?: QuestionKind;
+  /**
+   * RAG grounding (Contract 2). Ba trạng thái, PHÂN BIỆT bằng chính field này:
+   *  - `undefined`/`null` = BE CHƯA gắn grounding cho câu này → FE không hiện nhãn gì (degrade an toàn).
+   *  - `[]` (mảng rỗng) = **ungrounded**: đã thử tìm nguồn nhưng không có → nhãn NỔI BẬT "chưa có nguồn".
+   *  - mảng có phần tử = **grounded**: hiện badge "📎 Nguồn: …" bấm được.
+   * (Shape FE-facing này do W2/InterviewService map từ `citedChunkIds` — xem BÁO CÁO cuối worker.)
+   */
+  citations?: QuestionCitation[] | null;
 }
 
 export interface CriterionScore {

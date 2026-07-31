@@ -11,6 +11,10 @@ export const ADMIN_ROUTES: Routes = [
     loadComponent: () => import('./packages/packages').then((m) => m.AdminPackages),
   },
   {
+    path: 'knowledge',
+    loadComponent: () => import('./knowledge/knowledge').then((m) => m.AdminKnowledge),
+  },
+  {
     path: 'billing',
     loadComponent: () => import('./billing/billing-close').then((m) => m.BillingClose),
   },

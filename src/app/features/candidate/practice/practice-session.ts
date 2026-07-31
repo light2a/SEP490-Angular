@@ -26,6 +26,7 @@ import {
   AnswerScore,
   PracticeSession as SessionData,
   QUESTION_KIND_LABEL,
+  QuestionCitation,
   QuestionResponse,
   UploadAnswerResult,
 } from '../../../core/models';
@@ -286,6 +287,23 @@ export class PracticeSession implements OnInit {
   /** INT-17: nhãn badge cho câu thích ứng (Seed → null, không hiện badge). */
   kindBadge(q: QuestionResponse): string | null {
     return q.kind && q.kind !== 'Seed' ? QUESTION_KIND_LABEL[q.kind] : null;
+  }
+
+  /**
+   * RAG grounding (Contract 2/CITATION) — phân loại nguồn của câu hỏi để render minh bạch:
+   *  - `null`  = BE CHƯA gắn grounding cho câu này (`citations` vắng) → không hiện nhãn gì (degrade
+   *              an toàn, không dán nhãn "chưa có nguồn" oan lên buổi cũ / deploy chưa bật grounding).
+   *  - `'ungrounded'` = có gắn nhưng rỗng (`citations: []`) → nhãn NỔI BẬT "chưa có nguồn".
+   *  - `'grounded'`   = có ít nhất 1 nguồn → hiện badge bấm được.
+   */
+  citationState(q: QuestionResponse): 'grounded' | 'ungrounded' | null {
+    const c = q.citations;
+    if (c == null) return null;
+    return c.length > 0 ? 'grounded' : 'ungrounded';
+  }
+
+  citationsOf(q: QuestionResponse): QuestionCitation[] {
+    return q.citations ?? [];
   }
 
   onRecorded(qid: string, rec: RecordedAudio): void {
