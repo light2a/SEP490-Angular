@@ -453,4 +453,89 @@ describe('PracticeSession — khoá ghi âm khi avatar đọc câu hỏi', () =>
       expect(el.textContent).toContain('không phải chuẩn ngành');
     });
   });
+
+  /**
+   * RAG grounding (Contract 2/CITATION) — minh bạch nguồn của câu hỏi. Ba trạng thái PHÂN BIỆT bằng
+   * chính field `citations`, và điểm dễ hỏng nhất là gộp "chưa gắn grounding" (field vắng) với
+   * "đã thử nhưng rỗng" (`[]`): cái đầu KHÔNG được dán nhãn "chưa có nguồn" (oan cho buổi cũ / deploy
+   * chưa bật), cái sau PHẢI dán nhãn nổi bật (chống "đeo huy hiệu có nguồn mà rỗng").
+   */
+  describe('citation nguồn của câu hỏi (RAG grounding)', () => {
+    const withCitations = (citations: unknown): SessionData =>
+      ({
+        ...session(),
+        questions: [
+          {
+            id: 'q1',
+            orderNo: 1,
+            content: 'useEffect chạy khi nào?',
+            timeLimitSec: 120,
+            answer: null,
+            citations,
+          },
+        ],
+      }) as SessionData;
+
+    it('grounded → badge nguồn bấm được (href = sourceUrl) + nhãn "chưa kiểm chứng", KHÔNG nhãn ungrounded', () => {
+      api.get.mockReturnValue(
+        of(
+          withCitations([
+            {
+              chunkId: 'ch1',
+              sourceUrl: 'https://react.dev/reference/react/useEffect',
+              sourceTitle: 'react.dev — useEffect',
+            },
+          ]),
+        ),
+      );
+
+      const el = render().nativeElement as HTMLElement;
+      const link = el.querySelector('.cite') as HTMLAnchorElement | null;
+
+      expect(link).not.toBeNull();
+      expect(link!.getAttribute('href')).toBe('https://react.dev/reference/react/useEffect');
+      expect(el.textContent).toContain('Nguồn: react.dev — useEffect');
+      expect(el.textContent).toContain('đường dẫn chưa kiểm chứng');
+      // Grounded thì TUYỆT ĐỐI không được kèm nhãn "chưa có nguồn".
+      expect(el.textContent).not.toContain('chưa có nguồn kiểm chứng');
+      expect(el.querySelector('.ungrounded')).toBeNull();
+    });
+
+    it('ungrounded (citations = []) → nhãn NỔI BẬT "chưa có nguồn", KHÔNG badge nào', () => {
+      api.get.mockReturnValue(of(withCitations([])));
+
+      const el = render().nativeElement as HTMLElement;
+
+      expect(el.querySelector('.ungrounded')).not.toBeNull();
+      expect(el.textContent).toContain('Nội dung do mô hình tạo, chưa có nguồn kiểm chứng');
+      expect(el.querySelector('.cite')).toBeNull();
+    });
+
+    it('field citations VẮNG → degrade an toàn: không badge, KHÔNG nhãn ungrounded', () => {
+      // Đúng ca buổi cũ / deploy chưa bật grounding: câu hỏi vẫn hiện bình thường, không nhãn gì.
+      api.get.mockReturnValue(of(withCitations(undefined)));
+
+      const el = render().nativeElement as HTMLElement;
+
+      expect(el.querySelector('.cite')).toBeNull();
+      expect(el.querySelector('.ungrounded')).toBeNull();
+      expect(el.textContent).not.toContain('chưa có nguồn kiểm chứng');
+      expect(el.textContent).toContain('useEffect chạy khi nào?');
+    });
+
+    it('nhiều nguồn → nhiều badge tương ứng', () => {
+      api.get.mockReturnValue(
+        of(
+          withCitations([
+            { chunkId: 'ch1', sourceUrl: 'https://react.dev/a', sourceTitle: 'react.dev — A' },
+            { chunkId: 'ch2', sourceUrl: 'https://react.dev/b', sourceTitle: 'react.dev — B' },
+          ]),
+        ),
+      );
+
+      const el = render().nativeElement as HTMLElement;
+
+      expect(el.querySelectorAll('.cite').length).toBe(2);
+    });
+  });
 });

@@ -36,6 +36,31 @@
         </div>
         <p class="q-text">{{ q.content }}</p>
 
+        <!--
+          RAG grounding (Contract 2). 3 trạng thái phân biệt bằng chính `citations`:
+          grounded → badge nguồn bấm được; ungrounded → nhãn NỔI BẬT (không phải footnote mờ, đây là
+          điểm minh bạch chống "đeo huy hiệu có nguồn mà rỗng"); vắng field → không hiện gì (degrade).
+        -->
+        @switch (citationState(q)) {
+          @case ('grounded') {
+            <div class="citations">
+              @for (c of citationsOf(q); track c.chunkId) {
+                <a class="cite" [href]="c.sourceUrl" target="_blank" rel="noopener noreferrer">
+                  <mat-icon>menu_book</mat-icon>
+                  <span class="cite-title">Nguồn: {{ c.sourceTitle }}</span>
+                </a>
+              }
+              <span class="cite-note">Dựa trên nguồn — đường dẫn chưa kiểm chứng.</span>
+            </div>
+          }
+          @case ('ungrounded') {
+            <p class="ungrounded">
+              <mat-icon>info</mat-icon>
+              Nội dung do mô hình tạo, chưa có nguồn kiểm chứng.
+            </p>
+          }
+        }
+
         @if (q.answer) {
           @if (q.answer.transcript) {
             <p class="tr"><b>Bản ghi:</b> {{ q.answer.transcript }}</p>

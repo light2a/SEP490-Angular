@@ -47,6 +47,7 @@ export class AdminShell {
     { path: 'ai-usage', icon: 'smart_toy', label: 'Chi phí AI' },
     { path: 'credits', icon: 'card_giftcard', label: 'Cấp credit' },
     { path: 'packages', icon: 'inventory_2', label: 'Gói credit' },
+    { path: 'knowledge', icon: 'menu_book', label: 'Nguồn tri thức' },
     { path: 'billing', icon: 'event_repeat', label: 'Chốt kỳ postpaid' },
   ];
 
