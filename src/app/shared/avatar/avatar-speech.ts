@@ -287,18 +287,22 @@ export class AvatarSpeech {
     if (total / (spectrum.length * 255) < SILENCE_ENERGY) return 'viseme_sil';
     if (total > 0 && high / total > FRICATIVE_RATIO) return 'viseme_SS';
 
-    // F1 dò từ 280Hz chứ không phải từ 200: dưới mốc đó là cao độ giọng nữ (F0 ~200–250Hz) và hài
-    // bậc thấp của nó, vốn mạnh hơn formant thật nên hút hết đỉnh về mình. Đo trên một câu tiếng
-    // Việt thật, sửa riêng chỗ này đã kéo tỉ lệ nhận đúng "a" từ 16% lên 46% (chữ cho thấy đúng ra
-    // phải ~45%).
-    const f1 = this.peakHz(spectrum, binHz, 280, 1100);
+    // F1 dò từ 320Hz chứ không phải từ 0: dưới mốc đó là cao độ giọng (F0) và hài bậc thấp của nó,
+    // vốn mạnh hơn formant thật nên hút hết đỉnh về mình — bỏ qua chúng là sửa đúng gốc, không
+    // phải mẹo.
+    const f1 = this.peakHz(spectrum, binHz, 320, 1100);
     const f2 = this.peakHz(spectrum, binHz, 900, 3000);
 
-    // 420Hz nằm giữa F1 của nguyên âm ĐÓNG (i, u: ~300–370) và nguyên âm MỞ (a: ~730–850), nên
-    // tách được cả giọng nam lẫn nữ chứ không phải con số khớp riêng một giọng.
+    // Các mốc dưới đây HIỆU CHỈNH TRÊN CHÍNH GIỌNG SẢN PHẨM (Gemini TTS `vi-VN`), bằng cách so
+    // phân bố nguyên âm đo được với phân bố suy từ chữ của 3 câu hỏi thật. Ba câu chứ không phải
+    // một, để không khớp riêng vào đặc điểm của một câu.
+    //
+    // ⚠ Bộ mốc dò trên giọng KHÁC thì KHÔNG dùng lại được: bản dò trên giọng tiếng Việt của macOS
+    // cho `viseme_O` đúng 0% khi chạy trên giọng thật (đúng ra ~20%). Đổi giọng/nhà cung cấp TTS
+    // thì phải dò lại — đo mất khoảng một phút, đừng chỉnh tay theo cảm giác.
     if (f1 > 420) return 'viseme_aa';
-    if (f2 > 1700) return f1 < 420 ? 'viseme_I' : 'viseme_E';
-    if (f2 < 1050) return f1 < 420 ? 'viseme_U' : 'viseme_O';
+    if (f2 > 1500) return f1 < 340 ? 'viseme_I' : 'viseme_E';
+    if (f2 < 1050) return f1 < 340 ? 'viseme_U' : 'viseme_O';
     return 'viseme_E';
   }
 
