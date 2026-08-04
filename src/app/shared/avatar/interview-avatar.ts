@@ -208,6 +208,13 @@ export class InterviewAvatar {
   readonly sessionId = input.required<string>();
   /** Câu đang hỏi; đổi id → avatar tự đọc câu mới. `null` = không có gì để đọc. */
   readonly questionId = input<string | null>(null);
+  /**
+   * Nội dung câu hỏi — dùng để suy ra khẩu hình cho miệng.
+   *
+   * Bỏ trống thì avatar vẫn đọc và vẫn nhép theo biên độ, chỉ mất phần tạo hình miệng. Nói cách
+   * khác đây là input TĂNG CƯỜNG, không phải bắt buộc.
+   */
+  readonly text = input<string | null>(null);
   /** Cha đang ghi âm → cấm mọi tiếng động từ avatar (chống lẫn tiếng vào bài ghi). */
   readonly locked = input(false);
 
@@ -270,6 +277,7 @@ export class InterviewAvatar {
     this.webglAvailable.set(AvatarScene.isWebGLAvailable());
 
     this.speech.onAmplitude = (v) => this.scene?.setMouthOpen(v);
+    this.speech.onViseme = (v) => this.scene?.setViseme(v);
     this.speech.onEnded = () => this.setPlaying(false);
 
     // Dựng cảnh khi canvas đã vào DOM (canvas nằm trong @if nên xuất hiện muộn hơn constructor).
@@ -396,7 +404,7 @@ export class InterviewAvatar {
   private async playBlob(blob: Blob): Promise<void> {
     this.setPlaying(true);
     this.scene?.setSpeaking(true);
-    const started = await this.speech.play(blob);
+    const started = await this.speech.play(blob, this.text() ?? undefined);
     // Trình duyệt chặn autoplay (chưa có thao tác nào của người dùng) → mời bấm "nghe lại",
     // đừng để ứng viên ngồi chờ một giọng đọc không bao giờ vang lên.
     this.autoplayBlocked.set(!started);

@@ -1,5 +1,7 @@
 import type * as THREE from 'three';
 
+import { VISEMES, type Viseme } from './vietnamese-viseme';
+
 /**
  * Cảnh 3D cho avatar phỏng vấn — bọc Three.js sau một lớp mỏng.
  *
@@ -8,10 +10,17 @@ import type * as THREE from 'three';
  * và máy không có WebGL thì chunk đó không bao giờ được tải về.
  *
  * Có 2 chế độ hiển thị:
- *  - `modelUrl` rỗng (mặc định) → dựng đầu người bằng hình học cơ bản. KHÔNG cần asset ngoài, không
- *    vướng license, không tải file nặng.
- *  - `modelUrl` trỏ tới file .glb (vd Ready Player Me) → nạp bằng GLTFLoader và điều khiển morph target
- *    ARKit chuẩn (`jawOpen` / `mouthOpen`, `eyeBlinkLeft` / `eyeBlinkRight`).
+ *  - `modelUrl` rỗng → dựng đầu người bằng hình học cơ bản. KHÔNG cần asset ngoài, không vướng
+ *    license, không tải file nặng.
+ *  - `modelUrl` trỏ tới file .glb (mặc định là avatar Avaturn trong `public/avatar/`) → nạp bằng
+ *    GLTFLoader và điều khiển 15 khẩu hình chuẩn Oculus (`viseme_*`) + ARKit (`jawOpen`,
+ *    `eyeBlinkLeft` / `eyeBlinkRight`). Yêu cầu blend shape của model: xem `public/avatar/README.md`.
+ *
+ * ⚠ Đừng tìm đến Ready Player Me: dịch vụ đó ĐÃ ĐÓNG CỬA 31/01/2026 (Netflix mua lại rồi tắt toàn
+ * bộ public API), mọi `*.readyplayer.me` nay không phân giải được. Nguồn đang dùng là Avaturn.
+ *
+ * Model được nạp Ở NỀN, không chặn: đầu hình học hiện ra ngay rồi mới đổi sang mặt thật khi tải
+ * xong. Nếu await ở đây thì canvas đứng trắng vài giây giữa buổi phỏng vấn đã trừ credit.
  */
 
 /** Số khung/giây khi avatar đứng im — hạ tải GPU lúc không nói (chỉ còn chớp mắt + lắc đầu nhẹ). */
@@ -24,10 +33,35 @@ const BLINK_MAX_GAP = 6;
 /** Trần devicePixelRatio: retina 3x không đáng để trả giá GPU cho một cái đầu. */
 const MAX_PIXEL_RATIO = 1.5;
 
-/** Tên morph target ARKit mà Ready Player Me xuất ra, theo thứ tự ưu tiên. */
+/**
+ * Morph điều khiển ĐỘ MỞ hàm, theo thứ tự ưu tiên.
+ *
+ * Vẫn giữ dù đã có 15 viseme: viseme quyết định HÌNH miệng, còn hàm mở bao nhiêu thì bám biên độ
+ * audio thật. Model nào thiếu viseme cũng vẫn nhép được nhờ đường này (degrade, không đứng hình).
+ */
 const MOUTH_MORPHS = ['jawOpen', 'mouthOpen', 'viseme_aa'];
 const BLINK_MORPHS_LEFT = ['eyeBlinkLeft', 'eyesClosed'];
 const BLINK_MORPHS_RIGHT = ['eyeBlinkRight', 'eyesClosed'];
+
+/**
+ * Tốc độ chuyển giữa hai khẩu hình (phần bù mỗi 1/60 giây).
+ *
+ * Miệng người không nhảy cóc giữa các hình; gán thẳng 0/1 sẽ giật từng nấc thấy rõ. Giá trị này
+ * đủ nhanh để bắt kịp âm tiết tiếng Việt (~150–250ms) mà vẫn mượt.
+ */
+const VISEME_BLEND = 0.42;
+
+/** Hàm mở tối đa khi khẩu hình đang ở đỉnh — hé vừa phải, mở hết trông như đang ngáp. */
+const JAW_GAIN = 0.62;
+
+/**
+ * Khoảng cách từ đỉnh đầu xuống tầm mắt (mét) và khoảng cách camera, để lấy khung BÁN THÂN.
+ *
+ * Đo trên avatar Avaturn đang dùng. Khung phải chặt: model xuất ra ở tư thế T-pose nên khung rộng
+ * là lộ hai cánh tay dang ngang — trông như ảnh chụp hồ sơ chứ không phải người đang phỏng vấn.
+ */
+const HEAD_TOP_TO_EYE = 0.16;
+const BUST_CAMERA_DISTANCE = 0.78;
 
 /** Độ mở miệng lúc im lặng (scale.y) — dùng chung cho lúc dựng và lúc chạy. */
 const MOUTH_CLOSED_SCALE_Y = 0.12;
@@ -76,6 +110,15 @@ export class AvatarScene {
   /** Morph target khi dùng model GLB. */
   private mouthMorphs: MorphRef[] = [];
   private blinkMorphs: MorphRef[] = [];
+  /** 15 khẩu hình Oculus tra sẵn theo tên — tra lại mỗi khung hình thì phí. */
+  private visemeMorphs = new Map<Viseme, MorphRef[]>();
+  /** Ảnh hưởng ĐANG hiển thị của từng khẩu hình; bám dần về mục tiêu nên không giật. */
+  private visemeCurrent = new Map<Viseme, number>();
+  /** Khẩu hình mục tiêu do luồng phát giọng đẩy vào. */
+  private visemeTarget: Viseme = 'viseme_sil';
+
+  /** Những gì đã thêm vào cảnh cho bản dựng sẵn — giữ để gỡ đi khi model thật nạp xong. */
+  private proceduralNodes: THREE.Object3D[] = [];
 
   /** Độ mở miệng mong muốn (0..1) do biên độ audio đẩy vào. */
   private mouthTarget = 0;
@@ -142,16 +185,31 @@ export class AvatarScene {
     fill.position.set(-2, 0.5, 1.5);
     scene.add(fill);
 
-    if (opts.modelUrl) {
-      await this.loadGlb(three, opts.modelUrl);
-    } else {
-      this.buildProceduralHead(three);
-    }
+    // Luôn dựng đầu hình học TRƯỚC: nó không tốn gì và cho người dùng thấy avatar ngay lập tức.
+    this.buildProceduralHead(three);
 
     this.clock = new three.Clock();
     this.observeResize(canvas);
     this.resize(canvas);
     this.loop();
+
+    // Model thật (vài MB) nạp Ở NỀN và thay chỗ khi xong. KHÔNG await — await ở đây là để canvas
+    // trắng suốt thời gian tải, ngay giữa buổi phỏng vấn đã trừ credit của người dùng.
+    if (opts.modelUrl) {
+      void this.loadModel(three, opts.modelUrl).catch(() => {
+        // Tải hụt (mạng, 404, file hỏng) → giữ nguyên đầu hình học. Avatar chỉ là trợ năng đọc đề,
+        // không được phép làm vỡ trang phỏng vấn.
+      });
+    }
+  }
+
+  /**
+   * Khẩu hình cần thể hiện. Luồng phát giọng gọi liên tục theo mốc thời gian của audio.
+   *
+   * Chỉ đặt MỤC TIÊU — chuyển động thật do `applyViseme` nội suy, nên gọi dồn dập cũng không giật.
+   */
+  setViseme(viseme: Viseme): void {
+    this.visemeTarget = viseme;
   }
 
   /** Biên độ giọng nói 0..1 → độ mở miệng. Gọi liên tục từ AnalyserNode. */
@@ -162,7 +220,11 @@ export class AvatarScene {
   /** Đang nói hay không — chỉ dùng để chọn tốc độ khung hình (nói thì mượt, im thì tiết kiệm). */
   setSpeaking(value: boolean): void {
     this.speaking = value;
-    if (!value) this.mouthTarget = 0;
+    if (!value) {
+      this.mouthTarget = 0;
+      // Về trạng thái nghỉ, nếu không khẩu hình cuối cùng sẽ đọng lại trên mặt sau khi hết tiếng.
+      this.visemeTarget = 'viseme_sil';
+    }
   }
 
   /** Dừng vòng lặp + trả GPU resource. An toàn khi gọi nhiều lần / gọi lúc `init` chưa xong. */
@@ -189,6 +251,9 @@ export class AvatarScene {
     this.mouth = undefined;
     this.mouthMorphs = [];
     this.blinkMorphs = [];
+    this.visemeMorphs.clear();
+    this.visemeCurrent.clear();
+    this.proceduralNodes = [];
   }
 
   // ---------- dựng hình ----------
@@ -212,6 +277,7 @@ export class AvatarScene {
     head.position.y = 0.12;
     this.head = head;
     scene.add(head);
+    this.proceduralNodes.push(head);
 
     const skull = new three.Mesh(new three.SphereGeometry(1, 40, 32), skin);
     skull.scale.set(SKULL_X, 1, SKULL_Z);
@@ -265,31 +331,47 @@ export class AvatarScene {
 
     const neck = new three.Mesh(new three.CylinderGeometry(0.26, 0.3, 0.5, 20), skin);
     neck.position.set(0, -1.12, 0);
-    this.scene?.add(neck);
+    scene.add(neck);
+    this.proceduralNodes.push(neck);
 
     const torso = new three.Mesh(new three.CapsuleGeometry(0.62, 0.5, 8, 20), shirtMat);
     torso.position.set(0, -2.05, -0.05);
     torso.scale.set(1.35, 1, 0.85);
-    this.scene?.add(torso);
+    scene.add(torso);
+    this.proceduralNodes.push(torso);
   }
 
-  /** Nạp model .glb và tra sẵn morph target để khỏi tìm lại mỗi khung hình. */
-  private async loadGlb(three: typeof THREE, url: string): Promise<void> {
+  /**
+   * Nạp model .glb rồi THAY CHỖ đầu hình học đang hiển thị, và tra sẵn morph target để khỏi tìm
+   * lại mỗi khung hình.
+   */
+  private async loadModel(three: typeof THREE, url: string): Promise<void> {
     const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
     if (this.disposed) return;
     const gltf = await new GLTFLoader().loadAsync(url);
     if (this.disposed || !this.scene) return;
 
     const root = gltf.scene;
-    // RPM xuất avatar cao ~1.7m, gốc ở chân → kéo xuống cho khuôn mặt vào khung hình.
-    root.position.set(0, -1.55, 0);
     this.scene.add(root);
-    this.head = root.getObjectByName('Head') ?? root;
+
+    // Căn khung theo HỘP BAO thật của model thay vì toạ độ ghi cứng: mỗi nhà cung cấp xuất avatar
+    // một chiều cao khác nhau, ghi cứng thì đổi model là khuôn mặt trôi ra ngoài khung.
+    const box = new three.Box3().setFromObject(root);
+    const eyeLevel = box.max.y - HEAD_TOP_TO_EYE;
+    this.camera?.position.set(0, eyeLevel, BUST_CAMERA_DISTANCE);
+    this.camera?.lookAt(0, eyeLevel - 0.03, 0);
+
+    // Da người thật cần tone mapping, nếu không sẽ bệt và cháy sáng ở gò má.
+    if (this.renderer) {
+      this.renderer.toneMapping = three.ACESFilmicToneMapping;
+      this.renderer.toneMappingExposure = 1.15;
+    }
 
     root.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       const dict = mesh.morphTargetDictionary;
       if (!dict || !mesh.morphTargetInfluences) return;
+
       for (const name of MOUTH_MORPHS) {
         if (dict[name] !== undefined) {
           this.mouthMorphs.push({ mesh, index: dict[name] });
@@ -299,7 +381,36 @@ export class AvatarScene {
       for (const name of [...BLINK_MORPHS_LEFT, ...BLINK_MORPHS_RIGHT]) {
         if (dict[name] !== undefined) this.blinkMorphs.push({ mesh, index: dict[name] });
       }
+      // Một khẩu hình có thể nằm trên nhiều mesh (đầu và răng là hai mesh riêng) — phải gom hết,
+      // giữ mỗi mesh đầu tiên thì răng đứng im trong lúc môi cử động.
+      for (const viseme of VISEMES) {
+        if (dict[viseme] === undefined) continue;
+        const refs = this.visemeMorphs.get(viseme) ?? [];
+        refs.push({ mesh, index: dict[viseme] });
+        this.visemeMorphs.set(viseme, refs);
+      }
     });
+
+    // Chỉ gỡ đầu hình học SAU khi model đã vào cảnh — gỡ trước sẽ có một nhịp khung trống.
+    this.removeProceduralHead();
+    this.head = root.getObjectByName('Head') ?? root;
+  }
+
+  /** Gỡ và trả GPU resource của bản dựng sẵn khi model thật đã thay chỗ. */
+  private removeProceduralHead(): void {
+    for (const node of this.proceduralNodes) {
+      node.removeFromParent();
+      node.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        mesh.geometry?.dispose?.();
+        const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
+        if (Array.isArray(mat)) mat.forEach((m) => m.dispose?.());
+        else mat?.dispose?.();
+      });
+    }
+    this.proceduralNodes = [];
+    this.eyes = [];
+    this.mouth = undefined;
   }
 
   // ---------- vòng lặp ----------
@@ -328,6 +439,7 @@ export class AvatarScene {
     this.animateIdle(step);
     this.animateBlink(step);
     this.applyMouth(step);
+    this.applyViseme(step);
 
     if (this.renderer && this.scene && this.camera) {
       this.renderer.render(this.scene, this.camera);
@@ -383,7 +495,43 @@ export class AvatarScene {
       this.mouth.scale.y = MOUTH_CLOSED_SCALE_Y + this.mouthCurrent * MOUTH_OPEN_RANGE;
     for (const ref of this.mouthMorphs) {
       const influences = ref.mesh.morphTargetInfluences;
-      if (influences) influences[ref.index] = this.mouthCurrent;
+      // Có viseme thì hàm chỉ đóng vai phụ (hé theo biên độ); không có viseme thì nó là TẤT CẢ
+      // những gì làm miệng cử động, nên phải mở hết biên.
+      if (influences)
+        influences[ref.index] = this.visemeMorphs.size > 0
+          ? this.mouthCurrent * JAW_GAIN
+          : this.mouthCurrent;
+    }
+  }
+
+  /**
+   * Nội suy khẩu hình: hình đang tới tiến dần về 1, các hình khác lui về 0.
+   *
+   * ⚠ Điểm mấu chốt của cả tính năng: độ mạnh của khẩu hình được NHÂN với biên độ audio thật
+   * (`mouthCurrent`). Chuỗi khẩu hình suy từ CHỮ nên mốc thời gian chỉ là ước lượng, còn biên độ
+   * đo từ chính luồng âm thanh đang phát thì luôn đúng. Nhân vào nhau thì: lệch vài chục ms không
+   * lộ (miệng vẫn đóng/mở đúng nhịp thật, chỉ hình là suy đoán), và khoảng lặng đầu/cuối file MP3
+   * tự khép miệng mà không cần dò.
+   */
+  private applyViseme(step: number): void {
+    if (this.visemeMorphs.size === 0) return;
+
+    const factor = 1 - Math.pow(1 - VISEME_BLEND, Math.max(1, step * 60));
+
+    for (const [viseme, refs] of this.visemeMorphs) {
+      // `viseme_sil` là trạng thái NGHỈ, không phải một khẩu hình phát ra tiếng — để nó bám biên độ
+      // thì lúc im lặng miệng lại mím chặt bất thường.
+      const target =
+        viseme === this.visemeTarget && viseme !== 'viseme_sil' ? this.mouthCurrent : 0;
+
+      const current = this.visemeCurrent.get(viseme) ?? 0;
+      const next = current + (target - current) * factor;
+      this.visemeCurrent.set(viseme, next);
+
+      for (const ref of refs) {
+        const influences = ref.mesh.morphTargetInfluences;
+        if (influences) influences[ref.index] = next;
+      }
     }
   }
 

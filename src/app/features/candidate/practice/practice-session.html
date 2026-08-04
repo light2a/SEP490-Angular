@@ -16,6 +16,7 @@
       <app-interview-avatar
         [sessionId]="sessionId()"
         [questionId]="qid"
+        [text]="currentQuestionText()"
         [locked]="recordingActive()"
         (speakingChange)="avatarSpeaking.set($event)"
       />
