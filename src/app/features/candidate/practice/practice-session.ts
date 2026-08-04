@@ -118,6 +118,18 @@ export class PracticeSession implements OnInit {
     return this.questions().find((q) => !q.answer && !locked.has(q.id))?.id ?? null;
   });
 
+  /**
+   * Nội dung câu đang hỏi, để avatar suy ra khẩu hình.
+   *
+   * Suy ra từ `currentQuestionId` thay vì tự lọc lại: điều kiện chọn câu hiện tại có phần tinh tế
+   * (xem ghi chú ở trên), viết lại lần hai là mở đường cho hai chỗ lệch nhau về sau.
+   */
+  readonly currentQuestionText = computed(() => {
+    const qid = this.currentQuestionId();
+    if (!qid) return null;
+    return this.questions().find((q) => q.id === qid)?.content ?? null;
+  });
+
   /** F2 — đồng hồ đếm ngược của câu hiện tại; đứng yên khi avatar đang đọc đề. */
   readonly countdown = createCountdown({
     paused: () => this.avatarSpeaking(),
