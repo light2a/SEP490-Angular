@@ -168,9 +168,20 @@ export class Login {
    * OAuth Google là điều hướng CẢ TRANG (rời app sang accounts.google.com rồi quay lại), không
    * phải XHR — nên phải đổi location chứ không gọi HttpClient. Backend sẽ 302 về
    * /auth/google/callback kèm MÃ dùng-một-lần (token không đi qua URL; trang callback đổi mã lấy phiên).
+   *
+   * Chuyển tiếp `returnUrl` sang vòng Google, nếu không thì người được mời B2B bấm "Đăng nhập với
+   * Google" sẽ mất đích quay lại và rơi về trang chủ theo role — lời mời đứt lần nữa, đúng cái Q17
+   * sinh ra để diệt.
+   *
+   * Tên tham số `returnUrl` khớp `AuthController.LoginWithGoogle(string? returnUrl)`; backend chỉ
+   * nhận ĐƯỜNG DẪN TƯƠNG ĐỐI rồi ghép sau base URL trong config server
+   * (`GoogleLoginRedirects.SanitizeReturnUrl`), nên không mở được lỗ redirect sang host lạ. Vẫn lọc
+   * `safeReturnUrl` ở đây để không phụ thuộc một mình lá chắn phía server.
    */
   loginWithGoogle(): void {
-    window.location.href = `${environment.apiBase}/auth/login-google`;
+    const base = `${environment.apiBase}/auth/login-google`;
+    const back = safeReturnUrl(this.route.snapshot.queryParams['returnUrl']);
+    window.location.href = back ? `${base}?returnUrl=${encodeURIComponent(back)}` : base;
   }
 
   submit(): void {
