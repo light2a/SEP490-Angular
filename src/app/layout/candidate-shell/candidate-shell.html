@@ -21,7 +21,17 @@
 </mat-toolbar>
 
 <mat-sidenav-container class="container">
-  <mat-sidenav [opened]="opened()" mode="side" class="sidenav">
+  <!--
+    F24 — màn hẹp: mode "over" (overlay + backdrop) và đóng mặc định. `openedChange` là BẮT BUỘC:
+    ở mode "over", Material tự đóng drawer khi bấm backdrop / ESC; nếu chỉ bind một chiều thì
+    signal vẫn là true ⇒ lần bấm nút menu sau đó không mở lại được (phải bấm hai lần).
+  -->
+  <mat-sidenav
+    [opened]="opened()"
+    (openedChange)="opened.set($event)"
+    [mode]="sidenavMode()"
+    class="sidenav"
+  >
     <mat-nav-list>
       @for (item of nav; track item.path) {
         <a
@@ -30,6 +40,7 @@
           routerLinkActive
           #rla="routerLinkActive"
           [activated]="rla.isActive"
+          (click)="onNavigate()"
         >
           <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
           <span matListItemTitle>{{ item.label }}</span>
