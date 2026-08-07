@@ -45,12 +45,15 @@ describe('GrantCredits — cấp credit khuyến mãi (F20)', () => {
     const req = httpMock.expectOne(URL);
     expect(req.request.method).toBe('POST');
     // Payment serialize enum dạng SỐ — gửi 'User' sẽ bị từ chối.
+    // Q14: body nay mang thêm `idempotencyKey` (giá trị ngẫu nhiên) — tiền đề đổi CÓ CHỦ ĐÍCH.
     expect(req.request.body).toEqual({
       ownerType: 1,
       ownerId: 'u-123',
       credits: 5,
       note: 'bù sự cố',
+      idempotencyKey: expect.any(String),
     });
+    expect(req.request.body.idempotencyKey.length).toBeGreaterThan(0);
     req.flush({
       ownerType: 1,
       ownerId: 'u-123',
@@ -81,8 +84,8 @@ describe('GrantCredits — cấp credit khuyến mãi (F20)', () => {
     });
   });
 
-  // ── Chặn bấm trùng: lớp bảo vệ DUY NHẤT vì backend không idempotent ──────────
-  // Gửi hai lần = cấp hai lần và không có cách hoàn tự động.
+  // ── Lớp 1: chặn double-click trong cùng một lần bấm ─────────────────────────
+  // (Lớp 2 = idempotencyKey, phủ ở nhóm Q14 dưới, lo ca bấm lại sau khi request đã kết thúc.)
   it('bấm lần hai khi request đầu CHƯA xong → chỉ đúng MỘT request được gửi', () => {
     const fixture = setup();
     const cmp = fixture.componentInstance;
@@ -169,5 +172,106 @@ describe('GrantCredits — cấp credit khuyến mãi (F20)', () => {
     cmp.note = 'ab';
     cmp.submit();
     httpMock.expectNone(URL);
+  });
+
+  // ── Q14 — khoá idempotency: lớp chống cấp trùng ở MÁY CHỦ ────────────────────
+  // Backend khớp theo (ownerType, ownerId, key) và replay response lần cấp đầu. Hai bất biến:
+  //  · GIỮ khoá khi thử lại đúng khoản đó  → backend replay, không cấp thêm.
+  //  · ĐỔI khoá khi nội dung cấp thay đổi → không bị replay khoản cũ trong im lặng.
+  describe('khoá idempotency (Q14)', () => {
+    const OK = {
+      ownerType: 1,
+      ownerId: 'u-123',
+      creditsGranted: 5,
+      remainingCredits: 15,
+      transactionId: 'tx1',
+    };
+
+    /** Gửi 1 lần rồi trả về khoá đã dùng + hàm kết thúc request (thành công hoặc lỗi). */
+    function submitOnce(cmp: GrantCredits) {
+      cmp.submit();
+      const req = httpMock.expectOne(URL);
+      return {
+        key: req.request.body.idempotencyKey as string,
+        ok: () => req.flush(OK),
+        fail: () =>
+          req.flush({ message: 'mạng lỗi' }, { status: 503, statusText: 'Service Unavailable' }),
+      };
+    }
+
+    it('lỗi rồi bấm lại CÙNG khoản → gửi lại ĐÚNG khoá cũ (backend replay, không cấp thêm)', () => {
+      const fixture = setup();
+      const cmp = fixture.componentInstance;
+      fill(cmp);
+
+      const first = submitOnce(cmp);
+      first.fail();
+
+      // Form cố ý không bị xoá khi lỗi → admin bấm lại là đúng khoản đó.
+      const second = submitOnce(cmp);
+      expect(second.key).toBe(first.key);
+      second.ok();
+    });
+
+    it('cấp thành công → lần cấp kế dùng khoá MỚI (không bị replay thành khoản cũ)', () => {
+      const fixture = setup();
+      const cmp = fixture.componentInstance;
+
+      fill(cmp);
+      const first = submitOnce(cmp);
+      first.ok();
+
+      // Cùng ví + cùng số credit + cùng ghi chú: nếu giữ khoá cũ, backend sẽ replay khoản trước
+      // và admin tưởng đã cấp hai lần trong khi ví chỉ nhận một lần.
+      fill(cmp);
+      const second = submitOnce(cmp);
+      expect(second.key).not.toBe(first.key);
+      second.ok();
+    });
+
+    it('sửa số credit sau khi lỗi → khoá MỚI (backend không xét credits khi khớp khoá)', () => {
+      const fixture = setup();
+      const cmp = fixture.componentInstance;
+      fill(cmp);
+
+      const first = submitOnce(cmp);
+      first.fail();
+
+      cmp.credits = 50;
+      const second = submitOnce(cmp);
+      expect(second.key).not.toBe(first.key);
+      expect(second.key.length).toBeGreaterThan(0);
+      second.ok();
+    });
+
+    it('đổi ví sau khi lỗi → khoá MỚI (không mang khoá của ví khác sang)', () => {
+      const fixture = setup();
+      const cmp = fixture.componentInstance;
+      fill(cmp);
+
+      const first = submitOnce(cmp);
+      first.fail();
+
+      cmp.ownerId = 'u-999';
+      const second = submitOnce(cmp);
+      expect(second.key).not.toBe(first.key);
+      second.ok();
+    });
+
+    it('chỉ thêm khoảng trắng → VẪN là khoá cũ (request gửi đi không đổi)', () => {
+      const fixture = setup();
+      const cmp = fixture.componentInstance;
+      fill(cmp);
+
+      const first = submitOnce(cmp);
+      first.fail();
+
+      // Khoá neo vào giá trị ĐÃ TRIM: cùng một khoản cấp, không được coi là khoản mới.
+      cmp.ownerId = '  u-123  ';
+      cmp.note = '  bù sự cố  ';
+      const second = submitOnce(cmp);
+      expect(second.key).toBe(first.key);
+      second.ok();
+    });
   });
 });

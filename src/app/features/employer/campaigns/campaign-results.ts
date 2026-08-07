@@ -186,10 +186,30 @@ import {
           <mat-card class="edit-card">
             <h3>Điều chỉnh kết quả (HR chốt) — buổi {{ short(sid) }}</h3>
             <p class="hint">Điểm AI = gợi ý. Bỏ trống điểm + kết quả và bấm "Về AI" để huỷ điều chỉnh.</p>
+            <!--
+              Q12 — thang đo PHẢI hiện rõ ngay tại chỗ nhập. Backend so điểm override TRỰC TIẾP với
+              pass_score_pct (0–100) và CỐ Ý không quy đổi hộ (heuristic "score<=10 thì ×10" sẽ âm
+              thầm biến điểm 8% thật thành 80% Đạt), nên HR gõ 8 theo thang maxScore=10 sẽ bị hiểu là
+              8% → Không đạt oan. Nhắc lại ngưỡng ở đây vì thẻ ngưỡng trên đầu trang đã cuộn khỏi
+              tầm nhìn khi form này mở dưới bảng xếp hạng.
+            -->
+            <p class="scale-note">
+              <mat-icon>info</mat-icon>
+              <span>
+                Nhập theo <strong>thang phần trăm 0–100</strong> (ví dụ 8/10 điểm → nhập
+                <strong>80</strong>), <strong>không</strong> nhập theo thang điểm tiêu chí.
+                @if (d.passScorePct != null) {
+                  Ngưỡng đạt của chiến dịch: <strong>{{ d.passScorePct }}%</strong>.
+                } @else {
+                  Chiến dịch chưa đặt ngưỡng đạt — hãy chọn kết quả tay ở ô bên cạnh.
+                }
+              </span>
+            </p>
             <div class="edit-row">
               <mat-form-field appearance="outline">
-                <mat-label>Điểm mới</mat-label>
-                <input matInput type="number" [(ngModel)]="editScore" />
+                <mat-label>Điểm mới (%)</mat-label>
+                <input matInput type="number" min="0" max="100" step="0.1" [(ngModel)]="editScore" />
+                <mat-hint>Thang phần trăm 0–100</mat-hint>
               </mat-form-field>
               <mat-form-field appearance="outline">
                 <mat-label>Kết quả</mat-label>
@@ -301,6 +321,25 @@ import {
         font-size: 13px;
         color: var(--mat-sys-on-surface-variant);
       }
+      /* Q12 — nhắc thang đo: phải đọc được, không phải chú thích mờ cho có. */
+      .scale-note {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        margin: 0 0 16px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        background: #fff8e1;
+        color: #6d4c00;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+      .scale-note mat-icon {
+        flex: 0 0 auto;
+        font-size: 18px;
+        width: 18px;
+        height: 18px;
+      }
       .edit-row {
         display: flex;
         gap: 12px;
@@ -371,9 +410,25 @@ export class CampaignResults implements OnInit {
     this.editing.set(null);
   }
 
+  /**
+   * Q12 — điểm HR chốt là **phần trăm 0–100**, không phải thang điểm tiêu chí. Backend validate
+   * cùng dải và trả 400 khi ngoài dải; chặn sẵn ở client để đỡ một vòng request và để câu nhắc
+   * thang đo hiện ngay, thay vì hiện thông báo lỗi chung của server.
+   */
+  private isScoreInPercentRange(v: number): boolean {
+    return Number.isFinite(v) && v >= 0 && v <= 100;
+  }
+
   saveOverride(sessionId: string): void {
     if (!this.editNote.trim()) {
       this.notify.warn('Vui lòng nhập lý do điều chỉnh.');
+      return;
+    }
+    // Bỏ trống điểm là hợp lệ (chỉ chốt kết quả Đạt/Không đạt) → chỉ kiểm khi HR có nhập số.
+    if (this.editScore != null && !this.isScoreInPercentRange(this.editScore)) {
+      this.notify.warn(
+        'Điểm phải theo thang phần trăm 0–100 (ví dụ 8/10 điểm → nhập 80).',
+      );
       return;
     }
     this.saving.set(true);

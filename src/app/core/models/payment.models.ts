@@ -20,6 +20,15 @@ export interface CreditAccountResponse {
   status: CreditAccountStatus;
   remainingCredits: number;
   reservedCredits: number;
+  /**
+   * F7 — tổng số credit dùng thử ĐÃ ĐƯỢC TẶNG cho ví này (không phải số còn lại). 0 với mọi ví Org
+   * và với ví chưa từng tồn tại; > 0 vĩnh viễn sau khi đã tặng, kể cả khi đã tiêu hết.
+   *
+   * ⚠ Đây là dấu hiệu DUY NHẤT phân biệt "chưa có ví" với "đã có ví và tiêu hết quà": khi chủ ví
+   * chưa có row `credit_accounts`, backend cố ý trả ví rỗng toàn số 0 và KHÔNG hứa trước suất dùng
+   * thử (cấu hình có thể đổi/tắt) ⇒ không có field nào nói "còn N suất chưa cấp".
+   */
+  freeCreditsGranted: number;
   creditLimit?: number | null;
   periodUsage?: number | null;
   updatedAt: string;
@@ -235,6 +244,16 @@ export interface GrantCreditRequest {
   credits: number;
   /** Bắt buộc, 3..500 ký tự — đi vào sổ kiểm toán. */
   note: string;
+  /**
+   * Q14 — khoá chống cấp trùng do retry/double-click (≤200 ký tự). Bỏ trống = giữ hành vi cũ:
+   * mỗi request là một lần cấp mới.
+   *
+   * ⚠ Backend khớp khoá theo `(ownerType, ownerId, idempotencyKey)` và **KHÔNG** xét `credits`/`note`:
+   * gửi lại cùng khoá trên cùng ví sẽ replay đúng response lần cấp đầu và **bỏ qua số credit mới**.
+   * Vì vậy người gọi phải sinh khoá MỚI mỗi khi nội dung cấp thay đổi, và chỉ giữ nguyên khoá khi
+   * đang thử lại đúng khoản đó.
+   */
+  idempotencyKey?: string | null;
 }
 
 export interface GrantCreditResponse {

@@ -146,4 +146,23 @@ describe('AdminUsers — cấm / gỡ cấm / đặt lại mật khẩu (F20)', 
     expect(notify['error']).toHaveBeenCalledWith('Cannot ban the last active platform Admin');
     expect(cmp.busy()).toBeNull();
   });
+
+  /**
+   * F24 — bảng 8 cột phải cuộn ngang TRONG khung của nó (không để cả trang cuộn ngang trên
+   * mobile). Kiểm bằng CẤU TRÚC DOM chứ không đo pixel: jsdom không layout thật.
+   */
+  it('F24 — bảng nằm trong khung .tbl-wrap', () => {
+    dialogResult = undefined;
+    const fixture = setup();
+    fixture.detectChanges();
+
+    const table = (fixture.nativeElement as HTMLElement).querySelector('table[mat-table]');
+    expect(table).not.toBeNull();
+    const wrap = table!.closest('.tbl-wrap');
+    expect(wrap).not.toBeNull();
+
+    // Mặc định của overflowX là "visible", nên "auto" chứng minh style component đã áp thật.
+    expect(getComputedStyle(wrap!).overflowX).toBe('auto');
+    expect(getComputedStyle(table!).minWidth).toBe('880px');
+  });
 });

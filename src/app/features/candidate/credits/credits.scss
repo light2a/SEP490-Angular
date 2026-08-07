@@ -28,6 +28,27 @@ h1 {
   font-size: 13px;
   color: var(--mat-sys-on-surface-variant);
 }
+/* BK32 — thẻ mời dùng suất dùng thử (hiện thay khối số dư khi ví chưa từng tồn tại). */
+.trial {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+.trial-icon {
+  flex: none;
+  color: var(--mat-sys-primary);
+}
+.trial-title {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+.trial-text {
+  margin: 0 0 12px;
+  color: var(--mat-sys-on-surface-variant);
+}
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));

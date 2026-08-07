@@ -15,10 +15,15 @@ import { GrantCreditResponse, OwnerType } from '../../../core/models';
 /**
  * Cấp credit khuyến mãi vào 1 ví (F20, Admin).
  *
- * ⚠ Backend KHÔNG idempotent: gọi hai lần là cấp hai lần, không có khoá trùng nào. Vì vậy
- * việc chặn bấm trùng nằm hoàn toàn ở đây — nút bị khoá ngay khi bấm và chỉ mở lại khi
- * request kết thúc. Đây là phòng thủ MỎNG (không cứu được ca tải lại trang rồi gửi lại,
- * hay hai admin làm cùng lúc); cần chắc chắn thì backend phải có khoá idempotency.
+ * Q14 — chống cấp trùng có HAI lớp:
+ * 1. Khoá nút khi đang gửi (chặn double-click trong cùng một lần bấm).
+ * 2. `idempotencyKey` gửi kèm request — backend khớp theo `(ownerType, ownerId, key)` và replay
+ *    đúng response lần cấp đầu, nên retry sau lỗi mạng/5xx KHÔNG cấp thêm lần nữa.
+ *
+ * ⚠ Khoá phải sinh MỘT LẦN cho mỗi khoản cấp và GIỮ QUA RETRY — sinh khoá mới mỗi lần bấm là vô
+ * hiệu hoá đúng cái vừa xây. Ngược lại, backend KHÔNG xét `credits`/`note` khi khớp khoá, nên dùng
+ * lại khoá cũ sau khi admin sửa số credit sẽ khiến backend replay khoản CŨ và bỏ qua số mới trong
+ * im lặng. Vì thế khoá được neo vào nội dung form (xem {@link GrantCredits.idempotencyKeyFor}).
  */
 @Component({
   selector: 'app-grant-credits',
@@ -85,8 +90,9 @@ import { GrantCreditResponse, OwnerType } from '../../../core/models';
 
           <p class="warn">
             <mat-icon inline>warning</mat-icon>
-            Thao tác này <strong>không chống trùng ở máy chủ</strong>: gửi hai lần là cấp hai lần
-            và không có cách hoàn tự động. Hãy kiểm tra kỹ id ví trước khi bấm.
+            Máy chủ chống cấp trùng cho <strong>cùng một khoản</strong>: bấm lại sau lỗi mạng sẽ
+            không cấp thêm lần nữa. Nhưng cấp cho <strong>sai ví</strong> thì không có cách hoàn tự
+            động — hãy kiểm tra kỹ id ví trước khi bấm.
           </p>
 
           @if (last(); as r) {
@@ -177,8 +183,28 @@ export class GrantCredits {
   credits: number | null = null;
   note = '';
 
+  /** Khoá idempotency của LẦN CẤP đang thực hiện; null = chưa có lần cấp nào đang dở. */
+  private attemptKey: string | null = null;
+  /** Nội dung form mà `attemptKey` được sinh ra cho — đổi nội dung ⇒ phải sinh khoá mới. */
+  private attemptFor: string | null = null;
+
+  /**
+   * Trả khoá idempotency cho khoản cấp đang mô tả bởi `fingerprint`.
+   *
+   * Giữ NGUYÊN khoá khi admin bấm lại đúng khoản đó (retry sau lỗi ⇒ backend replay, không cấp
+   * thêm); sinh khoá MỚI khi nội dung đổi (nếu không, backend replay khoản cũ và bỏ qua số credit
+   * mới trong im lặng vì nó chỉ khớp theo ví + khoá).
+   */
+  private idempotencyKeyFor(fingerprint: string): string {
+    if (this.attemptKey === null || this.attemptFor !== fingerprint) {
+      this.attemptKey = crypto.randomUUID();
+      this.attemptFor = fingerprint;
+    }
+    return this.attemptKey;
+  }
+
   submit(): void {
-    // Chặn bấm trùng: đây là lớp bảo vệ DUY NHẤT vì backend không idempotent.
+    // Lớp 1: chặn double-click trong cùng một lần bấm (khoá idempotency lo ca retry).
     if (this.submitting()) return;
 
     const ownerId = this.ownerId.trim();
@@ -196,14 +222,30 @@ export class GrantCredits {
       return;
     }
 
+    // Neo khoá vào các giá trị THẬT SỰ được gửi (đã trim) — sửa khoảng trắng không đổi request
+    // nên cũng không được đổi khoá, còn đổi ví/số credit/ghi chú thì phải là một khoản cấp khác.
+    const idempotencyKey = this.idempotencyKeyFor(
+      `${this.ownerType}|${ownerId}|${this.credits}|${note}`,
+    );
+
     this.submitting.set(true);
     this.api
-      .grantCredits({ ownerType: this.ownerType, ownerId, credits: this.credits, note })
+      .grantCredits({
+        ownerType: this.ownerType,
+        ownerId,
+        credits: this.credits,
+        note,
+        idempotencyKey,
+      })
       .subscribe({
         next: (r) => {
           this.submitting.set(false);
           this.last.set(r);
           this.notify.success(`Đã cấp ${r.creditsGranted} credit.`);
+          // Khoản này đã xong → khoá cũ hết vai trò. Giữ lại sẽ khiến lần cấp kế cho CÙNG ví với
+          // cùng nội dung bị backend replay thành khoản cũ (admin tưởng đã cấp hai lần).
+          this.attemptKey = null;
+          this.attemptFor = null;
           // Xoá id + ghi chú để lần cấp kế không vô tình lặp lại đúng khoản vừa cấp.
           this.ownerId = '';
           this.note = '';
@@ -212,6 +254,9 @@ export class GrantCredits {
         error: (e: HttpErrorResponse) => {
           this.submitting.set(false);
           this.notify.error(extractErrorMessage(e) ?? 'Không cấp được credit.');
+          // CỐ Ý giữ `attemptKey`: lỗi mạng/5xx không cho biết backend đã commit hay chưa, nên lần
+          // bấm lại phải mang ĐÚNG khoá cũ để backend replay thay vì cấp thêm. Xoá khoá ở đây là
+          // mở lại đúng cửa cấp-hai-lần mà Q14 bịt. Form cũng cố ý không bị xoá.
         },
       });
   }

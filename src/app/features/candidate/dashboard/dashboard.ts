@@ -81,6 +81,7 @@ export class Dashboard {
     { path: '/candidate/practice', icon: 'mic', title: 'Luyện phỏng vấn', desc: 'Tạo buổi luyện, AI hỏi & chấm điểm' },
     { path: '/candidate/files', icon: 'description', title: 'CV / JD', desc: 'Tải lên và quản lý CV, JD (PDF)' },
     { path: '/candidate/cv-analysis', icon: 'insights', title: 'Phân tích CV', desc: 'AI đánh giá CV, khớp JD' },
+    { path: '/candidate/repo-analysis', icon: 'code', title: 'Phân tích repo GitHub', desc: 'AI đọc repo public, gợi ý cách kể khi phỏng vấn' },
     { path: '/candidate/roadmaps', icon: 'map', title: 'Lộ trình ôn', desc: 'Roadmap cá nhân hoá theo điểm yếu' },
     { path: '/candidate/rubrics', icon: 'rule', title: 'Tiêu chí chấm', desc: 'Tuỳ chỉnh rubric theo nhóm nghề' },
     { path: '/candidate/credits', icon: 'account_balance_wallet', title: 'Credit', desc: 'Mua & xem lịch sử thanh toán' },

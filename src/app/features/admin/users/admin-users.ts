@@ -70,81 +70,83 @@ import { Spinner } from '../../../shared/ui/spinner';
           } @else if (!items().length) {
             <app-empty-state icon="group" message="Không có người dùng nào." />
           } @else {
-            <table mat-table [dataSource]="items()" class="tbl">
-              <ng-container matColumnDef="email">
-                <th mat-header-cell *matHeaderCellDef>Email</th>
-                <td mat-cell *matCellDef="let u">{{ u.email ?? '—' }}</td>
-              </ng-container>
-              <ng-container matColumnDef="fullName">
-                <th mat-header-cell *matHeaderCellDef>Họ tên</th>
-                <td mat-cell *matCellDef="let u">{{ u.fullName ?? '—' }}</td>
-              </ng-container>
-              <ng-container matColumnDef="role">
-                <th mat-header-cell *matHeaderCellDef>Vai trò</th>
-                <td mat-cell *matCellDef="let u"><span class="chip">{{ u.role }}</span></td>
-              </ng-container>
-              <ng-container matColumnDef="orgName">
-                <th mat-header-cell *matHeaderCellDef>Tổ chức</th>
-                <td mat-cell *matCellDef="let u">{{ u.orgName ?? '—' }}</td>
-              </ng-container>
-              <ng-container matColumnDef="orgRole">
-                <th mat-header-cell *matHeaderCellDef>Org-role</th>
-                <td mat-cell *matCellDef="let u">{{ u.orgRole ?? '—' }}</td>
-              </ng-container>
-              <ng-container matColumnDef="createdAt">
-                <th mat-header-cell *matHeaderCellDef>Tạo lúc</th>
-                <td mat-cell *matCellDef="let u">{{ u.createdAt | date: 'short' }}</td>
-              </ng-container>
-              <ng-container matColumnDef="state">
-                <th mat-header-cell *matHeaderCellDef>Trạng thái</th>
-                <td mat-cell *matCellDef="let u">
-                  @if (u.bannedAt) {
-                    <span class="chip banned" [title]="u.banReason || 'Không ghi lý do'">
-                      Bị cấm
-                    </span>
-                  } @else {
-                    <span class="chip ok">Hoạt động</span>
-                  }
-                </td>
-              </ng-container>
-              <ng-container matColumnDef="actions">
-                <th mat-header-cell *matHeaderCellDef>Thao tác</th>
-                <td mat-cell *matCellDef="let u">
-                  @if (u.bannedAt) {
+            <div class="tbl-wrap">
+              <table mat-table [dataSource]="items()" class="tbl">
+                <ng-container matColumnDef="email">
+                  <th mat-header-cell *matHeaderCellDef>Email</th>
+                  <td mat-cell *matCellDef="let u">{{ u.email ?? '—' }}</td>
+                </ng-container>
+                <ng-container matColumnDef="fullName">
+                  <th mat-header-cell *matHeaderCellDef>Họ tên</th>
+                  <td mat-cell *matCellDef="let u">{{ u.fullName ?? '—' }}</td>
+                </ng-container>
+                <ng-container matColumnDef="role">
+                  <th mat-header-cell *matHeaderCellDef>Vai trò</th>
+                  <td mat-cell *matCellDef="let u"><span class="chip">{{ u.role }}</span></td>
+                </ng-container>
+                <ng-container matColumnDef="orgName">
+                  <th mat-header-cell *matHeaderCellDef>Tổ chức</th>
+                  <td mat-cell *matCellDef="let u">{{ u.orgName ?? '—' }}</td>
+                </ng-container>
+                <ng-container matColumnDef="orgRole">
+                  <th mat-header-cell *matHeaderCellDef>Org-role</th>
+                  <td mat-cell *matCellDef="let u">{{ u.orgRole ?? '—' }}</td>
+                </ng-container>
+                <ng-container matColumnDef="createdAt">
+                  <th mat-header-cell *matHeaderCellDef>Tạo lúc</th>
+                  <td mat-cell *matCellDef="let u">{{ u.createdAt | date: 'short' }}</td>
+                </ng-container>
+                <ng-container matColumnDef="state">
+                  <th mat-header-cell *matHeaderCellDef>Trạng thái</th>
+                  <td mat-cell *matCellDef="let u">
+                    @if (u.bannedAt) {
+                      <span class="chip banned" [title]="u.banReason || 'Không ghi lý do'">
+                        Bị cấm
+                      </span>
+                    } @else {
+                      <span class="chip ok">Hoạt động</span>
+                    }
+                  </td>
+                </ng-container>
+                <ng-container matColumnDef="actions">
+                  <th mat-header-cell *matHeaderCellDef>Thao tác</th>
+                  <td mat-cell *matCellDef="let u">
+                    @if (u.bannedAt) {
+                      <button
+                        mat-icon-button
+                        title="Gỡ cấm"
+                        aria-label="Gỡ cấm"
+                        [disabled]="busy() === u.id"
+                        (click)="unban(u)"
+                      >
+                        <mat-icon>lock_open</mat-icon>
+                      </button>
+                    } @else {
+                      <button
+                        mat-icon-button
+                        title="Cấm người dùng"
+                        aria-label="Cấm người dùng"
+                        [disabled]="busy() === u.id"
+                        (click)="ban(u)"
+                      >
+                        <mat-icon>block</mat-icon>
+                      </button>
+                    }
                     <button
                       mat-icon-button
-                      title="Gỡ cấm"
-                      aria-label="Gỡ cấm"
+                      title="Đặt lại mật khẩu"
+                      aria-label="Đặt lại mật khẩu"
                       [disabled]="busy() === u.id"
-                      (click)="unban(u)"
+                      (click)="resetPassword(u)"
                     >
-                      <mat-icon>lock_open</mat-icon>
+                      <mat-icon>key</mat-icon>
                     </button>
-                  } @else {
-                    <button
-                      mat-icon-button
-                      title="Cấm người dùng"
-                      aria-label="Cấm người dùng"
-                      [disabled]="busy() === u.id"
-                      (click)="ban(u)"
-                    >
-                      <mat-icon>block</mat-icon>
-                    </button>
-                  }
-                  <button
-                    mat-icon-button
-                    title="Đặt lại mật khẩu"
-                    aria-label="Đặt lại mật khẩu"
-                    [disabled]="busy() === u.id"
-                    (click)="resetPassword(u)"
-                  >
-                    <mat-icon>key</mat-icon>
-                  </button>
-                </td>
-              </ng-container>
-              <tr mat-header-row *matHeaderRowDef="cols"></tr>
-              <tr mat-row *matRowDef="let row; columns: cols"></tr>
-            </table>
+                  </td>
+                </ng-container>
+                <tr mat-header-row *matHeaderRowDef="cols"></tr>
+                <tr mat-row *matRowDef="let row; columns: cols"></tr>
+              </table>
+            </div>
           }
         </mat-card-content>
       </mat-card>
@@ -171,8 +173,19 @@ import { Spinner } from '../../../shared/ui/spinner';
       .f-search {
         width: 280px;
       }
+      /*
+       * F24 — 8 cột không vừa màn hẹp. overflow-x nằm ở KHUNG BỌC để bảng cuộn ngang
+       * bên trong nó, còn <body> thì không bao giờ cuộn ngang. min-width là vế bắt buộc:
+       * chỉ có width:100% thì bảng co lại vừa khung và các cột bị bóp/gãy dòng thay vì
+       * cuộn. 880px vẫn nhỏ hơn bề rộng nội dung thật ở 1280px ⇒ desktop không đổi.
+       */
+      .tbl-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
       .tbl {
         width: 100%;
+        min-width: 880px;
       }
       .chip.banned {
         background: var(--mat-sys-error-container);

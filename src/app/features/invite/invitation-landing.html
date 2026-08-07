@@ -41,12 +41,76 @@
         </ul>
       }
 
-      <button mat-flat-button color="primary" class="join" (click)="join()" [disabled]="joining()">
-        <mat-icon>login</mat-icon> Tham gia phỏng vấn
-      </button>
-      <p class="note">
-        Nhấn "Tham gia" để nhận phiên ứng viên và làm bài phỏng vấn AI cho chiến dịch này.
+      <mat-divider />
+
+      <!--
+        Ràng buộc email hiện ở CẢ HAI trạng thái: backend so email đăng nhập với email được mời và
+        trả 403 nếu lệch, mà FE không đọc được email được mời (metadata không trả) ⇒ chỉ nói trước
+        được là điều kiện bắt buộc, không kiểm hộ được.
+      -->
+      <p class="email-rule">
+        <mat-icon>mark_email_read</mat-icon>
+        <span>
+          Bạn phải đăng nhập (hoặc đăng ký) bằng <b>chính email đã nhận lời mời này</b>. Dùng email
+          khác sẽ bị từ chối.
+        </span>
       </p>
+
+      @if (isAuthenticated()) {
+        @if (currentEmail(); as mail) {
+          <p class="note current">
+            Bạn đang đăng nhập bằng: <b>{{ mail }}</b>
+          </p>
+        }
+
+        @if (joinRejected(); as rejected) {
+          <div class="rejected">
+            <mat-icon>report</mat-icon>
+            <p>{{ rejected }}</p>
+          </div>
+          <button mat-flat-button color="primary" class="join" (click)="switchAccount()">
+            <mat-icon>swap_horiz</mat-icon> Đăng nhập bằng email khác
+          </button>
+        } @else {
+          <button
+            mat-flat-button
+            color="primary"
+            class="join"
+            (click)="join()"
+            [disabled]="joining()"
+          >
+            <mat-icon>login</mat-icon> Tham gia phỏng vấn
+          </button>
+          <button mat-button type="button" class="switch" (click)="switchAccount()">
+            Đăng nhập bằng email khác
+          </button>
+          <p class="note">
+            Nhấn "Tham gia" để vào chiến dịch này và làm bài phỏng vấn AI.
+          </p>
+        }
+      } @else {
+        <div class="auth-actions">
+          <a
+            mat-flat-button
+            color="primary"
+            [routerLink]="['/auth/login']"
+            [queryParams]="{ returnUrl: returnUrl() }"
+          >
+            <mat-icon>login</mat-icon> Đăng nhập
+          </a>
+          <a
+            mat-stroked-button
+            [routerLink]="['/auth/register']"
+            [queryParams]="{ returnUrl: returnUrl() }"
+          >
+            <mat-icon>person_add</mat-icon> Đăng ký
+          </a>
+        </div>
+        <p class="note">
+          Bạn cần đăng nhập trước khi tham gia. Sau khi đăng nhập, bạn sẽ được đưa về đúng trang lời
+          mời này.
+        </p>
+      }
     }
   </mat-card>
 </div>

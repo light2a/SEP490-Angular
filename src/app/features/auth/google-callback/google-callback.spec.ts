@@ -174,4 +174,24 @@ describe('GoogleCallback', () => {
 
     expect(navigate).toHaveBeenCalledWith('/candidate/practice');
   });
+
+  // returnUrl tới đây qua QUERY STRING nên sửa được bằng tay, dù backend nói đã lọc ⇒ lọc lại phía
+  // client (Q17). Trước đó chỗ này `navigateByUrl` thẳng giá trị từ URL.
+  it('BỎ QUA returnUrl trỏ host ngoài, về trang chủ theo role', () => {
+    setQuery('?code=c5&returnUrl=%2F%2Fevil.com');
+
+    render();
+    flushExchange('Candidate');
+
+    expect(navigate).toHaveBeenCalledWith('/candidate/dashboard');
+  });
+
+  it('BỎ QUA returnUrl dạng URL tuyệt đối', () => {
+    setQuery('?code=c6&returnUrl=https%3A%2F%2Fevil.com%2Fx');
+
+    render();
+    flushExchange('Candidate');
+
+    expect(navigate).toHaveBeenCalledWith('/candidate/dashboard');
+  });
 });

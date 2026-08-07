@@ -30,6 +30,10 @@ export const CANDIDATE_ROUTES: Routes = [
     loadComponent: () => import('./cv-analysis/cv-analysis').then((m) => m.CvAnalysis),
   },
   {
+    path: 'repo-analysis',
+    loadComponent: () => import('./repo-analysis/repo-analysis').then((m) => m.RepoAnalysis),
+  },
+  {
     path: 'roadmaps',
     loadComponent: () => import('./roadmaps/roadmaps').then((m) => m.Roadmaps),
   },

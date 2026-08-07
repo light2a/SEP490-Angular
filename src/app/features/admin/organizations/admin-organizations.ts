@@ -52,26 +52,28 @@ import { Spinner } from '../../../shared/ui/spinner';
           } @else if (!items().length) {
             <app-empty-state icon="domain" message="Không có tổ chức nào." />
           } @else {
-            <table mat-table [dataSource]="items()" class="tbl">
-              <ng-container matColumnDef="name">
-                <th mat-header-cell *matHeaderCellDef>Tên</th>
-                <td mat-cell *matCellDef="let o">{{ o.name }}</td>
-              </ng-container>
-              <ng-container matColumnDef="taxCode">
-                <th mat-header-cell *matHeaderCellDef>Mã số thuế</th>
-                <td mat-cell *matCellDef="let o">{{ o.taxCode ?? '—' }}</td>
-              </ng-container>
-              <ng-container matColumnDef="memberCount">
-                <th mat-header-cell *matHeaderCellDef>Thành viên</th>
-                <td mat-cell *matCellDef="let o">{{ o.memberCount }}</td>
-              </ng-container>
-              <ng-container matColumnDef="createdAt">
-                <th mat-header-cell *matHeaderCellDef>Tạo lúc</th>
-                <td mat-cell *matCellDef="let o">{{ o.createdAt | date: 'short' }}</td>
-              </ng-container>
-              <tr mat-header-row *matHeaderRowDef="cols"></tr>
-              <tr mat-row *matRowDef="let row; columns: cols"></tr>
-            </table>
+            <div class="tbl-wrap">
+              <table mat-table [dataSource]="items()" class="tbl">
+                <ng-container matColumnDef="name">
+                  <th mat-header-cell *matHeaderCellDef>Tên</th>
+                  <td mat-cell *matCellDef="let o">{{ o.name }}</td>
+                </ng-container>
+                <ng-container matColumnDef="taxCode">
+                  <th mat-header-cell *matHeaderCellDef>Mã số thuế</th>
+                  <td mat-cell *matCellDef="let o">{{ o.taxCode ?? '—' }}</td>
+                </ng-container>
+                <ng-container matColumnDef="memberCount">
+                  <th mat-header-cell *matHeaderCellDef>Thành viên</th>
+                  <td mat-cell *matCellDef="let o">{{ o.memberCount }}</td>
+                </ng-container>
+                <ng-container matColumnDef="createdAt">
+                  <th mat-header-cell *matHeaderCellDef>Tạo lúc</th>
+                  <td mat-cell *matCellDef="let o">{{ o.createdAt | date: 'short' }}</td>
+                </ng-container>
+                <tr mat-header-row *matHeaderRowDef="cols"></tr>
+                <tr mat-row *matRowDef="let row; columns: cols"></tr>
+              </table>
+            </div>
           }
         </mat-card-content>
       </mat-card>
@@ -95,8 +97,19 @@ import { Spinner } from '../../../shared/ui/spinner';
       .f-search {
         width: 280px;
       }
+      /*
+       * F24 — 4 cột không vừa màn hẹp. overflow-x nằm ở KHUNG BỌC để bảng cuộn ngang
+       * bên trong nó, còn <body> thì không bao giờ cuộn ngang. min-width là vế bắt buộc:
+       * chỉ có width:100% thì bảng co lại vừa khung và các cột bị bóp/gãy dòng thay vì
+       * cuộn. 520px vẫn nhỏ hơn bề rộng nội dung thật ở 1280px ⇒ desktop không đổi.
+       */
+      .tbl-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
       .tbl {
         width: 100%;
+        min-width: 520px;
       }
     `,
   ],
