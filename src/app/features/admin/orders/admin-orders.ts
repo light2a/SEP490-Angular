@@ -88,84 +88,86 @@ import { VndPipe } from '../../../shared/pipes';
           } @else if (!items().length) {
             <app-empty-state icon="receipt_long" message="Không có đơn hàng nào." />
           } @else {
-            <table mat-table [dataSource]="items()" class="tbl">
-              <ng-container matColumnDef="payosOrderCode">
-                <th mat-header-cell *matHeaderCellDef>Mã đơn</th>
-                <td mat-cell *matCellDef="let o"><code>{{ o.payosOrderCode }}</code></td>
-              </ng-container>
-              <ng-container matColumnDef="owner">
-                <th mat-header-cell *matHeaderCellDef>Chủ ví</th>
-                <td mat-cell *matCellDef="let o">
-                  <span class="chip">{{ ownerLabel(o.ownerType) }}</span>
-                  <code class="muted">{{ short(o.ownerId) }}</code>
-                </td>
-              </ng-container>
-              <ng-container matColumnDef="kind">
-                <th mat-header-cell *matHeaderCellDef>Loại</th>
-                <td mat-cell *matCellDef="let o">{{ kindLabel(o.kind) }}</td>
-              </ng-container>
-              <ng-container matColumnDef="amountVnd">
-                <th mat-header-cell *matHeaderCellDef>Số tiền</th>
-                <td mat-cell *matCellDef="let o">{{ o.amountVnd | vnd }}</td>
-              </ng-container>
-              <ng-container matColumnDef="status">
-                <th mat-header-cell *matHeaderCellDef>Trạng thái</th>
-                <td mat-cell *matCellDef="let o">
-                  <span class="chip" [class]="statusClass(o.status)">{{ statusLabel(o.status) }}</span>
-                  @if (o.status === OrderStatus.Refunded) {
-                    @if (o.refundSettledAt) {
-                      <span
-                        class="sub-chip settled"
-                        [title]="o.refundGatewayRef ? 'Mã: ' + o.refundGatewayRef : 'Đã chuyển tiền'"
-                      >
-                        <mat-icon inline>check_circle</mat-icon> đã chuyển
-                      </span>
-                    } @else {
-                      <span class="sub-chip pending" title="Chưa chuyển tiền thật cho khách">
-                        <mat-icon inline>schedule</mat-icon> chờ chuyển tiền
-                      </span>
+            <div class="tbl-wrap">
+              <table mat-table [dataSource]="items()" class="tbl">
+                <ng-container matColumnDef="payosOrderCode">
+                  <th mat-header-cell *matHeaderCellDef>Mã đơn</th>
+                  <td mat-cell *matCellDef="let o"><code>{{ o.payosOrderCode }}</code></td>
+                </ng-container>
+                <ng-container matColumnDef="owner">
+                  <th mat-header-cell *matHeaderCellDef>Chủ ví</th>
+                  <td mat-cell *matCellDef="let o">
+                    <span class="chip">{{ ownerLabel(o.ownerType) }}</span>
+                    <code class="muted">{{ short(o.ownerId) }}</code>
+                  </td>
+                </ng-container>
+                <ng-container matColumnDef="kind">
+                  <th mat-header-cell *matHeaderCellDef>Loại</th>
+                  <td mat-cell *matCellDef="let o">{{ kindLabel(o.kind) }}</td>
+                </ng-container>
+                <ng-container matColumnDef="amountVnd">
+                  <th mat-header-cell *matHeaderCellDef>Số tiền</th>
+                  <td mat-cell *matCellDef="let o">{{ o.amountVnd | vnd }}</td>
+                </ng-container>
+                <ng-container matColumnDef="status">
+                  <th mat-header-cell *matHeaderCellDef>Trạng thái</th>
+                  <td mat-cell *matCellDef="let o">
+                    <span class="chip" [class]="statusClass(o.status)">{{ statusLabel(o.status) }}</span>
+                    @if (o.status === OrderStatus.Refunded) {
+                      @if (o.refundSettledAt) {
+                        <span
+                          class="sub-chip settled"
+                          [title]="o.refundGatewayRef ? 'Mã: ' + o.refundGatewayRef : 'Đã chuyển tiền'"
+                        >
+                          <mat-icon inline>check_circle</mat-icon> đã chuyển
+                        </span>
+                      } @else {
+                        <span class="sub-chip pending" title="Chưa chuyển tiền thật cho khách">
+                          <mat-icon inline>schedule</mat-icon> chờ chuyển tiền
+                        </span>
+                      }
                     }
-                  }
-                </td>
-              </ng-container>
-              <ng-container matColumnDef="paidAt">
-                <th mat-header-cell *matHeaderCellDef>Thanh toán lúc</th>
-                <td mat-cell *matCellDef="let o">{{ o.paidAt ? (o.paidAt | date: 'short') : '—' }}</td>
-              </ng-container>
-              <ng-container matColumnDef="createdAt">
-                <th mat-header-cell *matHeaderCellDef>Tạo lúc</th>
-                <td mat-cell *matCellDef="let o">{{ o.createdAt | date: 'short' }}</td>
-              </ng-container>
-              <ng-container matColumnDef="actions">
-                <th mat-header-cell *matHeaderCellDef>Thao tác</th>
-                <td mat-cell *matCellDef="let o">
-                  @if (canRefund(o)) {
-                    <button
-                      mat-icon-button
-                      title="Hoàn tiền đơn"
-                      aria-label="Hoàn tiền đơn"
-                      [disabled]="busy() === o.id"
-                      (click)="refund(o)"
-                    >
-                      <mat-icon>currency_exchange</mat-icon>
-                    </button>
-                  }
-                  @if (canSettle(o)) {
-                    <button
-                      mat-icon-button
-                      title="Xác nhận đã chuyển tiền cho khách"
-                      aria-label="Xác nhận đã chuyển tiền cho khách"
-                      [disabled]="busy() === o.id"
-                      (click)="settle(o)"
-                    >
-                      <mat-icon>price_check</mat-icon>
-                    </button>
-                  }
-                </td>
-              </ng-container>
-              <tr mat-header-row *matHeaderRowDef="cols"></tr>
-              <tr mat-row *matRowDef="let row; columns: cols"></tr>
-            </table>
+                  </td>
+                </ng-container>
+                <ng-container matColumnDef="paidAt">
+                  <th mat-header-cell *matHeaderCellDef>Thanh toán lúc</th>
+                  <td mat-cell *matCellDef="let o">{{ o.paidAt ? (o.paidAt | date: 'short') : '—' }}</td>
+                </ng-container>
+                <ng-container matColumnDef="createdAt">
+                  <th mat-header-cell *matHeaderCellDef>Tạo lúc</th>
+                  <td mat-cell *matCellDef="let o">{{ o.createdAt | date: 'short' }}</td>
+                </ng-container>
+                <ng-container matColumnDef="actions">
+                  <th mat-header-cell *matHeaderCellDef>Thao tác</th>
+                  <td mat-cell *matCellDef="let o">
+                    @if (canRefund(o)) {
+                      <button
+                        mat-icon-button
+                        title="Hoàn tiền đơn"
+                        aria-label="Hoàn tiền đơn"
+                        [disabled]="busy() === o.id"
+                        (click)="refund(o)"
+                      >
+                        <mat-icon>currency_exchange</mat-icon>
+                      </button>
+                    }
+                    @if (canSettle(o)) {
+                      <button
+                        mat-icon-button
+                        title="Xác nhận đã chuyển tiền cho khách"
+                        aria-label="Xác nhận đã chuyển tiền cho khách"
+                        [disabled]="busy() === o.id"
+                        (click)="settle(o)"
+                      >
+                        <mat-icon>price_check</mat-icon>
+                      </button>
+                    }
+                  </td>
+                </ng-container>
+                <tr mat-header-row *matHeaderRowDef="cols"></tr>
+                <tr mat-row *matRowDef="let row; columns: cols"></tr>
+              </table>
+            </div>
           }
         </mat-card-content>
       </mat-card>
@@ -189,8 +191,19 @@ import { VndPipe } from '../../../shared/pipes';
       .f-status {
         width: 200px;
       }
+      /*
+       * F24 — 8 cột không vừa màn hẹp. overflow-x nằm ở KHUNG BỌC để bảng cuộn ngang
+       * bên trong nó, còn <body> thì không bao giờ cuộn ngang. min-width là vế bắt buộc:
+       * chỉ có width:100% thì bảng co lại vừa khung và các cột bị bóp/gãy dòng thay vì
+       * cuộn. 880px vẫn nhỏ hơn bề rộng nội dung thật ở 1280px ⇒ desktop không đổi.
+       */
+      .tbl-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
       .tbl {
         width: 100%;
+        min-width: 880px;
       }
       code {
         font-size: 12px;
