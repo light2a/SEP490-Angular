@@ -63,6 +63,57 @@ h3 {
   margin-top: 16px;
   width: 100%;
 }
+.switch {
+  margin-top: 8px;
+  width: 100%;
+}
+.email-rule {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 16px 0 4px;
+  font-size: 14px;
+  color: var(--mat-sys-on-surface-variant);
+  mat-icon {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+    flex: 0 0 auto;
+    color: var(--mat-sys-primary);
+  }
+}
+.current {
+  text-align: left;
+}
+.rejected {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--mat-sys-error-container);
+  color: var(--mat-sys-on-error-container);
+  font-size: 14px;
+  p {
+    margin: 0;
+  }
+  mat-icon {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+    flex: 0 0 auto;
+  }
+}
+.auth-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+  a {
+    width: 100%;
+  }
+}
 .note {
   margin: 12px 0 0;
   font-size: 13px;

@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -9,6 +9,7 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { extractErrorMessage } from '../../../core/api/http-utils';
 import { AuthStore } from '../../../core/auth/auth.store';
 import { homeRouteFor } from '../../../core/auth/home-route';
+import { returnUrlQuery, safeReturnUrl } from '../return-url';
 import { environment } from '../../../../environments/environment';
 
 @Component({
@@ -81,7 +82,7 @@ import { environment } from '../../../../environments/environment';
 
     <div class="links">
       <a routerLink="/auth/forgot-password">Quên mật khẩu?</a>
-      <a routerLink="/auth/register">Tạo tài khoản</a>
+      <a routerLink="/auth/register" [queryParams]="returnUrlQuery">Tạo tài khoản</a>
     </div>
   `,
   styles: [
@@ -150,9 +151,13 @@ export class Login {
   private fb = inject(FormBuilder);
   private auth = inject(AuthStore);
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
 
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
+
+  /** Chuyển tiếp returnUrl sang trang đăng ký để lối vòng "chưa có tài khoản" không mất đích. */
+  readonly returnUrlQuery = returnUrlQuery(this.route.snapshot.queryParams['returnUrl']);
 
   readonly form = this.fb.nonNullable.group({
     email: ['', [Validators.required, Validators.email]],
@@ -178,12 +183,23 @@ export class Login {
     this.auth.login(this.form.getRawValue()).subscribe({
       next: () => {
         this.auth.loadProfile();
-        this.router.navigateByUrl(homeRouteFor(this.auth.primaryRole()));
+        this.router.navigateByUrl(this.afterAuthUrl());
       },
       error: (e: HttpErrorResponse) => {
         this.loading.set(false);
         this.error.set(extractErrorMessage(e) ?? 'Đăng nhập thất bại. Kiểm tra email/mật khẩu.');
       },
     });
+  }
+
+  /**
+   * Về đúng chỗ người dùng đang cần (vd /invite/:token của lời mời B2B) nếu returnUrl hợp lệ, else
+   * trang chủ theo role như trước. returnUrl do query string cấp ⇒ phải qua `safeReturnUrl`.
+   */
+  private afterAuthUrl(): string {
+    return (
+      safeReturnUrl(this.route.snapshot.queryParams['returnUrl']) ??
+      homeRouteFor(this.auth.primaryRole())
+    );
   }
 }
