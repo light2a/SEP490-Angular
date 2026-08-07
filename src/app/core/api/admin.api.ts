@@ -162,7 +162,13 @@ export class AdminApi {
 
   /**
    * POST /payment/admin/credits/grant — cấp credit khuyến mãi vào 1 ví (F20).
-   * ⚠ KHÔNG idempotent ở backend: gọi 2 lần = cấp 2 lần. Người gọi phải tự chặn bấm trùng.
+   *
+   * Q14 — idempotent KHI VÀ CHỈ KHI gửi `idempotencyKey`: backend khớp theo
+   * `(ownerType, ownerId, key)` rồi replay đúng response lần cấp đầu. Bỏ trống khoá thì mỗi
+   * request là một lần cấp mới (hành vi cũ).
+   *
+   * ⚠ Khớp khoá KHÔNG xét `credits`/`note` ⇒ dùng lại khoá cũ sau khi sửa số credit sẽ nhận lại
+   * khoản CŨ trong im lặng. Đổi nội dung cấp thì phải đổi khoá.
    */
   grantCredits(body: GrantCreditRequest): Observable<GrantCreditResponse> {
     return this.http.post<GrantCreditResponse>(`${this.base}/payment/admin/credits/grant`, body);

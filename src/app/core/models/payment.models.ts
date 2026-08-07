@@ -244,6 +244,16 @@ export interface GrantCreditRequest {
   credits: number;
   /** Bắt buộc, 3..500 ký tự — đi vào sổ kiểm toán. */
   note: string;
+  /**
+   * Q14 — khoá chống cấp trùng do retry/double-click (≤200 ký tự). Bỏ trống = giữ hành vi cũ:
+   * mỗi request là một lần cấp mới.
+   *
+   * ⚠ Backend khớp khoá theo `(ownerType, ownerId, idempotencyKey)` và **KHÔNG** xét `credits`/`note`:
+   * gửi lại cùng khoá trên cùng ví sẽ replay đúng response lần cấp đầu và **bỏ qua số credit mới**.
+   * Vì vậy người gọi phải sinh khoá MỚI mỗi khi nội dung cấp thay đổi, và chỉ giữ nguyên khoá khi
+   * đang thử lại đúng khoản đó.
+   */
+  idempotencyKey?: string | null;
 }
 
 export interface GrantCreditResponse {
