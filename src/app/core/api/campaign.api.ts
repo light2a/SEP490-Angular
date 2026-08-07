@@ -45,7 +45,15 @@ export class CampaignApi {
     return this.http.get<InvitationInfo>(`${this.base}/invitations/${encodeURIComponent(token)}`);
   }
 
-  /** Public — join: backend provision Candidate + trả JWT (KHÔNG refreshToken → AuthStore.setAccessOnlySession). */
+  /**
+   * Join lời mời — **CẦN JWT role Candidate** (tên "Public" cũ là sai: backend gác
+   * `[Authorize(Roles="Candidate")]`, gọi ẩn danh → 401). Backend còn so email người đăng nhập với
+   * email được mời → lệch thì **403**, không tạo membership.
+   *
+   * `accessToken` trong response là JWT của candidate được provision, KHÔNG kèm refreshToken. Từ
+   * Q17(b) FE **không dùng** nó nữa (đã đăng nhập trước khi join) — lưu nó qua
+   * `setAccessOnlySession` sẽ xoá refreshToken và làm buổi phỏng vấn dài đứt giữa chừng.
+   */
   join(token: string): Observable<JoinCampaignResult> {
     return this.http.post<JoinCampaignResult>(
       `${this.base}/invitations/${encodeURIComponent(token)}/join`,

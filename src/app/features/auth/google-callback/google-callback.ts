@@ -4,6 +4,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { AuthStore } from '../../../core/auth/auth.store';
 import { homeRouteFor } from '../../../core/auth/home-route';
+import { safeReturnUrl } from '../return-url';
 
 /** Thông báo tiếng Việt theo mã lỗi backend trả trong `?error=`. */
 const ERROR_MESSAGES: Record<string, string> = {
@@ -79,8 +80,10 @@ export class GoogleCallback implements OnInit {
       return;
     }
 
-    // returnUrl (nếu có) đã được backend lọc chỉ-đường-dẫn-tương-đối trước khi ghép vào URL.
-    const returnUrl = params.get('returnUrl');
+    // returnUrl (nếu có) backend nói là đã lọc chỉ-đường-dẫn-tương-đối trước khi ghép vào URL —
+    // nhưng nó tới FE qua QUERY STRING nên vẫn sửa được bằng tay ⇒ lọc lại phía client. Trước Q17
+    // chỗ này `navigateByUrl` thẳng giá trị từ URL, tin hoàn toàn vào lá chắn bên kia.
+    const returnUrl = safeReturnUrl(params.get('returnUrl'));
 
     this.auth.loginWithGoogleCode(code).subscribe({
       next: () => this.onSession(returnUrl),
