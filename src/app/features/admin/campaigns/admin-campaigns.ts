@@ -55,36 +55,38 @@ import { Spinner } from '../../../shared/ui/spinner';
           } @else if (!items().length) {
             <app-empty-state icon="campaign" message="Không có chiến dịch nào." />
           } @else {
-            <table mat-table [dataSource]="items()" class="tbl">
-              <ng-container matColumnDef="title">
-                <th mat-header-cell *matHeaderCellDef>Tiêu đề</th>
-                <td mat-cell *matCellDef="let c">{{ c.title }}</td>
-              </ng-container>
-              <ng-container matColumnDef="domain">
-                <th mat-header-cell *matHeaderCellDef>Lĩnh vực</th>
-                <td mat-cell *matCellDef="let c">{{ c.domain ?? '—' }}</td>
-              </ng-container>
-              <ng-container matColumnDef="status">
-                <th mat-header-cell *matHeaderCellDef>Trạng thái</th>
-                <td mat-cell *matCellDef="let c">
-                  <span class="chip" [class]="statusClass(c.status)">{{ statusLabel(c.status) }}</span>
-                </td>
-              </ng-container>
-              <ng-container matColumnDef="orgId">
-                <th mat-header-cell *matHeaderCellDef>Tổ chức</th>
-                <td mat-cell *matCellDef="let c"><code>{{ short(c.orgId) }}</code></td>
-              </ng-container>
-              <ng-container matColumnDef="maxCandidates">
-                <th mat-header-cell *matHeaderCellDef>Số ứng viên tối đa</th>
-                <td mat-cell *matCellDef="let c">{{ c.maxCandidates ?? '—' }}</td>
-              </ng-container>
-              <ng-container matColumnDef="createdAt">
-                <th mat-header-cell *matHeaderCellDef>Tạo lúc</th>
-                <td mat-cell *matCellDef="let c">{{ c.createdAt | date: 'short' }}</td>
-              </ng-container>
-              <tr mat-header-row *matHeaderRowDef="cols"></tr>
-              <tr mat-row *matRowDef="let row; columns: cols"></tr>
-            </table>
+            <div class="tbl-wrap">
+              <table mat-table [dataSource]="items()" class="tbl">
+                <ng-container matColumnDef="title">
+                  <th mat-header-cell *matHeaderCellDef>Tiêu đề</th>
+                  <td mat-cell *matCellDef="let c">{{ c.title }}</td>
+                </ng-container>
+                <ng-container matColumnDef="domain">
+                  <th mat-header-cell *matHeaderCellDef>Lĩnh vực</th>
+                  <td mat-cell *matCellDef="let c">{{ c.domain ?? '—' }}</td>
+                </ng-container>
+                <ng-container matColumnDef="status">
+                  <th mat-header-cell *matHeaderCellDef>Trạng thái</th>
+                  <td mat-cell *matCellDef="let c">
+                    <span class="chip" [class]="statusClass(c.status)">{{ statusLabel(c.status) }}</span>
+                  </td>
+                </ng-container>
+                <ng-container matColumnDef="orgId">
+                  <th mat-header-cell *matHeaderCellDef>Tổ chức</th>
+                  <td mat-cell *matCellDef="let c"><code>{{ short(c.orgId) }}</code></td>
+                </ng-container>
+                <ng-container matColumnDef="maxCandidates">
+                  <th mat-header-cell *matHeaderCellDef>Số ứng viên tối đa</th>
+                  <td mat-cell *matCellDef="let c">{{ c.maxCandidates ?? '—' }}</td>
+                </ng-container>
+                <ng-container matColumnDef="createdAt">
+                  <th mat-header-cell *matHeaderCellDef>Tạo lúc</th>
+                  <td mat-cell *matCellDef="let c">{{ c.createdAt | date: 'short' }}</td>
+                </ng-container>
+                <tr mat-header-row *matHeaderRowDef="cols"></tr>
+                <tr mat-row *matRowDef="let row; columns: cols"></tr>
+              </table>
+            </div>
           }
         </mat-card-content>
       </mat-card>
@@ -108,8 +110,19 @@ import { Spinner } from '../../../shared/ui/spinner';
       .f-status {
         width: 180px;
       }
+      /*
+       * F24 — 6 cột không vừa màn hẹp. overflow-x nằm ở KHUNG BỌC để bảng cuộn ngang
+       * bên trong nó, còn <body> thì không bao giờ cuộn ngang. min-width là vế bắt buộc:
+       * chỉ có width:100% thì bảng co lại vừa khung và các cột bị bóp/gãy dòng thay vì
+       * cuộn. 700px vẫn nhỏ hơn bề rộng nội dung thật ở 1280px ⇒ desktop không đổi.
+       */
+      .tbl-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
       .tbl {
         width: 100%;
+        min-width: 700px;
       }
       code {
         font-size: 12px;

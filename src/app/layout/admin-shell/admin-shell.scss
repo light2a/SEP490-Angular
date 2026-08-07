@@ -37,11 +37,27 @@
   opacity: 1 !important;
 }
 
-@media (max-width: 720px) {
+/*
+ * F24 — ngưỡng phải KHỚP `SHELL_NARROW_QUERY` trong shell-sidenav.ts, nếu không thì chế độ
+ * sidenav và padding lật ở hai điểm khác nhau. Ở dải này sidenav là overlay nên bề rộng của nó
+ * không còn bóp nội dung.
+ */
+@media (max-width: 767.98px) {
   .sidenav {
-    width: 220px;
+    width: 260px;
   }
   .content {
     padding: 16px;
+  }
+}
+
+/*
+ * Material hạ mat-toolbar 64px -> 56px tại đúng `max-width: 599px`
+ * (--mat-toolbar-mobile-height). Không trừ theo đúng số thì .container cao quá 8px và trang
+ * sinh thêm một thanh cuộn dọc thừa trên điện thoại.
+ */
+@media (max-width: 599px) {
+  .container {
+    height: calc(100vh - 56px);
   }
 }

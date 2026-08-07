@@ -92,92 +92,94 @@ import { Spinner } from '../../../shared/ui/spinner';
           } @else if (!packages().length) {
             <app-empty-state icon="inventory_2" message="Chưa có gói nào." />
           } @else {
-            <table mat-table [dataSource]="packages()" class="tbl">
-              <ng-container matColumnDef="name">
-                <th mat-header-cell *matHeaderCellDef>Tên</th>
-                <td mat-cell *matCellDef="let p">
-                  @if (editId() === p.id) {
-                    <input class="edit-in" [value]="editName()" (input)="editName.set($any($event.target).value)" />
-                  } @else {
-                    {{ p.name }}
-                  }
-                </td>
-              </ng-container>
-              <ng-container matColumnDef="type">
-                <th mat-header-cell *matHeaderCellDef>Loại</th>
-                <td mat-cell *matCellDef="let p">{{ label(p.type) }}</td>
-              </ng-container>
-              <ng-container matColumnDef="priceVnd">
-                <th mat-header-cell *matHeaderCellDef>Giá (VND)</th>
-                <td mat-cell *matCellDef="let p">
-                  @if (editId() === p.id) {
-                    <input
-                      class="edit-in num"
-                      type="number"
-                      [value]="editPrice()"
-                      (input)="editPrice.set($any($event.target).valueAsNumber)"
+            <div class="tbl-wrap">
+              <table mat-table [dataSource]="packages()" class="tbl">
+                <ng-container matColumnDef="name">
+                  <th mat-header-cell *matHeaderCellDef>Tên</th>
+                  <td mat-cell *matCellDef="let p">
+                    @if (editId() === p.id) {
+                      <input class="edit-in" [value]="editName()" (input)="editName.set($any($event.target).value)" />
+                    } @else {
+                      {{ p.name }}
+                    }
+                  </td>
+                </ng-container>
+                <ng-container matColumnDef="type">
+                  <th mat-header-cell *matHeaderCellDef>Loại</th>
+                  <td mat-cell *matCellDef="let p">{{ label(p.type) }}</td>
+                </ng-container>
+                <ng-container matColumnDef="priceVnd">
+                  <th mat-header-cell *matHeaderCellDef>Giá (VND)</th>
+                  <td mat-cell *matCellDef="let p">
+                    @if (editId() === p.id) {
+                      <input
+                        class="edit-in num"
+                        type="number"
+                        [value]="editPrice()"
+                        (input)="editPrice.set($any($event.target).valueAsNumber)"
+                      />
+                    } @else {
+                      {{ p.priceVnd | number: '1.0-0' }}
+                    }
+                  </td>
+                </ng-container>
+                <ng-container matColumnDef="interviewCredits">
+                  <th mat-header-cell *matHeaderCellDef>Credit</th>
+                  <td mat-cell *matCellDef="let p">
+                    @if (editId() === p.id) {
+                      <input
+                        class="edit-in num"
+                        type="number"
+                        [value]="editCredits() ?? ''"
+                        (input)="editCredits.set($any($event.target).valueAsNumber)"
+                      />
+                    } @else {
+                      {{ p.interviewCredits ?? '—' }}
+                    }
+                  </td>
+                </ng-container>
+                <ng-container matColumnDef="durationDays">
+                  <th mat-header-cell *matHeaderCellDef>Số ngày</th>
+                  <td mat-cell *matCellDef="let p">{{ p.durationDays ?? '—' }}</td>
+                </ng-container>
+                <ng-container matColumnDef="isActive">
+                  <th mat-header-cell *matHeaderCellDef>Trạng thái</th>
+                  <td mat-cell *matCellDef="let p">
+                    <mat-slide-toggle
+                      [checked]="p.isActive"
+                      [disabled]="busyId() === p.id || editId() === p.id"
+                      (change)="toggleActive(p, $event.checked)"
                     />
-                  } @else {
-                    {{ p.priceVnd | number: '1.0-0' }}
-                  }
-                </td>
-              </ng-container>
-              <ng-container matColumnDef="interviewCredits">
-                <th mat-header-cell *matHeaderCellDef>Credit</th>
-                <td mat-cell *matCellDef="let p">
-                  @if (editId() === p.id) {
-                    <input
-                      class="edit-in num"
-                      type="number"
-                      [value]="editCredits() ?? ''"
-                      (input)="editCredits.set($any($event.target).valueAsNumber)"
-                    />
-                  } @else {
-                    {{ p.interviewCredits ?? '—' }}
-                  }
-                </td>
-              </ng-container>
-              <ng-container matColumnDef="durationDays">
-                <th mat-header-cell *matHeaderCellDef>Số ngày</th>
-                <td mat-cell *matCellDef="let p">{{ p.durationDays ?? '—' }}</td>
-              </ng-container>
-              <ng-container matColumnDef="isActive">
-                <th mat-header-cell *matHeaderCellDef>Trạng thái</th>
-                <td mat-cell *matCellDef="let p">
-                  <mat-slide-toggle
-                    [checked]="p.isActive"
-                    [disabled]="busyId() === p.id || editId() === p.id"
-                    (change)="toggleActive(p, $event.checked)"
-                  />
-                </td>
-              </ng-container>
-              <ng-container matColumnDef="createdAt">
-                <th mat-header-cell *matHeaderCellDef>Ngày tạo</th>
-                <td mat-cell *matCellDef="let p">{{ p.createdAt | date: 'short' }}</td>
-              </ng-container>
-              <ng-container matColumnDef="actions">
-                <th mat-header-cell *matHeaderCellDef></th>
-                <td mat-cell *matCellDef="let p">
-                  @if (editId() === p.id) {
-                    <button mat-icon-button color="primary" [disabled]="busyId() === p.id" (click)="saveEdit(p)" title="Lưu">
-                      <mat-icon>check</mat-icon>
-                    </button>
-                    <button mat-icon-button [disabled]="busyId() === p.id" (click)="cancelEdit()" title="Huỷ">
-                      <mat-icon>close</mat-icon>
-                    </button>
-                  } @else {
-                    <button mat-icon-button [disabled]="busyId() === p.id" (click)="startEdit(p)" title="Sửa">
-                      <mat-icon>edit</mat-icon>
-                    </button>
-                    <button mat-icon-button color="warn" [disabled]="busyId() === p.id" (click)="remove(p)" title="Xoá">
-                      <mat-icon>delete</mat-icon>
-                    </button>
-                  }
-                </td>
-              </ng-container>
-              <tr mat-header-row *matHeaderRowDef="cols"></tr>
-              <tr mat-row *matRowDef="let row; columns: cols"></tr>
-            </table>
+                  </td>
+                </ng-container>
+                <ng-container matColumnDef="createdAt">
+                  <th mat-header-cell *matHeaderCellDef>Ngày tạo</th>
+                  <td mat-cell *matCellDef="let p">{{ p.createdAt | date: 'short' }}</td>
+                </ng-container>
+                <ng-container matColumnDef="actions">
+                  <th mat-header-cell *matHeaderCellDef></th>
+                  <td mat-cell *matCellDef="let p">
+                    @if (editId() === p.id) {
+                      <button mat-icon-button color="primary" [disabled]="busyId() === p.id" (click)="saveEdit(p)" title="Lưu">
+                        <mat-icon>check</mat-icon>
+                      </button>
+                      <button mat-icon-button [disabled]="busyId() === p.id" (click)="cancelEdit()" title="Huỷ">
+                        <mat-icon>close</mat-icon>
+                      </button>
+                    } @else {
+                      <button mat-icon-button [disabled]="busyId() === p.id" (click)="startEdit(p)" title="Sửa">
+                        <mat-icon>edit</mat-icon>
+                      </button>
+                      <button mat-icon-button color="warn" [disabled]="busyId() === p.id" (click)="remove(p)" title="Xoá">
+                        <mat-icon>delete</mat-icon>
+                      </button>
+                    }
+                  </td>
+                </ng-container>
+                <tr mat-header-row *matHeaderRowDef="cols"></tr>
+                <tr mat-row *matRowDef="let row; columns: cols"></tr>
+              </table>
+            </div>
           }
         </mat-card-content>
       </mat-card>
@@ -209,8 +211,19 @@ import { Spinner } from '../../../shared/ui/spinner';
       .f-num {
         width: 140px;
       }
+      /*
+       * F24 — 8 cột không vừa màn hẹp. overflow-x nằm ở KHUNG BỌC để bảng cuộn ngang
+       * bên trong nó, còn <body> thì không bao giờ cuộn ngang. min-width là vế bắt buộc:
+       * chỉ có width:100% thì bảng co lại vừa khung và các cột bị bóp/gãy dòng thay vì
+       * cuộn. 880px vẫn nhỏ hơn bề rộng nội dung thật ở 1280px ⇒ desktop không đổi.
+       */
+      .tbl-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
       .tbl {
         width: 100%;
+        min-width: 880px;
       }
       .edit-in {
         width: 100%;

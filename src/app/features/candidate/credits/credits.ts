@@ -1,9 +1,10 @@
 import { DatePipe } from '@angular/common';
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
+import { RouterLink } from '@angular/router';
 import { PaymentApi } from '../../../core/api/payment.api';
 import { NotifyService } from '../../../core/notify.service';
 import {
@@ -25,6 +26,7 @@ import { Spinner } from '../../../shared/ui/spinner';
     MatButtonModule,
     MatIconModule,
     MatListModule,
+    RouterLink,
     VndPipe,
     OrderStatusPipe,
     PackageTypePipe,
@@ -47,6 +49,32 @@ export class Credits {
   readonly orders = signal<OrderResponse[]>([]);
   readonly loading = signal(true);
   readonly buying = signal<string | null>(null);
+
+  /**
+   * BK32 — ví trông như CHƯA TỪNG tồn tại ⇒ mời dùng suất dùng thử thay vì hiện "0 credit".
+   *
+   * Người mới đăng ký THẬT SỰ luyện được ngay: ví (kèm suất dùng thử F7) chỉ được tạo ở lần
+   * reserve đầu tiên, còn `GET /me/account` là endpoint chỉ-đọc nên nó trả ví rỗng toàn số 0.
+   * Hiện "0 credit" ở đúng bước đầu của phễu khiến người dùng bỏ đi hoặc đi mua gói mà không cần.
+   *
+   * `freeCreditsGranted` là dấu hiệu duy nhất phân biệt "chưa có ví" với "đã có ví và tiêu hết
+   * quà" (ví đã nhận quà thì > 0 vĩnh viễn). `orders().length === 0` là vế BẮT BUỘC cho ca suất
+   * dùng thử bị TẮT bằng cấu hình: lúc đó người đã mua gói rồi tiêu hết cũng có mọi số bằng 0,
+   * mà họ không còn suất nào — mời họ dùng thử là nói sai.
+   *
+   * CỐ Ý không nêu con số suất dùng thử: đó là cấu hình phía backend (`Billing:FreeTrialCredits`,
+   * 0 = tắt) mà endpoint này không trả về, nên hứa một con số là hứa điều FE không đọc được.
+   */
+  readonly noWalletYet = computed(() => {
+    const acc = this.account();
+    return (
+      acc != null &&
+      acc.remainingCredits === 0 &&
+      acc.reservedCredits === 0 &&
+      acc.freeCreditsGranted === 0 &&
+      this.orders().length === 0
+    );
+  });
 
   constructor() {
     this.load();

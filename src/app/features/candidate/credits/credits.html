@@ -4,7 +4,23 @@
 @if (loading()) {
   <app-spinner />
 } @else {
-  @if (account(); as acc) {
+  <!-- BK32: ví chưa từng tồn tại → mời dùng suất dùng thử, đừng hiện "0 credit" cho người
+       thật sự luyện được ngay (ví + suất dùng thử chỉ sinh ra ở lần bắt đầu buổi đầu tiên). -->
+  @if (noWalletYet()) {
+    <mat-card class="trial">
+      <mat-icon class="trial-icon">card_giftcard</mat-icon>
+      <div class="trial-body">
+        <h2 class="trial-title">Bạn chưa có ví credit</h2>
+        <p class="trial-text">
+          Buổi luyện đầu tiên dùng suất dùng thử miễn phí — ví credit được tạo ngay khi bạn bắt
+          đầu. Chưa cần mua gói.
+        </p>
+        <a mat-flat-button color="primary" routerLink="/candidate/practice">
+          <mat-icon>play_arrow</mat-icon> Bắt đầu luyện
+        </a>
+      </div>
+    </mat-card>
+  } @else if (account(); as acc) {
     <mat-card class="balance">
       <div class="bal-main">
         <span class="bal-num">{{ acc.remainingCredits }}</span>
