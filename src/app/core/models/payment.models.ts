@@ -20,6 +20,15 @@ export interface CreditAccountResponse {
   status: CreditAccountStatus;
   remainingCredits: number;
   reservedCredits: number;
+  /**
+   * F7 — tổng số credit dùng thử ĐÃ ĐƯỢC TẶNG cho ví này (không phải số còn lại). 0 với mọi ví Org
+   * và với ví chưa từng tồn tại; > 0 vĩnh viễn sau khi đã tặng, kể cả khi đã tiêu hết.
+   *
+   * ⚠ Đây là dấu hiệu DUY NHẤT phân biệt "chưa có ví" với "đã có ví và tiêu hết quà": khi chủ ví
+   * chưa có row `credit_accounts`, backend cố ý trả ví rỗng toàn số 0 và KHÔNG hứa trước suất dùng
+   * thử (cấu hình có thể đổi/tắt) ⇒ không có field nào nói "còn N suất chưa cấp".
+   */
+  freeCreditsGranted: number;
   creditLimit?: number | null;
   periodUsage?: number | null;
   updatedAt: string;
