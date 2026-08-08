@@ -14,7 +14,7 @@ import { VndPipe } from '../../../shared/pipes';
  * chúng sẽ lệch nhau, mà đây đúng là chỗ không được lệch (huỷ đơn là hành động không đảo được:
  * trạng thái terminal của đơn là bất biến, PAY-10).
  *
- * ⚠ Vị trí file: vòng này worker chỉ được sửa `features/*/credits/**` nên helper dùng chung tạm
+ * ⚠ Vị trí file: vòng này worker chỉ được sửa hai thư mục `credits` nên helper dùng chung tạm
  * nằm ở đây; dời sang `shared/` khi gộp là an toàn.
  */
 @Injectable({ providedIn: 'root' })

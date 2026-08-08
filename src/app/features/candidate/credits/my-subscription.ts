@@ -19,7 +19,7 @@ import { Spinner } from '../../../shared/ui/spinner';
  * và Employer**: backend suy chủ thuê bao từ JWT (`org_id` → thuê bao Org, không → cá nhân) nên
  * một màn phục vụ được cả hai; chỉ đường dẫn "mua gói" là khác nhau và được suy từ URL.
  *
- * ⚠ Vị trí file: vòng này worker chỉ được sửa `features/*/credits/**`, nên component dùng chung
+ * ⚠ Vị trí file: vòng này worker chỉ được sửa hai thư mục `credits`, nên component dùng chung
  * tạm nằm ở đây thay vì `shared/`. Dời sang `shared/` khi gộp là an toàn (không phụ thuộc gì
  * riêng của khu vực Candidate).
  *
