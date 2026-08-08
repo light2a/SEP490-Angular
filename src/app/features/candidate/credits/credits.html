@@ -70,7 +70,11 @@
             <span matListItemMeta>
               @if (o.status === OrderStatus.Pending) {
                 <button mat-button (click)="checkStatus(o)">Kiểm tra</button>
+                <button mat-button (click)="cancelOrder(o)" [disabled]="cancelling() === o.id">
+                  Huỷ đơn
+                </button>
               }
+              <button mat-button (click)="openOrder(o)">Chi tiết</button>
             </span>
           </mat-list-item>
         }

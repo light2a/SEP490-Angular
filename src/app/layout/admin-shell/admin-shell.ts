@@ -54,6 +54,11 @@ export class AdminShell {
     { path: 'packages', icon: 'inventory_2', label: 'Gói credit' },
     { path: 'knowledge', icon: 'menu_book', label: 'Nguồn tri thức' },
     { path: 'billing', icon: 'event_repeat', label: 'Chốt kỳ postpaid' },
+    { path: 'plans', icon: 'layers', label: 'Gói thuê bao' },
+    { path: 'subscriptions', icon: 'workspace_premium', label: 'Cấp thuê bao' },
+    { path: 'wallet', icon: 'account_balance_wallet', label: 'Ví & chế độ TT' },
+    { path: 'analytics', icon: 'insights', label: 'Thống kê vận hành' },
+    { path: 'prompts', icon: 'edit_note', label: 'Prompt AI' },
   ];
 
   toggle(): void {

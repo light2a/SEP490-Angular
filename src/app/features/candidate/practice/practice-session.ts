@@ -1,4 +1,5 @@
 import { DecimalPipe } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import {
   Component,
   DestroyRef,
@@ -36,6 +37,8 @@ import { AnswerStatusPipe, JobCategoryPipe, SessionStatusPipe } from '../../../s
 import { createCountdown } from '../../../shared/timing/countdown';
 import { Spinner } from '../../../shared/ui/spinner';
 import { AudioRecorder, RecordedAudio } from './audio-recorder';
+import { CriterionEvidencePanel } from './criterion-evidence-panel';
+import { CvVsAnswerPanel } from './cv-vs-answer-panel';
 import { DeliveryMetricsPanel } from './delivery-metrics';
 
 const POLL_STATUS = ['GeneratingQuestions', 'Scoring', 'Completed'];
@@ -53,6 +56,8 @@ const ANSWER_PENDING = ['Uploaded', 'Transcribing', 'Scoring'];
     MatDividerModule,
     MatProgressBarModule,
     AudioRecorder,
+    CriterionEvidencePanel,
+    CvVsAnswerPanel,
     DeliveryMetricsPanel,
     InterviewAvatar,
     RadarChart,
@@ -229,6 +234,51 @@ export class PracticeSession implements OnInit {
   }
 
   /**
+   * Evidence-Driven Interviewer — dẫn chứng AI thu được cho từng tiêu chí trong CẢ buổi.
+   *
+   * `null` = buổi cũ / chưa bật theo dõi ⇒ không hiện gì (khác hẳn "đã theo dõi mà không thu được
+   * gì", vốn là một kết luận thật sự về bài làm).
+   */
+  readonly criterionEvidence = computed(() => {
+    const list = this.session()?.criterionEvidence;
+    return list && list.length ? list : null;
+  });
+
+  // ── Nghe lại bản ghi âm của chính mình ──────────────────────────────────────────────────
+  /**
+   * answerId → object URL đã tải. Phải qua HttpClient chứ không gán thẳng `audioUrl` vào
+   * `<audio src>`: endpoint đòi JWT mà thẻ `<audio>` không đính Authorization ⇒ 401, và trình phát
+   * chỉ báo "không phát được" nên rất khó truy ra nguyên nhân.
+   */
+  private readonly audioUrls = signal<Record<string, string>>({});
+  readonly loadingAudioId = signal<string | null>(null);
+
+  audioSrc(answerId: string): string | null {
+    return this.audioUrls()[answerId] ?? null;
+  }
+
+  loadAudio(answerId: string): void {
+    if (this.audioUrls()[answerId] || this.loadingAudioId()) return;
+    this.loadingAudioId.set(answerId);
+    this.api.answerAudio(this.sessionId(), answerId).subscribe({
+      next: (blob) => {
+        this.loadingAudioId.set(null);
+        this.audioUrls.update((m) => ({ ...m, [answerId]: URL.createObjectURL(blob) }));
+      },
+      error: (e: HttpErrorResponse) => {
+        this.loadingAudioId.set(null);
+        // 404 ở đây thường là file đã bị dọn khỏi S3 theo retention, không phải hỏng hệ thống —
+        // nói đúng lý do để người dùng khỏi tưởng mất bài.
+        this.notify.error(
+          e.status === 404
+            ? 'Bản ghi âm không còn trên hệ thống.'
+            : (extractErrorMessage(e) ?? 'Không tải được bản ghi âm.'),
+        );
+      },
+    });
+  }
+
+  /**
    * Dự phòng cho buổi chấm TRƯỚC 2026-07-18: hồi đó điểm per-answer không mang tên tiêu chí nên
    * breakdown dưới từng câu hiện trơ "Điểm tiêu chí". Tên khi ấy chỉ có ở `result.criteriaScores[]`
    * (cùng response) → tra ngược theo id.
@@ -252,6 +302,9 @@ export class PracticeSession implements OnInit {
     this.destroyRef.onDestroy(() => {
       this.stopPoll();
       this.countdown.stop();
+      // Object URL sống tới khi document bị bỏ → rời trang mà không revoke là rò bộ nhớ theo
+      // từng lần nghe lại (blob audio không nhỏ).
+      for (const url of Object.values(this.audioUrls())) URL.revokeObjectURL(url);
     });
   }
 

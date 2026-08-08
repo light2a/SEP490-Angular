@@ -52,6 +52,7 @@ export class CandidateShell {
     { path: 'roadmaps', icon: 'map', label: 'Lộ trình ôn' },
     { path: 'rubrics', icon: 'rule', label: 'Tiêu chí (rubric)' },
     { path: 'credits', icon: 'account_balance_wallet', label: 'Credit & Thanh toán' },
+    { path: 'subscription', icon: 'card_membership', label: 'Gói của tôi' },
   ];
 
   toggle(): void {

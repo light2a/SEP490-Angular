@@ -3,6 +3,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
+import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { PaymentApi } from '../../../core/api/payment.api';
 import { extractErrorMessage } from '../../../core/api/http-utils';
@@ -12,6 +13,7 @@ import { InvoiceResponse, InvoiceStatus } from '../../../core/models';
 import { VndPipe } from '../../../shared/pipes';
 import { EmptyState } from '../../../shared/ui/empty-state';
 import { Spinner } from '../../../shared/ui/spinner';
+import { InvoiceDetailDialog, InvoiceDetailDialogData } from './invoice-detail-dialog';
 
 const INVOICE_STATUS_LABEL: Record<number, string> = {
   0: 'Đã phát hành',
@@ -72,16 +74,19 @@ const INVOICE_STATUS_LABEL: Record<number, string> = {
               <span>{{ inv.createdAt | date: 'short' }}</span>
             </div>
 
-            @if (canPay() && isUnpaid(inv.status)) {
-              <button
-                mat-flat-button
-                color="primary"
-                (click)="pay(inv)"
-                [disabled]="paying() === inv.id"
-              >
-                Thanh toán
-              </button>
-            }
+            <div class="acts">
+              <button mat-button (click)="openDetail(inv)">Chi tiết</button>
+              @if (canPay() && isUnpaid(inv.status)) {
+                <button
+                  mat-flat-button
+                  color="primary"
+                  (click)="pay(inv)"
+                  [disabled]="paying() === inv.id"
+                >
+                  Thanh toán
+                </button>
+              }
+            </div>
           </mat-card>
         }
       </div>
@@ -131,7 +136,10 @@ const INVOICE_STATUS_LABEL: Record<number, string> = {
         font-weight: 600;
         color: var(--mat-sys-primary);
       }
-      .inv button {
+      .acts {
+        display: flex;
+        gap: 8px;
+        align-items: center;
         margin-top: 8px;
       }
       .chip {
@@ -164,6 +172,7 @@ export class EmployerInvoices {
   private api = inject(PaymentApi);
   private notify = inject(NotifyService);
   private auth = inject(AuthStore);
+  private dialog = inject(MatDialog);
 
   readonly invoices = signal<InvoiceResponse[]>([]);
   readonly loading = signal(true);
@@ -205,6 +214,14 @@ export class EmployerInvoices {
         this.paying.set(null);
         this.notify.error(extractErrorMessage(e) ?? 'Không thanh toán được hoá đơn.');
       },
+    });
+  }
+
+  /** Đọc lại hoá đơn từ server (không nhận object trong danh sách — nó có thể đã cũ). */
+  openDetail(inv: InvoiceResponse): void {
+    this.dialog.open(InvoiceDetailDialog, {
+      data: { invoiceId: inv.id } satisfies InvoiceDetailDialogData,
+      width: '460px',
     });
   }
 

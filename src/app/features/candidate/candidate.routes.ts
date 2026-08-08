@@ -52,5 +52,25 @@ export const CANDIDATE_ROUTES: Routes = [
     path: 'payment/:result',
     loadComponent: () => import('./credits/payment-return').then((m) => m.PaymentReturn),
   },
+  {
+    path: 'subscription',
+    loadComponent: () => import('./credits/my-subscription').then((m) => m.MySubscription),
+  },
+  // ⚠ Mọi route MỚI phải nằm TRÊN wildcard `**` — đặt dưới thì không bao giờ khớp, người dùng bị
+  // đá về dashboard mà không có lỗi nào để lần ra.
+  {
+    path: 'files/:id',
+    loadComponent: () => import('./files/file-detail').then((m) => m.FileDetail),
+  },
+  {
+    path: 'cv-analysis/:id',
+    loadComponent: () =>
+      import('./cv-analysis/cv-analysis-detail').then((m) => m.CvAnalysisDetail),
+  },
+  {
+    path: 'repo-analysis/:id',
+    loadComponent: () =>
+      import('./repo-analysis/repo-analysis-detail').then((m) => m.RepoAnalysisDetail),
+  },
   { path: '**', redirectTo: 'dashboard' },
 ];

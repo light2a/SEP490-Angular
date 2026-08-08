@@ -1,0 +1,92 @@
+<a mat-button routerLink="/candidate/repo-analysis">
+  <mat-icon>arrow_back</mat-icon> Phân tích repo GitHub
+</a>
+
+@if (loading()) {
+  <app-spinner message="Đang tải kết quả phân tích..." />
+} @else if (notFound()) {
+  <p class="muted">Không tìm thấy kết quả phân tích này.</p>
+} @else if (analysis(); as a) {
+  <div class="head">
+    <mat-icon>code</mat-icon>
+    <h1>{{ a.repoOwner }}/{{ a.repoName }}</h1>
+  </div>
+
+  <div class="meta">
+    <span>{{ a.jobCategory | jobCategory }}</span>
+    <span><mat-icon inline>star</mat-icon> {{ a.stars | number }} sao</span>
+    @if (a.primaryLanguage) {
+      <span>Ngôn ngữ chính: {{ a.primaryLanguage }}</span>
+    }
+    @if (a.commitSha) {
+      <!-- Mốc commit: kết quả này ứng với repo Ở THỜI ĐIỂM ĐÓ, không phải bản mới nhất. -->
+      <span>Commit: {{ a.commitSha.slice(0, 7) }}</span>
+    }
+    <span>{{ a.createdAt | date: 'short' }}</span>
+    <a [href]="a.repoUrl" target="_blank" rel="noopener noreferrer">Mở trên GitHub</a>
+  </div>
+
+  <mat-card class="card">
+    @if (languageShares().length) {
+      <mat-chip-set>
+        @for (l of languageShares(); track l.name) {
+          <mat-chip>{{ l.name }} {{ l.pct }}%</mat-chip>
+        }
+      </mat-chip-set>
+    }
+
+    <h4>Tổng quan</h4>
+    <p class="summary">{{ a.summary }}</p>
+
+    @if (a.techStack.length) {
+      <h4>Tech stack</h4>
+      <mat-chip-set>
+        @for (t of a.techStack; track t) {
+          <mat-chip>{{ t }}</mat-chip>
+        }
+      </mat-chip-set>
+    }
+
+    @if (a.strengths.length) {
+      <h4>Điểm mạnh</h4>
+      <ul>
+        @for (s of a.strengths; track s) {
+          <li>{{ s }}</li>
+        }
+      </ul>
+    }
+
+    @if (a.weaknesses.length) {
+      <h4>Điểm yếu</h4>
+      <ul>
+        @for (w of a.weaknesses; track w) {
+          <li>{{ w }}</li>
+        }
+      </ul>
+    }
+
+    @if (a.suggestions.length) {
+      <h4>Gợi ý cải thiện</h4>
+      <ul>
+        @for (s of a.suggestions; track s) {
+          <li>{{ s }}</li>
+        }
+      </ul>
+    }
+
+    @if (a.interviewTalkingPoints.length) {
+      <h4>Nên kể gì khi đi phỏng vấn</h4>
+      <ul>
+        @for (p of a.interviewTalkingPoints; track p) {
+          <li>{{ p }}</li>
+        }
+      </ul>
+    }
+
+    @if (a.jdMatch; as jd) {
+      <h4>Khớp JD ({{ jd.score }}%)</h4>
+      <p>Kỹ năng khớp: {{ jd.matchedSkills.join(', ') || '—' }}</p>
+      <p>Còn thiếu: {{ jd.missingSkills.join(', ') || '—' }}</p>
+    }
+  </mat-card>
+}

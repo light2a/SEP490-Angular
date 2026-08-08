@@ -22,3 +22,14 @@ h1 {
 .head h3 {
   margin: 0;
 }
+
+/* Tên file dẫn sang trang chi tiết — giữ màu link để thấy rõ là bấm được (danh sách này
+   toàn nút icon, một dòng chữ trơn bấm được sẽ không ai nhận ra). */
+.file-link {
+  color: var(--mat-sys-primary);
+  text-decoration: none;
+  cursor: pointer;
+}
+.file-link:hover {
+  text-decoration: underline;
+}

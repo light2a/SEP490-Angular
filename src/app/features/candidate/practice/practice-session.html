@@ -63,6 +63,27 @@
         }
 
         @if (q.answer) {
+          <!--
+            Nghe lại chính bản thu của mình. Nút tải trước rồi mới dựng `<audio>` vì endpoint đòi
+            JWT: gán thẳng `audioUrl` vào `src` sẽ ra 401 và trình phát chỉ hiện "không phát được".
+            `audioUrl` null = BE không còn giữ file (retention) → không hiện nút, đỡ hứa suông.
+          -->
+          @if (q.answer.audioUrl) {
+            <div class="playback">
+              @if (audioSrc(q.answer.id); as src) {
+                <audio controls [src]="src"></audio>
+              } @else {
+                <button
+                  mat-stroked-button
+                  (click)="loadAudio(q.answer.id)"
+                  [disabled]="loadingAudioId() === q.answer.id"
+                >
+                  <mat-icon>play_circle</mat-icon>
+                  {{ loadingAudioId() === q.answer.id ? 'Đang tải…' : 'Nghe lại bản thu' }}
+                </button>
+              }
+            </div>
+          }
           @if (q.answer.transcript) {
             <p class="tr"><b>Bản ghi:</b> {{ q.answer.transcript }}</p>
           }
@@ -170,6 +191,8 @@
     }
   }
 
+  <app-criterion-evidence-panel [evidence]="criterionEvidence()" />
+
   @if (result(); as r) {
     <mat-card class="result">
       <h2>Kết quả</h2>
@@ -225,6 +248,9 @@
           </div>
         </div>
       }
+
+      <!-- BC8 — panel tự ẩn khi không có gì để nói (không gắn CV / cả hai vế rỗng). -->
+      <app-cv-vs-answer-panel [source]="r.cvVsAnswer ?? null" />
     </mat-card>
   }
 }

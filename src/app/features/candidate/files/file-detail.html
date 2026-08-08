@@ -1,0 +1,66 @@
+<a mat-button routerLink="/candidate/files"><mat-icon>arrow_back</mat-icon> CV / JD</a>
+
+<input type="file" #picker hidden accept="application/pdf" (change)="onReplace($event)" />
+
+@if (replacing()) {
+  <mat-progress-bar mode="indeterminate" />
+}
+
+@if (loading()) {
+  <app-spinner message="Đang tải thông tin file..." />
+} @else if (file(); as f) {
+  <div class="head">
+    <mat-icon>picture_as_pdf</mat-icon>
+    <h1>{{ f.originalName }}</h1>
+  </div>
+
+  <div class="meta">
+    <span>Loại: {{ f.fileType === 'cv' ? 'CV' : 'JD' }}</span>
+    <span>{{ f.fileSize / 1024 | number: '1.0-0' }} KB</span>
+    <span>{{ f.mimeType }}</span>
+    <span>Bóc tách: {{ f.parseStatus }}</span>
+    <span>Tải lên: {{ f.createdAt | date: 'short' }}</span>
+    @if (f.updatedAt && f.updatedAt !== f.createdAt) {
+      <span>Cập nhật: {{ f.updatedAt | date: 'short' }}</span>
+    }
+  </div>
+
+  <div class="actions">
+    <button mat-stroked-button (click)="download()">
+      <mat-icon>open_in_new</mat-icon> Xem PDF
+    </button>
+    <!--
+      "Thay file" giữ nguyên id ⇒ mọi buổi luyện / bản phân tích cũ vẫn trỏ đúng. Nói rõ điều đó
+      ngay trên nút, vì lựa chọn tự nhiên của người dùng là xoá rồi tải lại — và cái đó thì làm
+      đứt tham chiếu.
+    -->
+    <button mat-stroked-button (click)="picker.click()" [disabled]="replacing()">
+      <mat-icon>swap_horiz</mat-icon> Thay bằng bản mới
+    </button>
+    <button mat-stroked-button color="warn" (click)="remove()">
+      <mat-icon>delete</mat-icon> Xoá
+    </button>
+  </div>
+  <p class="muted">Thay file giữ nguyên liên kết với các buổi luyện và bản phân tích đã có.</p>
+
+  <mat-card class="card">
+    <h3>Nội dung AI đọc được</h3>
+    @if (loadingText()) {
+      <app-spinner [diameter]="24" />
+    } @else if (parsedText()) {
+      <!--
+        Đây là thứ THẬT SỰ đi vào prompt, không phải file PDF gốc. PDF scan / nhiều cột hay bị bóc
+        sai, và khi đó câu hỏi AI sinh ra sẽ lệch mà người dùng không hiểu vì sao — nên phải cho
+        xem được.
+      -->
+      <pre class="parsed">{{ parsedText() }}</pre>
+    } @else {
+      <p class="muted">
+        Chưa bóc được nội dung từ file này (thường gặp với PDF scan ảnh). AI sẽ không đọc được CV
+        này — hãy thử thay bằng bản PDF có chữ chọn được.
+      </p>
+    }
+  </mat-card>
+} @else {
+  <p class="muted">Không tìm thấy file.</p>
+}

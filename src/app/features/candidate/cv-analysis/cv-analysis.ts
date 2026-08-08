@@ -2,6 +2,7 @@ import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
@@ -29,6 +30,7 @@ import { Spinner } from '../../../shared/ui/spinner';
   selector: 'app-cv-analysis',
   imports: [
     DatePipe,
+    RouterLink,
     ReactiveFormsModule,
     MatCardModule,
     MatFormFieldModule,

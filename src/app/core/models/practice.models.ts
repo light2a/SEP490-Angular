@@ -11,8 +11,67 @@ export interface CreatePracticeSessionRequest {
   jdText?: string | null;
   /** F2 — thời lượng mỗi câu (giây). BE chỉ nhận 60/120/240; bỏ trống = 120. */
   timeLimitSec?: number | null;
-  /** F2b — số câu hỏi, 1..20. Bỏ trống = mặc định của AIService (5). */
+  /**
+   * F2b — **TỔNG số câu của buổi**, 1..20 (KHÔNG phải số câu gốc). Bỏ trống = mặc định BE.
+   *
+   * ⚠ Đây là chỗ dễ hiểu nhầm nhất của cả luồng: với phỏng vấn thích ứng (INT-17b), ngân sách này
+   * bị chia cho chiều sâu — gõ `5` với trần đào sâu 3 chỉ còn `ceil(5/4)` = **2 câu gốc**. Đừng tự
+   * suy số câu gốc ở FE: hỏi `GET /practice/session-options` (SC3), server tính bằng ĐÚNG luật tạo
+   * session nên hai bên không thể lệch.
+   */
   questionCount?: number | null;
+  /**
+   * Ngôn ngữ của BÀI PHỎNG VẤN (`'vi' | 'en'`) — câu hỏi, nhận xét, câu trả lời mẫu đều theo đây.
+   *
+   * ⚠ KHÔNG phải ngôn ngữ giao diện: người Việt luyện phỏng vấn tiếng Anh mà vẫn dùng UI tiếng Việt
+   * là ca bình thường. Đừng gộp field này với locale i18n sau này.
+   *
+   * Bỏ trống = `'vi'`. Gửi `'en'` khi BE chưa bật cờ `Interview:Bilingual:Enabled` → **400**, và
+   * `'en'` mà nhóm nghề chưa có rubric tiếng Anh cũng **400**.
+   */
+  language?: string | null;
+}
+
+/** SC3 — 1 preset số câu do SERVER tính (không phải hằng số FE). */
+export interface PracticeSessionPreset {
+  /** `'short' | 'medium' | 'long'` — BE có thể gộp/bỏ preset khi trần gói hẹp, đừng giả định đủ 3. */
+  key: string;
+  /** Tổng số câu của buổi (giá trị sẽ gửi vào `questionCount`). */
+  questionCount: number;
+  /** Số câu GỐC suy ra từ tổng — con số người dùng thực sự quan tâm. */
+  seedCount: number;
+  /**
+   * `seedCount >= contentCriteriaCount`. Là điều kiện CẦN, không đủ: đủ khe không bảo đảm AI rải
+   * mỗi câu gốc vào một tiêu chí khác nhau (SC1). Nhãn UI phải nói "đủ chỗ để phủ", đừng hứa "phủ".
+   */
+  coversAllCriteria: boolean;
+}
+
+/** SC3 — bảng tra tổng-câu → số-câu-gốc cho MỌI giá trị trong `[min..max]`. */
+export interface PracticeSessionPreview {
+  questionCount: number;
+  seedCount: number;
+}
+
+/**
+ * SC3 — `GET /interview/practice/session-options?jobCategory=&language=`.
+ *
+ * ⚠ `language` truyền vào PHẢI trùng ngôn ngữ sẽ dùng lúc tạo buổi: số tiêu chí nội dung
+ * (`contentCriteriaCount`) đọc từ rubric theo ngôn ngữ, lệch ngôn ngữ là preview dựng trên bộ
+ * rubric khác bộ rubric của buổi thật.
+ */
+export interface PracticeSessionOptions {
+  /** Tắt → không có khái niệm "câu gốc", `seedCount` luôn bằng `questionCount`. */
+  adaptiveEnabled: boolean;
+  maxDeepPerQuestion: number;
+  /** Số tiêu chí NỘI DUNG của rubric — sàn để một buổi có cơ hội phủ hết (INT-18). */
+  contentCriteriaCount: number;
+  questionCountMin: number;
+  /** Trần hiệu lực = min(trần hệ thống 20, trần theo gói) → có thể NHỎ HƠN 20. */
+  questionCountMax: number;
+  defaultQuestionCount: number;
+  presets: PracticeSessionPreset[];
+  preview: PracticeSessionPreview[];
 }
 
 export interface AnswerScore {
@@ -75,7 +134,48 @@ export interface AnswerResponse {
   sampleAnswer?: string | null;
   /** F11 (FR06) — null = chưa đo được, KHÁC "đo ra 0". Xem `DeliveryMetrics`. */
   deliveryMetrics?: DeliveryMetrics | null;
+  /**
+   * Đường nghe lại bản ghi âm của chính mình — BE dựng sẵn path GATEWAY đầy đủ
+   * (`/api/v1/interview/practice/sessions/{sid}/answers/{aid}/audio`); `null` = không còn file.
+   *
+   * ⚠ ĐỪNG gán thẳng vào `<audio src>`: endpoint đòi JWT mà thẻ `<audio>` không đính header
+   * Authorization ⇒ 401 và trình phát chỉ hiện "không phát được" (đúng bẫy đã ghi ở
+   * `PracticeApi.speech`). Phải tải blob qua HttpClient rồi tạo object URL.
+   */
+  audioUrl?: string | null;
 }
+
+/**
+ * Evidence-Driven Interviewer — trạng thái thu thập dẫn chứng theo từng tiêu chí của cả BUỔI.
+ *
+ * ⚠ Nằm ở **cấp session** (`PracticeSession.criterionEvidence`), KHÔNG phải trong từng answer —
+ * đây là trạng thái cộng dồn qua các lượt, không phải điểm của một câu.
+ */
+export interface CriterionEvidence {
+  criterionId: string;
+  criterionName: string;
+  /** `UNKNOWN` (chưa hỏi tới) · `PARTIAL` · `SATISFIED` · `FAILED` — CHECK phía DB. */
+  state: string;
+  /** Dẫn chứng AI ghi nhận được từ câu trả lời. */
+  evidenceFound: string[];
+  /** Thứ còn thiếu để kết luận tiêu chí này. */
+  missingEvidence: string[];
+  /** Đã đào sâu bao nhiêu lượt cho tiêu chí này. */
+  deepCount: number;
+  updatedAt: string;
+}
+
+/**
+ * Nhãn trạng thái dẫn chứng. Khai ở đây chứ không ở `enums.ts` vì đây là hợp đồng riêng của
+ * Interview và `state` là chuỗi tự do phía BE (chỉ ràng bằng CHECK) — tra không trúng thì hiện
+ * nguyên giá trị thô còn hơn hiện rỗng.
+ */
+export const CRITERION_EVIDENCE_STATE_LABEL: Record<string, string> = {
+  UNKNOWN: 'Chưa hỏi tới',
+  PARTIAL: 'Có một phần',
+  SATISFIED: 'Đã đủ dẫn chứng',
+  FAILED: 'Chưa đạt',
+};
 
 /**
  * RAG grounding (Contract 2/CITATION) — 1 nguồn uy tín mà câu hỏi được sinh dựa trên.
@@ -168,12 +268,18 @@ export interface PracticeSession {
   id: string;
   status: SessionStatus;
   jobCategory: JobCategory;
+  /** Ngôn ngữ BÀI PHỎNG VẤN (`'vi' | 'en'`) — xem `CreatePracticeSessionRequest.language`. */
+  language?: string | null;
+  /** Mức ứng viên tự khai lúc tạo buổi; BE mặc định `'Junior'` cho client cũ. */
+  seniority?: string | null;
   cvId?: string | null;
   jdId?: string | null;
   createdAt: string;
   completedAt?: string | null;
   questions: QuestionResponse[];
   result?: SessionResult | null;
+  /** `null` = buổi cũ / B2B chưa bật theo dõi dẫn chứng (KHÁC "đã theo dõi mà rỗng"). */
+  criterionEvidence?: CriterionEvidence[] | null;
 }
 
 export interface PracticeSessionSummary {

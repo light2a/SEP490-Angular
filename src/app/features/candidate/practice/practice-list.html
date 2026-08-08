@@ -15,6 +15,20 @@
       </mat-select>
     </mat-form-field>
 
+    <!--
+      Ngôn ngữ BÀI PHỎNG VẤN — cố ý KHÔNG gọi là "ngôn ngữ" trơn: đây là ngôn ngữ câu hỏi/nhận xét,
+      không đổi giao diện. Người Việt luyện phỏng vấn tiếng Anh là ca bình thường.
+    -->
+    <mat-form-field appearance="outline">
+      <mat-label>Ngôn ngữ phỏng vấn</mat-label>
+      <mat-select formControlName="language">
+        @for (l of languageOptions; track l.value) {
+          <mat-option [value]="l.value">{{ l.label }}</mat-option>
+        }
+      </mat-select>
+      <mat-hint>AI hỏi và nhận xét bằng ngôn ngữ này. Giao diện không đổi.</mat-hint>
+    </mat-form-field>
+
     <mat-form-field appearance="outline">
       <mat-label>CV (tuỳ chọn)</mat-label>
       <mat-select formControlName="cvId">
@@ -63,21 +77,85 @@
       <span class="field-hint">Hết giờ sẽ tự nộp câu trả lời đang ghi.</span>
     </div>
 
-    <!-- F2b — số câu. Trần 20 khớp guard BE (vượt → 400). -->
-    <mat-form-field appearance="outline">
-      <mat-label>Số câu hỏi</mat-label>
-      <input
-        matInput
-        type="number"
-        formControlName="questionCount"
-        [min]="questionCountMin"
-        [max]="questionCountMax"
-      />
-      <mat-hint>Từ {{ questionCountMin }} đến {{ questionCountMax }} câu.</mat-hint>
-      @if (form.controls.questionCount.invalid && form.controls.questionCount.touched) {
-        <mat-error>Số câu phải từ {{ questionCountMin }} đến {{ questionCountMax }}.</mat-error>
+    <!--
+      SC3 — độ dài buổi luyện.
+
+      Ô này gửi lên BE là TỔNG số câu, nhưng thứ người dùng nghĩ trong đầu khi gõ "5" lại là "5 câu
+      chính". Với phỏng vấn thích ứng, tổng bị chia cho chiều sâu nên 5 tổng chỉ còn 2 câu chính —
+      chênh lệch đó trước giờ hoàn toàn vô hình. Nay preset và số câu gốc đều do SERVER tính
+      (`/practice/session-options`) rồi hiện thẳng ra, thay vì bắt người dùng gõ số mù.
+    -->
+    <div class="field-block">
+      <span class="field-label">Độ dài buổi luyện</span>
+
+      @if (options(); as opts) {
+        @if (opts.presets.length) {
+          <div class="presets" data-testid="question-presets">
+            @for (p of opts.presets; track p.key) {
+              <button
+                type="button"
+                mat-stroked-button
+                class="preset"
+                [class.active]="activePresetKey() === p.key"
+                (click)="applyPreset(p.questionCount)"
+              >
+                {{ presetLabel(p.key) }} · {{ p.questionCount }} câu
+                @if (opts.adaptiveEnabled) {
+                  <span class="preset-seed">({{ p.seedCount }} câu chính)</span>
+                }
+              </button>
+            }
+          </div>
+        }
       }
-    </mat-form-field>
+
+      <mat-form-field appearance="outline" class="qc-field">
+        <mat-label>Tổng số câu</mat-label>
+        <input
+          matInput
+          type="number"
+          formControlName="questionCount"
+          [min]="options()?.questionCountMin ?? questionCountMin"
+          [max]="options()?.questionCountMax ?? questionCountMax"
+        />
+        <mat-hint>
+          Từ {{ options()?.questionCountMin ?? questionCountMin }} đến
+          {{ options()?.questionCountMax ?? questionCountMax }} câu.
+        </mat-hint>
+        @if (form.controls.questionCount.invalid && form.controls.questionCount.touched) {
+          <mat-error>
+            Số câu phải từ {{ options()?.questionCountMin ?? questionCountMin }} đến
+            {{ options()?.questionCountMax ?? questionCountMax }}.
+          </mat-error>
+        }
+      </mat-form-field>
+
+      <!--
+        Chỉ hiện khi thích ứng đang BẬT và tra được số câu gốc. Tắt thích ứng thì tổng = số câu
+        chính, nói thêm chỉ gây nhiễu; tra không ra thì im lặng còn hơn đoán (số này quyết định
+        người dùng chọn gói dài hay ngắn).
+      -->
+      @if (options()?.adaptiveEnabled && seedCount() !== null) {
+        <span class="field-hint" data-testid="seed-explain">
+          → <b>{{ seedCount() }} câu chính</b>, mỗi câu AI có thể hỏi sâu thêm tối đa
+          {{ options()?.maxDeepPerQuestion }} lần.
+        </span>
+        @if (coversAllCriteria() === false) {
+          <span class="field-warn" data-testid="coverage-warn">
+            <mat-icon>info</mat-icon>
+            Rubric có {{ options()?.contentCriteriaCount }} tiêu chí chuyên môn — với
+            {{ seedCount() }} câu chính, buổi này sẽ không chạm hết được. Tiêu chí không được hỏi
+            sẽ bị loại khỏi điểm chứ không tính 0.
+          </span>
+        }
+      }
+
+      @if (optionsError(); as err) {
+        <span class="field-warn" data-testid="options-error">
+          <mat-icon>warning</mat-icon> {{ err }}
+        </span>
+      }
+    </div>
 
     <button mat-flat-button color="primary" type="submit" [disabled]="creating()">
       <mat-icon>mic</mat-icon> Bắt đầu luyện (−1 credit)

@@ -14,7 +14,11 @@ import { extractErrorMessage } from '../../../core/api/http-utils';
 import { CampaignApi } from '../../../core/api/campaign.api';
 import { NotifyService } from '../../../core/notify.service';
 import {
+  CAMPAIGN_LANGUAGE_OPTIONS,
+  CAMPAIGN_SENIORITY_OPTIONS,
   CampaignResponse,
+  CampaignLanguage,
+  CampaignSeniority,
   CampaignStatus,
   CreateInvitationsResponse,
 } from '../../../core/models';
@@ -64,8 +68,20 @@ const STATUS_LABEL: Record<CampaignStatus, string> = {
 
         <div class="grid">
           <div class="item">
+            <span class="k">Cấp độ ứng viên</span>
+            <span class="v">{{ seniorityLabel(c.seniority) }}</span>
+          </div>
+          <div class="item">
+            <span class="k">Ngôn ngữ bài phỏng vấn</span>
+            <span class="v">{{ languageLabel(c.language) }}</span>
+          </div>
+          <div class="item">
             <span class="k">Số ứng viên tối đa</span>
             <span class="v">{{ c.maxCandidates ?? '—' }}</span>
+          </div>
+          <div class="item">
+            <span class="k">Thi cùng lúc tối đa</span>
+            <span class="v">{{ c.maxConcurrentInterviews ?? 'Không giới hạn' }}</span>
           </div>
           <div class="item">
             <span class="k">Thời gian mỗi câu</span>
@@ -111,6 +127,76 @@ const STATUS_LABEL: Record<CampaignStatus, string> = {
           <h3>Mô tả công việc (JD)</h3>
           <p class="jd">{{ c.jdText }}</p>
         }
+
+        @if (c.criteriaText) {
+          <mat-divider />
+          <h3>Mô tả tiêu chí</h3>
+          <p class="jd">{{ c.criteriaText }}</p>
+        }
+      </mat-card>
+
+      <!--
+        Tài liệu PDF. Chỉ có đường tải lên/tải về — CampaignResponse KHÔNG trả tên hay đường dẫn
+        file, nên FE không biết trước slot nào đã có file; bấm tải mà chưa có thì backend trả 404
+        và ta hiện thông báo tử tế thay vì "lỗi hệ thống".
+      -->
+      <mat-card class="section">
+        <h3>Tài liệu đính kèm (PDF)</h3>
+        <p class="muted">
+          Tối đa 10MB mỗi file. <strong>Đã nhập nội dung dạng chữ ở trên thì phần chữ được ưu
+          tiên</strong> — hệ thống sẽ bỏ qua file gửi kèm cho đúng mục đó (JD hoặc Tiêu chí), chứ
+          không báo lỗi.
+        </p>
+
+        <div class="file-row">
+          <span class="file-lbl">Mô tả công việc (JD)</span>
+          <input
+            #jdInput
+            type="file"
+            accept="application/pdf,.pdf"
+            (change)="pickJd($any($event.target).files)"
+          />
+          <button mat-button [disabled]="busy()" (click)="download('jd')">
+            <mat-icon>download</mat-icon> Tải file hiện có
+          </button>
+        </div>
+
+        <div class="file-row">
+          <span class="file-lbl">Tiêu chí đánh giá</span>
+          <input
+            #critInput
+            type="file"
+            accept="application/pdf,.pdf"
+            (change)="pickCriteria($any($event.target).files)"
+          />
+          <button mat-button [disabled]="busy()" (click)="download('criteria')">
+            <mat-icon>download</mat-icon> Tải file hiện có
+          </button>
+        </div>
+
+        <div class="file-actions">
+          <button
+            mat-flat-button
+            color="primary"
+            [disabled]="busy() || !hasPickedFile()"
+            (click)="uploadFiles(false)"
+          >
+            <mat-icon>upload_file</mat-icon> Tải lên
+          </button>
+          <!--
+            Thay file chỉ chạy khi Draft (backend 409 với trạng thái khác) → ẩn hẳn nút cho các
+            trạng thái kia thay vì để HR bấm rồi ăn lỗi.
+          -->
+          @if (c.status === 'Draft') {
+            <button
+              mat-stroked-button
+              [disabled]="busy() || !hasPickedFile()"
+              (click)="uploadFiles(true)"
+            >
+              <mat-icon>find_replace</mat-icon> Thay file đã có
+            </button>
+          }
+        </div>
       </mat-card>
 
       <mat-card class="section">
@@ -153,6 +239,17 @@ const STATUS_LABEL: Record<CampaignStatus, string> = {
             }
           </ol>
         }
+      </mat-card>
+
+      <mat-card class="section actions-card">
+        <a mat-stroked-button [routerLink]="['/employer/campaigns', c.id, 'slots']">
+          <mat-icon>schedule</mat-icon>
+          Khung giờ phỏng vấn
+        </a>
+        <a mat-stroked-button [routerLink]="['/employer/campaigns', c.id, 'invitations']">
+          <mat-icon>mail</mat-icon>
+          Lời mời đã gửi
+        </a>
       </mat-card>
 
       <!-- Actions theo trạng thái -->
@@ -437,6 +534,23 @@ const STATUS_LABEL: Record<CampaignStatus, string> = {
       .full {
         width: 100%;
       }
+      .file-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        padding: 8px 0;
+      }
+      .file-lbl {
+        min-width: 180px;
+        font-weight: 500;
+      }
+      .file-actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+      }
       .res-block {
         margin-top: 16px;
         display: flex;
@@ -520,6 +634,109 @@ export class CampaignDetail implements OnInit {
 
   statusLabel(s: CampaignStatus): string {
     return STATUS_LABEL[s];
+  }
+
+  /** Chiến dịch cũ (trước khi có cột) không trả seniority → nói rõ mặc định, không hiện ô trống. */
+  seniorityLabel(s: CampaignSeniority | null | undefined): string {
+    if (!s) return 'Junior (mặc định)';
+    return CAMPAIGN_SENIORITY_OPTIONS.find((o) => o.value === s)?.label ?? s;
+  }
+
+  /** Cùng lý do như seniority: chiến dịch cũ không trả language → nói rõ mặc định backend. */
+  languageLabel(l: CampaignLanguage | null | undefined): string {
+    if (!l) return 'Tiếng Việt (mặc định)';
+    return CAMPAIGN_LANGUAGE_OPTIONS.find((o) => o.value === l)?.label ?? l;
+  }
+
+  // ── Tài liệu PDF ────────────────────────────────────────────────────────────
+  private jdFile: File | null = null;
+  private criteriaFile: File | null = null;
+  readonly picked = signal<string[]>([]);
+
+  pickJd(files: FileList | null): void {
+    this.jdFile = files?.[0] ?? null;
+    this.syncPicked();
+  }
+  pickCriteria(files: FileList | null): void {
+    this.criteriaFile = files?.[0] ?? null;
+    this.syncPicked();
+  }
+  private syncPicked(): void {
+    const names: string[] = [];
+    if (this.jdFile) names.push(this.jdFile.name);
+    if (this.criteriaFile) names.push(this.criteriaFile.name);
+    this.picked.set(names);
+  }
+  hasPickedFile(): boolean {
+    return this.picked().length > 0;
+  }
+
+  /** `replace = true` → PUT (chỉ Draft); false → POST (đính kèm lần đầu). */
+  uploadFiles(replace: boolean): void {
+    const files = { jdFile: this.jdFile, criteriaFile: this.criteriaFile };
+    if (!files.jdFile && !files.criteriaFile) {
+      this.notify.warn('Chọn ít nhất 1 file PDF.');
+      return;
+    }
+    this.busy.set(true);
+    const req = replace
+      ? this.api.updateCampaignFiles(this.campaignId(), files)
+      : this.api.uploadCampaignFiles(this.campaignId(), files);
+
+    req.subscribe({
+      next: (c) => {
+        this.busy.set(false);
+        this.jdFile = null;
+        this.criteriaFile = null;
+        this.syncPicked();
+        this.campaign.set(c);
+        this.notify.success(replace ? 'Đã thay file.' : 'Đã tải file lên.');
+      },
+      error: (e: HttpErrorResponse) => {
+        this.busy.set(false);
+        if (e.status === 409) {
+          this.notify.warn(
+            extractErrorMessage(e) ??
+              'Chỉ thay được file khi chiến dịch còn ở trạng thái Nháp.',
+          );
+          return;
+        }
+        this.notify.error(extractErrorMessage(e) ?? 'Tải file thất bại.');
+      },
+    });
+  }
+
+  /**
+   * Tải file đã đính kèm. Endpoint đòi JWT và trả thẳng bytes PDF ⇒ phải lấy blob qua HttpClient
+   * (mở URL trần bằng thẻ a sẽ 401 vì thiếu header).
+   */
+  download(fileType: 'jd' | 'criteria'): void {
+    this.busy.set(true);
+    this.api.downloadCampaignFile(this.campaignId(), fileType).subscribe({
+      next: (blob) => {
+        this.busy.set(false);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `campaign-${this.campaignId()}-${fileType}.pdf`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      },
+      error: (e: HttpErrorResponse) => {
+        this.busy.set(false);
+        // 404 = chưa đính kèm file cho mục này. Đây là trạng thái BÌNH THƯỜNG (JD nhập tay là
+        // đủ), không phải hỏng hóc → thông báo nhẹ, không dùng error đỏ.
+        if (e.status === 404) {
+          this.notify.warn(
+            fileType === 'jd'
+              ? 'Chiến dịch chưa đính kèm file JD.'
+              : 'Chiến dịch chưa đính kèm file tiêu chí.',
+          );
+          return;
+        }
+        this.notify.error(extractErrorMessage(e) ?? 'Tải file thất bại.');
+      },
+    });
   }
 
   publish(): void {
