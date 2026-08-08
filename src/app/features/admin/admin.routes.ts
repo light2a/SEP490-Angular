@@ -51,5 +51,13 @@ export const ADMIN_ROUTES: Routes = [
     path: 'profile',
     loadComponent: () => import('../account/account-profile').then((m) => m.AccountProfile),
   },
+  {
+    path: 'analytics',
+    loadComponent: () => import('./analytics/admin-analytics').then((m) => m.AdminAnalytics),
+  },
+  {
+    path: 'prompts',
+    loadComponent: () => import('./prompts/admin-prompts').then((m) => m.AdminPrompts),
+  },
   { path: '**', redirectTo: 'dashboard' },
 ];

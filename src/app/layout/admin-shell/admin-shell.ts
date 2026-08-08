@@ -54,6 +54,8 @@ export class AdminShell {
     { path: 'packages', icon: 'inventory_2', label: 'Gói credit' },
     { path: 'knowledge', icon: 'menu_book', label: 'Nguồn tri thức' },
     { path: 'billing', icon: 'event_repeat', label: 'Chốt kỳ postpaid' },
+    { path: 'analytics', icon: 'insights', label: 'Thống kê vận hành' },
+    { path: 'prompts', icon: 'edit_note', label: 'Prompt AI' },
   ];
 
   toggle(): void {
