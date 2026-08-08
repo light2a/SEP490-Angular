@@ -109,6 +109,24 @@ const STATUS_LABEL: Record<string, string> = {
                 <span class="cv-key muted" [title]="c.cvFileUrl">{{ c.cvFileUrl }}</span>
               </div>
             }
+
+            <!--
+              Đẩy lại sàng CV: dùng khi CV không tách được tên/điểm, hoặc lần chấm trước hỏng.
+              Chỉ mở với 3 trạng thái backend cho phép — Invited (kết quả đã chốt, chạy tiếp chỉ
+              đốt token rồi vứt) và Analyzing (job đang bay) đều bị từ chối bằng 409.
+            -->
+            <mat-divider />
+            <div class="cv-row">
+              <button
+                mat-stroked-button
+                [disabled]="busy() || rescreening() || !canRescreen(c.status)"
+                (click)="rescreen()"
+              >
+                <mat-icon>refresh</mat-icon>
+                {{ rescreening() ? 'Đang gửi…' : 'Đẩy lại sàng CV' }}
+              </button>
+              <span class="muted">{{ rescreenHint(c.status) }}</span>
+            </div>
           </mat-card-content>
         </mat-card>
 
@@ -394,6 +412,45 @@ export class CandidateDetail implements OnInit {
 
   statusLabel(status: string): string {
     return STATUS_LABEL[status] ?? status;
+  }
+
+  // ── Đẩy lại sàng CV ─────────────────────────────────────────────────────────
+  readonly rescreening = signal(false);
+
+  /** Đúng 3 trạng thái backend chấp nhận; các trạng thái khác trả 409. */
+  canRescreen(status: string): boolean {
+    return status === 'Filtered' || status === 'Analyzed' || status === 'AnalysisFailed';
+  }
+
+  /** Nói LÝ DO nút bị khoá — nút xám không giải thích là thứ khiến HR tưởng hệ thống hỏng. */
+  rescreenHint(status: string): string {
+    if (this.canRescreen(status)) {
+      return 'AI đọc lại CV để điền tên và điểm còn thiếu.';
+    }
+    if (status === 'Analyzing') return 'Đang chấm — chờ lượt hiện tại xong đã.';
+    if (status === 'Invited') return 'Đã mời phỏng vấn nên kết quả sàng CV được giữ nguyên.';
+    return 'Trạng thái này không đẩy lại được.';
+  }
+
+  rescreen(): void {
+    this.rescreening.set(true);
+    this.api.rescreenCandidate(this.campaignId(), this.candidateId()).subscribe({
+      next: () => {
+        this.rescreening.set(false);
+        this.notify.success('Đã gửi yêu cầu — AI đang chấm lại CV, xem lại sau ít phút.');
+        this.load();
+      },
+      error: (e: HttpErrorResponse) => {
+        this.rescreening.set(false);
+        // 409 ở đây phần lớn là "đang chạy rồi" (bấm hai lần) — cảnh báo nhẹ, không phải lỗi đỏ.
+        if (e.status === 409) {
+          this.notify.warn(extractErrorMessage(e) ?? 'Trạng thái hiện tại không đẩy lại được.');
+          this.load();
+          return;
+        }
+        this.notify.error(extractErrorMessage(e) ?? 'Đẩy lại sàng CV thất bại.');
+      },
+    });
   }
 
   pct(score: number, max: number): number {
