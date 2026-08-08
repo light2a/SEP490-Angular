@@ -15,7 +15,7 @@ import {
   OwnerType,
   PlanAudience,
   PlanResponse,
-  SubscriptionResponse,
+  SubscriptionEntity,
 } from '../../../core/models';
 
 /**
@@ -192,7 +192,7 @@ export class GrantSubscription implements OnInit {
   protected readonly OwnerType = OwnerType;
 
   readonly submitting = signal(false);
-  readonly last = signal<SubscriptionResponse | null>(null);
+  readonly last = signal<SubscriptionEntity | null>(null);
   readonly plans = signal<PlanResponse[]>([]);
 
   ownerType: OwnerType = OwnerType.User;

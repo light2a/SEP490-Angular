@@ -535,7 +535,7 @@ export interface GrantSubscriptionRequest {
  * Kỳ hạn thuê bao (entity `Subscription` serialize thẳng — mỗi lần cấp/mua là MỘT row mới,
  * không sửa row cũ để kéo dài hạn).
  */
-export interface SubscriptionResponse {
+export interface SubscriptionEntity {
   id: string;
   ownerType: OwnerType;
   ownerId: string;

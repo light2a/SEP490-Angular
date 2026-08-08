@@ -29,7 +29,7 @@ import {
   RefundPayoutResponse,
   SetPaymentModeRequest,
   SetPaymentModeResponse,
-  SubscriptionResponse,
+  SubscriptionEntity,
 } from '../models';
 
 /**
@@ -232,8 +232,8 @@ export class AdminApi {
    * cũ thì nội dung mới bị bỏ qua trong im lặng. Người gọi phải sinh khoá mới khi nội dung đổi và
    * giữ nguyên khoá khi đang thử lại đúng khoản đó.
    */
-  grantSubscription(body: GrantSubscriptionRequest): Observable<SubscriptionResponse> {
-    return this.http.post<SubscriptionResponse>(
+  grantSubscription(body: GrantSubscriptionRequest): Observable<SubscriptionEntity> {
+    return this.http.post<SubscriptionEntity>(
       `${this.base}/payment/admin/subscriptions/grant`,
       body,
     );

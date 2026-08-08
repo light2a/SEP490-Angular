@@ -56,7 +56,6 @@ export const CANDIDATE_ROUTES: Routes = [
     path: 'subscription',
     loadComponent: () => import('./credits/my-subscription').then((m) => m.MySubscription),
   },
-  {
   // ⚠ Mọi route MỚI phải nằm TRÊN wildcard `**` — đặt dưới thì không bao giờ khớp, người dùng bị
   // đá về dashboard mà không có lỗi nào để lần ra.
   {
