@@ -154,6 +154,15 @@ import { VndPipe } from '../../../shared/pipes';
                     @if (canSettle(o)) {
                       <button
                         mat-icon-button
+                        title="Chuyển tiền hoàn tự động qua payOS"
+                        aria-label="Chuyển tiền hoàn tự động qua payOS"
+                        [disabled]="busy() === o.id"
+                        (click)="payout(o)"
+                      >
+                        <mat-icon>send_money</mat-icon>
+                      </button>
+                      <button
+                        mat-icon-button
                         title="Xác nhận đã chuyển tiền cho khách"
                         aria-label="Xác nhận đã chuyển tiền cho khách"
                         [disabled]="busy() === o.id"
@@ -382,8 +391,60 @@ export class AdminOrders implements OnInit {
   }
 
   /**
+   * CHI tiền hoàn tự động qua kênh chi payOS (F18 payout). Không có body — đích chuyển được dựng
+   * từ webhook gốc của chính đơn đó, admin không nhập số tài khoản.
+   *
+   * ⚠ **202 ≠ 200 và không được gộp**: 202 = lệnh đã gửi, đang chờ ngân hàng (tiền CHƯA chắc tới);
+   * 200 = đã tới và đã đóng dấu. Báo "đã hoàn xong" khi mới 202 là nói dối về dòng tiền.
+   *
+   * ⚠ 409 `NameMismatch` là ca nguy hiểm nhất: **tiền ĐÃ ĐI** nhưng tên người nhận không khớp
+   * người đã trả. Nó tới đây dưới dạng lỗi, và message của server có kèm mã lệnh để đối soát —
+   * nên hiện nguyên message thay vì thay bằng câu chung chung.
+   */
+  payout(o: AdminOrderListItem): void {
+    if (
+      !confirm(
+        `Chuyển ${o.amountVnd.toLocaleString('vi-VN')} ₫ về tài khoản đã thanh toán đơn ` +
+          `${o.payosOrderCode}? Lệnh chi được gửi thật qua payOS.`,
+      )
+    )
+      return;
+
+    this.busy.set(o.id);
+    this.api.payoutRefund(o.id).subscribe({
+      next: ({ status, body }) => {
+        this.busy.set(null);
+        const ref = body?.payoutId ? ` Mã lệnh: ${body.payoutId}.` : '';
+        if (status === 202) {
+          // Đang bay: chưa đóng dấu `refundSettledAt`, nên đơn vẫn hiện "chờ chuyển tiền" sau khi
+          // tải lại — đúng sự thật, không phải lỗi hiển thị.
+          this.notify.info(
+            `Đã gửi lệnh chi, đang chờ ngân hàng xử lý.${ref} Tải lại danh sách sau ít phút để xem trạng thái.`,
+          );
+        } else {
+          this.notify.success(`Đã chuyển tiền hoàn cho khách.${ref}`);
+        }
+        this.load();
+      },
+      error: (e: HttpErrorResponse) => {
+        this.busy.set(null);
+        this.notify.error(
+          extractErrorMessage(e) ??
+            'Không chuyển được tiền hoàn tự động — dùng nút xác nhận đã chuyển nếu bạn chuyển tay.',
+        );
+        // Tải lại kể cả khi lỗi: ca NameMismatch tiền ĐÃ đi, và ca AlreadySettled nghĩa là đơn
+        // vừa được đóng dấu ở nơi khác — cả hai đều làm dòng trên bảng lỗi thời.
+        this.load();
+      },
+    });
+  }
+
+  /**
    * Xác nhận đã chuyển tiền hoàn thật cho khách (F18). Bước tay tách khỏi hoàn: đơn đã ở trạng thái
    * "chờ chuyển tiền", admin chuyển tiền xong rồi đóng dấu ở đây. KHÔNG đụng credit/status.
+   *
+   * Giữ nguyên làm LỐI THOÁT cho mọi ca chi tự động không xử được (không dựng được đích chuyển,
+   * vượt trần, payOS từ chối, chưa bật tính năng).
    */
   settle(o: AdminOrderListItem): void {
     this.dialog

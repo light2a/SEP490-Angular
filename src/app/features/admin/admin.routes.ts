@@ -51,5 +51,17 @@ export const ADMIN_ROUTES: Routes = [
     path: 'profile',
     loadComponent: () => import('../account/account-profile').then((m) => m.AccountProfile),
   },
+  {
+    path: 'plans',
+    loadComponent: () => import('./plans/admin-plans').then((m) => m.AdminPlans),
+  },
+  {
+    path: 'subscriptions',
+    loadComponent: () => import('./plans/grant-subscription').then((m) => m.GrantSubscription),
+  },
+  {
+    path: 'wallet',
+    loadComponent: () => import('./credits/wallet-admin').then((m) => m.WalletAdmin),
+  },
   { path: '**', redirectTo: 'dashboard' },
 ];

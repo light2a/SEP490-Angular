@@ -378,3 +378,245 @@ export interface AiResourceUrlStats {
   /** Tỉ lệ [0,1]. */
   rejectedRate: number;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Gói thuê bao phân tầng (S11 tiering) + duyệt chế độ thanh toán (BK24) +
+// chi tiền hoàn tự động (F18 payout) — nhóm màn ADMIN.
+//
+// ⚠ Enum ở khối này khai TẠI ĐÂY chứ không ở `enums.ts` để tránh đụng file mà
+// worker khác đang sửa trong cùng vòng. `models/index.ts` re-export cả file này
+// nên import từ `core/models` không phân biệt được — vị trí là chi tiết nội bộ.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Catalog nào — B2C (cá nhân) hay B2B (tổ chức). SỐ (quy ước Payment).
+ *
+ * ⚠ Hai catalog bị tách ở TẦNG DB bằng CHECK `ck_sub_audience_owner`: ví User chỉ nhận
+ * plan B2C, ví Org chỉ nhận plan B2B. Cấp chéo → backend 400, không phải chỉ là quy ước UI.
+ */
+export enum PlanAudience {
+  B2C = 0,
+  B2B = 1,
+}
+export const PLAN_AUDIENCE_LABEL: Record<number, string> = {
+  [PlanAudience.B2C]: 'B2C (cá nhân)',
+  [PlanAudience.B2B]: 'B2B (tổ chức)',
+};
+
+/**
+ * Buổi phỏng vấn của gói này được tài trợ kiểu gì.
+ * - `Credit` — vẫn trừ credit như thường (gói chỉ mở tính năng).
+ * - `Metered` — quota tháng, không đụng credit đã mua.
+ * - `Unlimited` — không giới hạn (chỉ còn dùng cho row F8 cũ; KHÔNG gói mới nào nên chọn).
+ */
+export enum InterviewFunding {
+  Credit = 0,
+  Metered = 1,
+  Unlimited = 2,
+}
+export const INTERVIEW_FUNDING_LABEL: Record<number, string> = {
+  [InterviewFunding.Credit]: 'Trừ credit',
+  [InterviewFunding.Metered]: 'Quota tháng',
+  [InterviewFunding.Unlimited]: 'Không giới hạn',
+};
+
+export enum SubscriptionStatus {
+  Active = 0,
+  Expired = 1,
+  Cancelled = 2,
+}
+export const SUBSCRIPTION_STATUS_LABEL: Record<number, string> = {
+  [SubscriptionStatus.Active]: 'Đang chạy',
+  [SubscriptionStatus.Expired]: 'Hết hạn',
+  [SubscriptionStatus.Cancelled]: 'Đã huỷ',
+};
+
+export enum SubscriptionSource {
+  Purchase = 0,
+  AdminGrant = 1,
+}
+
+export enum BillingCycle {
+  Monthly = 0,
+  Annual = 1,
+}
+
+// ── Catalog gói thuê bao (Admin) ────────────────────────────────────────────
+/** GET /payment/admin/plans — 1 gói trong catalog. */
+export interface PlanResponse {
+  id: string;
+  audience: PlanAudience;
+  /** Mã máy đọc (`free`/`plus`/`pro`/`starter`...) — dùng để đối chiếu, không đổi tuỳ tiện. */
+  code: string;
+  name: string;
+  /** Bậc tăng dần trong cùng audience (0 = thấp nhất). */
+  rank: number;
+  interviewFunding: InterviewFunding;
+  monthlyQuota?: number | null;
+  adaptiveEnabled: boolean;
+  adaptiveMaxQuestions?: number | null;
+  adaptiveMaxFollowups?: number | null;
+  groundingEnabled: boolean;
+  selfConsistencyN: number;
+  cvAnalysisIncluded: boolean;
+  repoAnalysisIncluded: boolean;
+  roadmapEnabled: boolean;
+  maxQuestionsCap?: number | null;
+  maxActiveCampaigns?: number | null;
+  maxCandidatesCap?: number | null;
+  postpaidEligible: boolean;
+  seatCount?: number | null;
+  entitlementsVersion: number;
+  isActive: boolean;
+}
+
+/**
+ * POST/PUT /payment/admin/plans — thân request.
+ *
+ * ⚠ PUT là REPLACE TOÀN BỘ (`PlanRequest.ApplyTo` gán đè mọi field), KHÔNG phải patch từng
+ * phần như `UpdatePackageRequest`: bỏ sót một field khi sửa = ghi giá trị mặc định của nó
+ * đè lên giá trị đang có. Vì thế form sửa phải nạp đủ gói hiện tại rồi gửi lại nguyên vẹn.
+ *
+ * `entitlementsJson` không lộ ở `PlanResponse` (chỉ có `entitlementsVersion`) ⇒ khi sửa mà
+ * không biết giá trị cũ thì buộc phải gửi mặc định `"[]"`.
+ */
+export interface PlanRequest {
+  audience: PlanAudience;
+  code: string;
+  name: string;
+  rank: number;
+  interviewFunding: InterviewFunding;
+  monthlyQuota?: number | null;
+  adaptiveEnabled: boolean;
+  adaptiveMaxQuestions?: number | null;
+  adaptiveMaxFollowups?: number | null;
+  groundingEnabled: boolean;
+  selfConsistencyN: number;
+  cvAnalysisIncluded: boolean;
+  repoAnalysisIncluded: boolean;
+  roadmapEnabled: boolean;
+  maxQuestionsCap?: number | null;
+  maxActiveCampaigns?: number | null;
+  maxCandidatesCap?: number | null;
+  postpaidEligible: boolean;
+  seatCount?: number | null;
+  entitlementsJson: string;
+  entitlementsVersion: number;
+  isActive: boolean;
+}
+
+// ── Cấp thuê bao tay (Admin) ────────────────────────────────────────────────
+/**
+ * POST /payment/admin/subscriptions/grant.
+ *
+ * ⚠ `idempotencyKey` BẮT BUỘC (backend khai non-nullable, rỗng → 400). Backend khớp theo
+ * `(ownerType, ownerId, idempotencyKey)` và trả lại kỳ hạn CŨ nếu trùng — **KHÔNG** xét
+ * `planId`/`durationDays`, y hệt bẫy của {@link GrantCreditRequest}. Đổi gói hoặc đổi số ngày
+ * mà giữ khoá cũ ⇒ backend replay kỳ hạn cũ và bỏ qua nội dung mới trong im lặng.
+ *
+ * Điều kiện backend từ chối (đều 400 kèm `message`):
+ * - `durationDays <= 0` hoặc khoá rỗng;
+ * - gói không tồn tại / đã tắt (`isActive=false`);
+ * - **audience không khớp chủ ví** (ví User ↔ gói B2C, ví Org ↔ gói B2B);
+ * - **chủ ví CHƯA có ví credit** — phải có row `credit_accounts` trước khi được cấp thuê bao.
+ */
+export interface GrantSubscriptionRequest {
+  ownerType: OwnerType;
+  ownerId: string;
+  planId: string;
+  /** > 0. */
+  durationDays: number;
+  /** Mốc kích hoạt (ISO). Bỏ trống = ngay bây giờ. */
+  activatedAt?: string | null;
+  idempotencyKey: string;
+}
+
+/**
+ * Kỳ hạn thuê bao (entity `Subscription` serialize thẳng — mỗi lần cấp/mua là MỘT row mới,
+ * không sửa row cũ để kéo dài hạn).
+ */
+export interface SubscriptionResponse {
+  id: string;
+  ownerType: OwnerType;
+  ownerId: string;
+  packageId?: string | null;
+  orderId?: string | null;
+  adminGrantIdempotencyKey?: string | null;
+  planId?: string | null;
+  audience: PlanAudience;
+  tierCode: string;
+  tierRank: number;
+  interviewFunding: InterviewFunding;
+  monthlyQuota?: number | null;
+  entitlementsVersion: number;
+  source: SubscriptionSource;
+  activatedAt: string;
+  billingCycle: BillingCycle;
+  status: SubscriptionStatus;
+  startedAt: string;
+  expiresAt: string;
+  createdAt: string;
+}
+
+// ── Duyệt chế độ thanh toán Prepaid ↔ Postpaid (BK24, Admin) ────────────────
+/**
+ * POST /payment/admin/credits/payment-mode — đường HỢP LỆ DUY NHẤT để bật Postpaid cho một
+ * tổ chức (trước đây chỉ làm được bằng `UPDATE` SQL tay, tức bỏ qua bước PlatformAdmin duyệt
+ * mà PAY-3 yêu cầu).
+ *
+ * Mã lỗi backend — **hiện `message` của server, đừng nuốt**: 400 ví User (B2C luôn Prepaid) ·
+ * 400 `creditLimit` sai combo · 403 tier B2B không đủ điều kiện Postpaid · 404 chưa có ví ·
+ * 409 ví còn credit đã mua sẽ mắc kẹt (`allowStrandedCredits` để tiếp tục) · 409 còn nợ chưa
+ * tất toán · 409 mode vừa bị đổi bởi thao tác khác.
+ */
+export interface SetPaymentModeRequest {
+  ownerType: OwnerType;
+  ownerId: string;
+  paymentMode: PaymentMode;
+  /** BẮT BUỘC > 0 khi Postpaid; PHẢI bỏ trống khi Prepaid (sai combo → 400). */
+  creditLimit?: number | null;
+  /** Bắt buộc, 3..500 ký tự — vào sổ kiểm toán cùng tên người duyệt. */
+  note: string;
+  /** Opt-in tường minh khi ví còn credit đã mua sẽ mắc kẹt sau khi chuyển Postpaid. */
+  allowStrandedCredits?: boolean;
+}
+
+export interface SetPaymentModeResponse {
+  ownerType: OwnerType;
+  ownerId: string;
+  paymentMode: PaymentMode;
+  creditLimit?: number | null;
+  remainingCredits: number;
+  reservedCredits: number;
+}
+
+/**
+ * Body của 409 "credit sẽ mắc kẹt". Nhận ra ca này bằng SỰ CÓ MẶT của hai con số — 409 còn
+ * dùng cho ca khác (còn nợ, mode vừa đổi) vốn chỉ có `message` (mẫu {@link RefundConflictBody}).
+ */
+export interface StrandedCreditsConflictBody {
+  message?: string;
+  remainingCredits?: number;
+  reservedCredits?: number;
+}
+
+// ── Chi tiền hoàn tự động qua kênh chi payOS (F18 payout, Admin) ────────────
+/**
+ * POST /payment/admin/orders/{id}/refund/payout — không có body.
+ *
+ * **202** = lệnh đã gửi, đang chờ ngân hàng (`refundSettledAt` còn null) · **200** = tiền đã tới
+ * và đã đóng dấu. Hai mã này khác nhau về sự thật, không được gộp: 202 mà báo "đã hoàn xong" là
+ * nói dối. Lỗi: 404 · 409 (chưa hoàn / đã settle / lệnh trước hỏng / **tên người nhận không khớp
+ * — tiền ĐÃ ĐI, cần đối soát ngay**) · 422 không dựng được đích chuyển · 503 chưa bật hoặc ví chi
+ * không đủ. Mọi ca không tự động được vẫn rơi về nút "xác nhận đã chuyển" (`/refund/settle`).
+ */
+export interface RefundPayoutResponse {
+  orderId: string;
+  /** Mã lệnh chi payOS — dùng để lần theo dòng tiền khi đối soát. */
+  payoutId?: string | null;
+  /** NULL = tiền chưa xác nhận tới khách (đang bay, hoặc cần người xử lý). */
+  refundSettledAt?: string | null;
+  /** CHUỖI tên outcome (`Succeeded`/`InFlight`/...) — ngoại lệ enum-số của Payment. */
+  outcome: string;
+  message?: string | null;
+}
