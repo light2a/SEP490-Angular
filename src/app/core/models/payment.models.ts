@@ -264,6 +264,48 @@ export interface GrantCreditResponse {
   transactionId: string;
 }
 
+// ── Thuê bao / gói định kỳ (F8) ─────────────────────────────────────────────
+/**
+ * GET /payment/me/subscription — kỳ hạn thuê bao của CHÍNH người gọi (chủ ví suy từ JWT:
+ * thuộc org → thuê bao Org, không → thuê bao cá nhân). Không nhận tham số ⇒ không đọc được
+ * thuê bao người khác.
+ *
+ * ⚠ Chưa mua gói KHÔNG phải 404 — backend trả **200 với `active: false`** và mọi trường kỳ hạn
+ * null (cùng lối `CreditAccountResponse` trả ví rỗng). Bắt 404 để suy ra "chưa mua" là sai:
+ * 404 ở đây chỉ có thể là route hỏng.
+ *
+ * ⚠ `active` = "đang chạy", KHÔNG phải "còn quyền lợi". Backend lọc `Status == Active`
+ * (`SubscriptionQueryExtensions.ActiveAt`), nên gói vừa bị huỷ — vẫn còn hiệu lực tới hết kỳ đã
+ * trả tiền — cũng rơi về `active: false` với mọi trường null. Hệ quả: sau khi huỷ, FE **không
+ * đọc lại được** ngày hết hiệu lực; muốn hiện thì phải giữ `expiresAt` đọc được TRƯỚC lúc huỷ.
+ */
+export interface SubscriptionResponse {
+  ownerType: OwnerType;
+  ownerId: string;
+  active: boolean;
+  /** CHUỖI 'Monthly' | 'Annual' — ngoại lệ enum-số của Payment (BE `.ToString()`). null khi không có gói. */
+  billingCycle?: string | null;
+  startedAt?: string | null;
+  expiresAt?: string | null;
+}
+
+export const BILLING_CYCLE_LABEL: Record<string, string> = {
+  Monthly: 'Theo tháng',
+  Annual: 'Theo năm',
+};
+
+/**
+ * POST /payment/me/subscription/cancel — huỷ **có hiệu lực cuối kỳ**: backend chỉ đổi
+ * `Status → Cancelled` và giữ nguyên `ExpiresAt`, không hoàn tiền, không cắt quyền ngay.
+ *
+ * `cancelled: false` = không có gói nào đang chạy để huỷ (kể cả khi đã huỷ trước đó rồi) —
+ * đây là phản hồi idempotent, không phải lỗi.
+ */
+export interface SubscriptionCancellationResponse {
+  subscriptionId?: string | null;
+  cancelled: boolean;
+}
+
 /** GET /payment/order/{id}/status — status là CHUỖI ở riêng endpoint này. */
 export interface OrderStatusResponse {
   orderCode: number;

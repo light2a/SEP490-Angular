@@ -14,6 +14,8 @@ import {
   OrderResponse,
   OrderStatusResponse,
   PackageResponse,
+  SubscriptionCancellationResponse,
+  SubscriptionResponse,
   UpdatePackageRequest,
 } from '../models';
 
@@ -78,6 +80,22 @@ export class PaymentApi {
   }
   cancelOrder(id: string): Observable<unknown> {
     return this.http.delete(`${this.base}/order/${id}`);
+  }
+
+  // ── Thuê bao (F8) ───────────────────────────────────────────────────────────
+  /**
+   * GET /payment/me/subscription — chưa mua gói → **200 với `active:false`**, KHÔNG phải 404.
+   * Chủ thuê bao suy từ JWT (org_id → Org, else User).
+   */
+  mySubscription(): Observable<SubscriptionResponse> {
+    return this.http.get<SubscriptionResponse>(`${this.base}/me/subscription`);
+  }
+  /** POST /payment/me/subscription/cancel — huỷ gia hạn, quyền lợi giữ tới hết kỳ đã trả tiền. */
+  cancelMySubscription(): Observable<SubscriptionCancellationResponse> {
+    return this.http.post<SubscriptionCancellationResponse>(
+      `${this.base}/me/subscription/cancel`,
+      {},
+    );
   }
 
   // ── Invoice / postpaid (Employer) ───────────────────────────────────────────

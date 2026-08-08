@@ -1,11 +1,14 @@
 import { DatePipe } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
+import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
 import { RouterLink } from '@angular/router';
 import { PaymentApi } from '../../../core/api/payment.api';
+import { extractErrorMessage } from '../../../core/api/http-utils';
 import { NotifyService } from '../../../core/notify.service';
 import {
   CreditAccountResponse,
@@ -13,6 +16,7 @@ import {
   OrderStatus,
   PackageResponse,
 } from '../../../core/models';
+import { OrderActions } from './order-actions';
 import { OrderStatusPipe, PackageOfferPipe, PackageTypePipe, VndPipe } from '../../../shared/pipes';
 import { CreditHistory } from '../../../shared/credit-history/credit-history';
 import { EmptyState } from '../../../shared/ui/empty-state';
@@ -41,8 +45,10 @@ import { Spinner } from '../../../shared/ui/spinner';
 export class Credits {
   private api = inject(PaymentApi);
   private notify = inject(NotifyService);
+  private orderActions = inject(OrderActions);
 
   readonly OrderStatus = OrderStatus;
+  readonly cancelling = signal<string | null>(null);
   /** Số dư ví — null khi chưa tải xong hoặc API lỗi: khối số dư ẩn, không chặn phần mua gói. */
   readonly account = signal<CreditAccountResponse | null>(null);
   readonly packages = signal<PackageResponse[]>([]);
@@ -124,6 +130,29 @@ export class Credits {
         this.load();
       },
       error: () => this.notify.error('Không kiểm tra được trạng thái.'),
+    });
+  }
+
+  openOrder(order: OrderResponse): void {
+    this.orderActions.openDetail(order.id);
+  }
+
+  /** Huỷ đơn còn chờ thanh toán (backend trả 204). Đơn đã terminal thì không có nút này. */
+  cancelOrder(order: OrderResponse): void {
+    this.orderActions.confirmCancel(order).subscribe((ok) => {
+      if (!ok) return;
+      this.cancelling.set(order.id);
+      this.api.cancelOrder(order.id).subscribe({
+        next: () => {
+          this.cancelling.set(null);
+          this.notify.success('Đã huỷ đơn.');
+          this.load();
+        },
+        error: (e: HttpErrorResponse) => {
+          this.cancelling.set(null);
+          this.notify.error(extractErrorMessage(e) ?? 'Không huỷ được đơn.');
+        },
+      });
     });
   }
 }
