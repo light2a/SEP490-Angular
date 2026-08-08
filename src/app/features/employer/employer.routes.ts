@@ -70,6 +70,9 @@ export const EMPLOYER_ROUTES: Routes = [
     // Màn "Gói của tôi" dùng chung cho cả hai khu vực (backend suy chủ thuê bao từ JWT).
     // File nằm bên candidate/credits vì vòng này worker chỉ được sửa hai thư mục credits.
     path: 'subscription',
+    // Nav đánh dấu orgAdminOnly nên route phải có guard tương ứng — thiếu nó thì
+    // HrMember gõ tay URL vẫn vào được màn, đúng lỗ mà orgAdminGuard sinh ra để bịt.
+    canActivate: [orgAdminGuard],
     loadComponent: () =>
       import('../candidate/credits/my-subscription').then((m) => m.MySubscription),
   },
