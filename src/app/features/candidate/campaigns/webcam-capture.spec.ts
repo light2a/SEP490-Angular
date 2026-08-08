@@ -154,4 +154,114 @@ describe('WebcamCapture', () => {
     cmp.stop(); // clear the periodic interval
     expect(trackStop).toHaveBeenCalled();
   });
+
+  // ── Ảnh mốc phải có NỘI DUNG mới được gửi ────────────────────────────────────
+  //
+  // Prod 2026-08-08: `video.play()` resolve xong FE chụp mốc ngay, webcam chưa phơi sáng → ảnh
+  // đen (sáng 0.0/255) → InsightFace không thấy mặt → mọi lượt đối chiếu sau đó gắn
+  // `face_mismatch` ("không đúng người") cho ứng viên trung thực, mỗi 30 giây suốt buổi thi.
+  //
+  // `beforeEach` stub `getContext` trả đúng `{ drawImage }` — KHÔNG có `getImageData` — nên các
+  // test cũ chạy qua nhánh fallback "không đọc được pixel thì coi là hợp lệ". Các test dưới đây
+  // thay stub đó để điều khiển được nội dung khung hình.
+
+  /** Khung hình giả: `black` = toàn 0 · `flatGray` = xám đồng nhất · `real` = có biến thiên. */
+  function stubFramePixels(kind: 'black' | 'flatGray' | 'real' | 'throws') {
+    HTMLCanvasElement.prototype.getContext = vi.fn(() => ({
+      drawImage: vi.fn(),
+      getImageData: (_x: number, _y: number, w: number, h: number) => {
+        if (kind === 'throws') throw new DOMException('tainted', 'SecurityError');
+        const data = new Uint8ClampedArray(w * h * 4);
+        for (let i = 0; i < data.length; i += 4) {
+          const v = kind === 'black' ? 0 : kind === 'flatGray' ? 128 : (i / 4) % 256;
+          data[i] = data[i + 1] = data[i + 2] = v;
+          data[i + 3] = 255;
+        }
+        return { data };
+      },
+    })) as unknown as HTMLCanvasElement['getContext'];
+  }
+
+  async function startWithCamera(enrollRequired = true) {
+    getUserMedia.mockResolvedValue({
+      getTracks: () => [{ stop: trackStop }],
+    } as unknown as MediaStream);
+    const cmp = make(enrollRequired);
+    await cmp.start();
+    return cmp;
+  }
+
+  it('KHÔNG gửi ảnh mốc khi khung hình còn đen, và nhắc ứng viên bật đèn', async () => {
+    stubFramePixels('black');
+    const cmp = await startWithCamera();
+
+    expect(campaignApi.faceEnroll).not.toHaveBeenCalled();
+    expect(cmp.needsBetterLighting()).toBe(true);
+    cmp.stop();
+  });
+
+  it('KHÔNG gửi ảnh mốc khi khung xám đồng nhất (đủ sáng nhưng không có hình)', async () => {
+    // Prod có 2 ảnh mốc `sáng=128` — sáng "vừa đẹp" mà không mặt nào. Chỉ đo độ sáng thì lọt;
+    // đây là ca duy nhất chứng minh phép đo độ lệch chuẩn thật sự có tác dụng.
+    stubFramePixels('flatGray');
+    const cmp = await startWithCamera();
+
+    expect(campaignApi.faceEnroll).not.toHaveBeenCalled();
+    expect(cmp.needsBetterLighting()).toBe(true);
+    cmp.stop();
+  });
+
+  it('gửi ảnh mốc khi khung hình đã có nội dung, không hiện nhắc nhở', async () => {
+    stubFramePixels('real');
+    const cmp = await startWithCamera();
+
+    expect(campaignApi.faceEnroll).toHaveBeenCalledTimes(1);
+    expect(cmp.needsBetterLighting()).toBe(false);
+    cmp.stop();
+  });
+
+  it('thử lại ảnh mốc ở nhịp sau khi camera đã sáng — và chỉ gửi MỘT lần', async () => {
+    // Gọi thẳng runCheck thay vì chờ interval 30s: chỗ đấu dây interval→runCheck không đổi
+    // trong bản vá này, còn dùng fake timer cho một hàm async lồng nhau thì giòn hơn nhiều.
+    stubFramePixels('black');
+    const cmp = await startWithCamera();
+    expect(campaignApi.faceEnroll).not.toHaveBeenCalled();
+
+    stubFramePixels('real');
+    const runCheck = (cmp as unknown as { runCheck: () => Promise<void> }).runCheck.bind(cmp);
+    await runCheck();
+
+    expect(campaignApi.faceEnroll).toHaveBeenCalledTimes(1);
+    expect(cmp.needsBetterLighting()).toBe(false);
+    // Nhịp vừa rồi dành cho enroll → không bắn thêm face-check cùng lúc.
+    expect(campaignApi.faceCheck).not.toHaveBeenCalled();
+
+    await runCheck();
+    expect(campaignApi.faceEnroll).toHaveBeenCalledTimes(1); // không gửi mốc lần hai
+    expect(campaignApi.faceCheck).toHaveBeenCalledTimes(1); // nhịp sau quay lại giám sát
+    cmp.stop();
+  });
+
+  it('vẫn gửi ảnh mốc khi KHÔNG đọc được pixel (fallback an toàn)', async () => {
+    // Phép kiểm khung hình là phụ trợ. Nếu nó tự hỏng mà lại chặn enroll thì ứng viên mất
+    // giám sát danh tính cả buổi — hỏng nặng hơn chính bug đang sửa.
+    stubFramePixels('throws');
+    const cmp = await startWithCamera();
+
+    expect(campaignApi.faceEnroll).toHaveBeenCalledTimes(1);
+    expect(cmp.needsBetterLighting()).toBe(false);
+    cmp.stop();
+  });
+
+  it('ảnh live KHÔNG bị lọc theo độ sáng — khung tối là tín hiệu thật cho HR', async () => {
+    // Khác ảnh mốc: ứng viên che camera / rời chỗ phải tới được HR dưới dạng `no_face`.
+    stubFramePixels('real');
+    const cmp = await startWithCamera();
+    stubFramePixels('black');
+
+    await (cmp as unknown as { runCheck: () => Promise<void> }).runCheck.bind(cmp)();
+
+    expect(campaignApi.faceCheck).toHaveBeenCalledTimes(1);
+    cmp.stop();
+  });
 });

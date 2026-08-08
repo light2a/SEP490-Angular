@@ -17,6 +17,20 @@ import { CampaignApi } from '../../../core/api/campaign.api';
 const FACE_CHECK_INTERVAL_MS = 30_000;
 
 /**
+ * Ngưỡng coi một khung hình là ĐÃ CÓ NỘI DUNG, đủ dùng làm ảnh MỐC (0–255).
+ *
+ * Vì sao cần cả hai: `getUserMedia` + `video.play()` resolve xong KHÔNG có nghĩa đã có khung
+ * hình dùng được — webcam thật cần vài trăm ms phơi sáng, khung đầu tiên thường đen. Prod
+ * 2026-08-08 đã dính: ảnh mốc sáng 0.0/255 ⇒ InsightFace không thấy mặt ⇒ mọi lượt đối chiếu
+ * sau đó gắn `face_mismatch` cho ứng viên trung thực, mỗi 30 giây suốt buổi thi.
+ *
+ * Chỉ đo độ sáng là KHÔNG đủ: prod cũng có ảnh mốc `sáng=128` — xám đồng nhất, sáng "vừa đẹp"
+ * mà chẳng có mặt nào. Độ lệch chuẩn ~0 bắt được đúng nhóm đó.
+ */
+const MIN_FRAME_BRIGHTNESS = 8;
+const MIN_FRAME_STDDEV = 5;
+
+/**
  * Camera giám sát cho bài thi B2B — clone pattern từ AudioRecorder (getUserMedia + teardown track).
  *  - Bật webcam → preview nhỏ (Material card) + trạng thái từ chối quyền.
  *  - (a) Nếu `enrollRequired` → chụp 1 ảnh tham chiếu → `faceEnroll`.
@@ -41,6 +55,15 @@ const FACE_CHECK_INTERVAL_MS = 30_000;
           <mat-icon [class.on]="active()">videocam</mat-icon>
           <span>{{ active() ? 'Camera giám sát đang bật' : 'Đang bật camera giám sát…' }}</span>
         </div>
+        @if (needsBetterLighting()) {
+          <div class="cam-warn">
+            <mat-icon>lightbulb</mat-icon>
+            <span
+              >Chưa thấy rõ khuôn mặt — hãy bật thêm đèn và ngồi vào giữa khung hình. Hệ thống sẽ
+              tự thử lại, bạn cứ tiếp tục trả lời.</span
+            >
+          </div>
+        }
         <div #preview class="cam-preview"></div>
       }
     </mat-card>
@@ -52,12 +75,17 @@ const FACE_CHECK_INTERVAL_MS = 30_000;
         margin-bottom: 12px;
       }
       .cam-head,
-      .cam-denied {
+      .cam-denied,
+      .cam-warn {
         display: flex;
         align-items: center;
         gap: 8px;
         font-size: 13px;
         color: var(--mat-sys-on-surface-variant);
+      }
+      .cam-warn {
+        margin-top: 8px;
+        color: var(--mat-sys-error);
       }
       .cam-head mat-icon.on {
         color: var(--mat-sys-error);
@@ -94,6 +122,15 @@ export class WebcamCapture implements OnInit {
   readonly denied = signal(false);
   /** Số lần đối chiếu khuôn mặt đã gửi — surface cho UI nếu cần. */
   readonly checks = signal(0);
+
+  /**
+   * Chưa lấy được khung hình đủ dùng làm ảnh mốc → nhắc ứng viên bật đèn / vào giữa khung.
+   * CẢNH BÁO, KHÔNG CHẶN (SEC-5/D13): ứng viên vẫn trả lời bình thường, hệ thống tự thử lại.
+   */
+  readonly needsBetterLighting = signal(false);
+
+  /** Đã gửi được ảnh mốc chưa. Chưa xong → mỗi nhịp 30s thử lại thay vì chịu chết cả buổi. */
+  private enrolled = false;
 
   /**
    * Cờ báo-một-lần cho `cameraBlocked`. KHÔNG dựa được vào debounce 1200ms của ProctorService:
@@ -153,6 +190,14 @@ export class WebcamCapture implements OnInit {
 
   /** Chụp 1 khung hình hiện tại → JPEG Blob (null nếu chưa sẵn sàng). */
   async capture(): Promise<Blob | null> {
+    return (await this.captureFrame())?.blob ?? null;
+  }
+
+  /**
+   * Chụp khung hình kèm kết luận khung đó đã có nội dung hay chưa.
+   * `usable=false` = khung đen/đồng nhất (camera chưa phơi sáng, phòng tối, ống kính bị che).
+   */
+  private async captureFrame(): Promise<{ blob: Blob; usable: boolean } | null> {
     const video = this.videoEl;
     if (!video) return null;
     const w = video.videoWidth || 320;
@@ -163,25 +208,82 @@ export class WebcamCapture implements OnInit {
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
     ctx.drawImage(video, 0, 0, w, h);
-    return new Promise<Blob | null>((resolve) =>
-      canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.8),
+    const usable = WebcamCapture.frameHasContent(ctx, w, h);
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.8),
     );
+    return blob ? { blob, usable } : null;
   }
 
-  private async enroll(): Promise<void> {
-    const blob = await this.capture();
-    if (!blob) return;
-    // Best-effort: enroll lỗi không chặn thi (HR duyệt sau — SEC-5).
-    this.campaignApi
-      .faceEnroll(this.campaignId(), this.sessionId(), blob)
-      .subscribe({ error: () => {} });
+  /**
+   * Khung hình đã có nội dung chưa? Đo độ sáng trung bình + độ lệch chuẩn trên mẫu thưa.
+   *
+   * KHÔNG đọc được pixel (jsdom không cài canvas, hoặc trình duyệt chặn `getImageData`) →
+   * coi như HỢP LỆ. Đây là phép kiểm phụ; để nó chặn được enroll khi bản thân nó không chạy
+   * được thì ứng viên mất giám sát danh tính cả buổi mà không ai biết — hỏng nặng hơn bug đang sửa.
+   */
+  private static frameHasContent(ctx: CanvasRenderingContext2D, w: number, h: number): boolean {
+    let data: Uint8ClampedArray;
+    try {
+      data = ctx.getImageData(0, 0, w, h).data;
+    } catch {
+      return true;
+    }
+    if (!data?.length) return true;
+
+    // Mẫu thưa mỗi 16 pixel: 640×480 là ~307k pixel và hàm này chạy mỗi 30s trên máy ứng viên;
+    // để phân biệt "đen" với "có hình" thì không cần duyệt hết.
+    const STEP = 16 * 4;
+    let n = 0;
+    let sum = 0;
+    let sumSq = 0;
+    for (let i = 0; i + 2 < data.length; i += STEP) {
+      const v = (data[i] + data[i + 1] + data[i + 2]) / 3;
+      sum += v;
+      sumSq += v * v;
+      n++;
+    }
+    if (n === 0) return true;
+    const mean = sum / n;
+    const stddev = Math.sqrt(Math.max(0, sumSq / n - mean * mean));
+    return mean >= MIN_FRAME_BRIGHTNESS && stddev >= MIN_FRAME_STDDEV;
+  }
+
+  /** Gửi ảnh mốc. Trả về `true` nếu đã gửi (khung dùng được), `false` nếu cần thử lại nhịp sau. */
+  private async enroll(): Promise<boolean> {
+    const frame = await this.captureFrame();
+    if (!frame) return false;
+
+    // Khung chưa có nội dung → KHÔNG upload. Ảnh mốc hỏng còn tệ hơn không có ảnh mốc: nó biến
+    // mọi lượt đối chiếu về sau thành `face_mismatch` — cờ "không đúng người" — cho một ứng
+    // viên trung thực. Nhắc họ mở sáng rồi thử lại ở nhịp kế.
+    if (!frame.usable) {
+      this.needsBetterLighting.set(true);
+      return false;
+    }
+
+    this.needsBetterLighting.set(false);
+    this.enrolled = true;
+    // Best-effort: enroll lỗi không chặn thi (HR duyệt sau — SEC-5). Lỗi mạng → mở lại cờ để
+    // nhịp sau gửi lại, thay vì buổi thi trôi đi mà không có mốc nào.
+    this.campaignApi.faceEnroll(this.campaignId(), this.sessionId(), frame.blob).subscribe({
+      error: () => {
+        this.enrolled = false;
+      },
+    });
+    return true;
   }
 
   private async runCheck(): Promise<void> {
+    // Ảnh mốc lần đầu trúng khung chưa phơi sáng → ưu tiên thử lại; camera lúc này đã ổn định.
+    if (this.enrollRequired() && !this.enrolled && (await this.enroll())) return;
+
     const blob = await this.capture();
     if (!blob) return;
     this.checks.update((n) => n + 1);
-    // Fire-and-forget: kết quả chỉ là cờ cho HR, KHÔNG chặn bài (D13).
+    // Ảnh live CỐ Ý không lọc theo `usable`: khung tối ở đây là TÍN HIỆU THẬT (ứng viên rời chỗ,
+    // che camera) và phải tới được HR dưới dạng `no_face` — khác hẳn ảnh mốc, nơi khung tối chỉ là
+    // hỏng kỹ thuật. Fire-and-forget: kết quả chỉ là cờ, KHÔNG chặn bài (D13).
     this.campaignApi
       .faceCheck(this.campaignId(), this.sessionId(), blob)
       .subscribe({ error: () => {} });
