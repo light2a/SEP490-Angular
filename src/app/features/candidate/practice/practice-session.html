@@ -63,6 +63,27 @@
         }
 
         @if (q.answer) {
+          <!--
+            Nghe lại chính bản thu của mình. Nút tải trước rồi mới dựng `<audio>` vì endpoint đòi
+            JWT: gán thẳng `audioUrl` vào `src` sẽ ra 401 và trình phát chỉ hiện "không phát được".
+            `audioUrl` null = BE không còn giữ file (retention) → không hiện nút, đỡ hứa suông.
+          -->
+          @if (q.answer.audioUrl) {
+            <div class="playback">
+              @if (audioSrc(q.answer.id); as src) {
+                <audio controls [src]="src"></audio>
+              } @else {
+                <button
+                  mat-stroked-button
+                  (click)="loadAudio(q.answer.id)"
+                  [disabled]="loadingAudioId() === q.answer.id"
+                >
+                  <mat-icon>play_circle</mat-icon>
+                  {{ loadingAudioId() === q.answer.id ? 'Đang tải…' : 'Nghe lại bản thu' }}
+                </button>
+              }
+            </div>
+          }
           @if (q.answer.transcript) {
             <p class="tr"><b>Bản ghi:</b> {{ q.answer.transcript }}</p>
           }
@@ -170,6 +191,57 @@
     }
   }
 
+  <!--
+    Evidence-Driven Interviewer — AI đang thu được dẫn chứng gì cho từng tiêu chí.
+
+    Đây là phần đáng giá nhất cho người học: nó nói RÕ còn thiếu gì để đạt tiêu chí, thay vì chỉ
+    đưa một con số điểm. Hiện cả khi buổi CHƯA chấm xong — biết mình còn hổng chỗ nào trong lúc
+    còn câu để trả lời thì mới kịp bù.
+
+    `criterionEvidence()` trả null khi BE không gắn (buổi cũ / B2B) ⇒ cả khối biến mất, không dán
+    nhãn "chưa có dẫn chứng" oan lên những buổi vốn không hề theo dõi thứ này.
+  -->
+  @if (criterionEvidence(); as evidence) {
+    <mat-card class="evidence" data-testid="criterion-evidence">
+      <h2>Dẫn chứng theo tiêu chí</h2>
+      <p class="ev-note">
+        <mat-icon>info</mat-icon>
+        AI ghi lại những gì bạn đã chứng minh được và phần còn thiếu của từng tiêu chí.
+      </p>
+      @for (ev of evidence; track ev.criterionId) {
+        <div class="ev-item">
+          <div class="ev-head">
+            <span class="ev-name">{{ ev.criterionName }}</span>
+            <mat-chip [class]="'ev-' + ev.state">{{ evidenceStateLabel(ev.state) }}</mat-chip>
+          </div>
+          @if (ev.evidenceFound.length) {
+            <div class="ev-block">
+              <h4>Đã thể hiện được</h4>
+              <ul>
+                @for (f of ev.evidenceFound; track f) {
+                  <li>{{ f }}</li>
+                }
+              </ul>
+            </div>
+          }
+          @if (ev.missingEvidence.length) {
+            <div class="ev-block">
+              <h4>Còn thiếu</h4>
+              <ul>
+                @for (m of ev.missingEvidence; track m) {
+                  <li>{{ m }}</li>
+                }
+              </ul>
+            </div>
+          }
+          @if (!ev.evidenceFound.length && !ev.missingEvidence.length) {
+            <p class="ev-empty">Chưa có câu hỏi nào chạm tới tiêu chí này.</p>
+          }
+        </div>
+      }
+    </mat-card>
+  }
+
   @if (result(); as r) {
     <mat-card class="result">
       <h2>Kết quả</h2>
@@ -223,6 +295,63 @@
               <div class="target" [style.left.%]="target" [title]="'Mốc ' + target + '%'"></div>
             }
           </div>
+        </div>
+      }
+
+      <!--
+        BC8 — đối chiếu CV ↔ câu trả lời. BE dựng read-time bằng cách giao "tiêu chí cần cải thiện
+        của buổi này" với "điểm mạnh ghi trong CV" (khớp token, KHÔNG dùng AI).
+
+        Vì thế nó chỉ xuất hiện khi buổi luyện có gắn CV, và `gaps` rỗng là tin TỐT (không có chỗ
+        nào CV nói mạnh mà trả lời lại yếu) — nên chỉ dựng cả khối khi thực sự có nội dung, thay vì
+        bày một mục trống bắt người đọc tự đoán.
+
+        Câu chữ phải nói rõ đây là so với CHÍNH CV BẠN KHAI, không phải một chuẩn bên ngoài: khớp
+        token có thể trùng nhầm, mà nói "bạn yếu ở X" nghe nặng hơn hẳn "CV khai X nhưng phần trả
+        lời chưa thể hiện được".
+      -->
+      @if (cvVsAnswer(); as cva) {
+        <div class="cv-vs-answer" data-testid="cv-vs-answer">
+          <h3>CV nói gì so với câu trả lời</h3>
+          <p class="cva-note">
+            <mat-icon>info</mat-icon>
+            Đối chiếu với chính CV bạn đính kèm buổi này (so khớp từ khoá, không phải AI).
+          </p>
+
+          @if (cva.gaps.length) {
+            <h4>CV có nhắc, nhưng phần trả lời chưa thể hiện được</h4>
+            @for (g of cva.gaps; track g.criterionId) {
+              <div class="gap">
+                <div class="gap-top">
+                  <span>{{ g.criterionName }}</span>
+                  <b>{{ g.percentage | number: '1.0-0' }}%</b>
+                </div>
+                @if (g.cvEvidence.length) {
+                  <ul class="cv-evidence">
+                    @for (ev of g.cvEvidence; track ev) {
+                      <li>“{{ ev }}”</li>
+                    }
+                  </ul>
+                } @else {
+                  <p class="cv-evidence-none">Không trích được đoạn CV tương ứng.</p>
+                }
+              </div>
+            }
+          } @else {
+            <p class="gap-none">
+              <mat-icon>check_circle</mat-icon>
+              Không có điểm mạnh nào trong CV bị hụt ở buổi này.
+            </p>
+          }
+
+          @if (cva.cvStrengths.length) {
+            <h4>Điểm mạnh đọc được từ CV</h4>
+            <mat-chip-set>
+              @for (s of cva.cvStrengths; track s) {
+                <mat-chip>{{ s }}</mat-chip>
+              }
+            </mat-chip-set>
+          }
         </div>
       }
     </mat-card>

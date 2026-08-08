@@ -18,6 +18,23 @@ export class FilesApi {
     });
   }
 
+  /**
+   * PUT .../files/{id} — THAY nội dung file đã tải lên (giữ nguyên id, loại cv/jd, và mọi tham
+   * chiếu tới nó). Dùng khi CV có bản mới: sửa tại chỗ thay vì xoá-rồi-tải-lại (xoá là mất id,
+   * kéo theo các buổi luyện/phân tích cũ trỏ vào một file không còn).
+   *
+   * ⚠ Tên field multipart là **`newFile`**, KHÔNG phải `file` như lúc upload — sai tên thì BE
+   * đọc ra null và trả 400 "Không có file.".
+   * ⚠ Cũng KHÔNG có tham số `fileType`: loại kế thừa từ bản ghi cũ (không đổi cv ↔ jd được).
+   *
+   * 200 `{ message, parsedCv }` (parsedCv chỉ có với CV) · 400 (không phải PDF) · 403 · 404.
+   */
+  replace(id: string, newFile: File): Observable<{ message: string; parsedCv?: unknown }> {
+    const form = new FormData();
+    form.append('newFile', newFile, newFile.name);
+    return this.http.put<{ message: string; parsedCv?: unknown }>(`${this.base}/${id}`, form);
+  }
+
   /** GET .../files/files (đúng path lặp theo spec). */
   list(): Observable<FileRecord[]> {
     return this.http.get<FileRecord[]>(`${this.base}/files`);
