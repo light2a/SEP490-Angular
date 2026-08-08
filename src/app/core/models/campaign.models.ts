@@ -131,6 +131,21 @@ export const CAMPAIGN_SENIORITY_OPTIONS: ReadonlyArray<{
   { value: 'Senior', label: 'Senior (trên 5 năm)' },
 ];
 
+/**
+ * Ngôn ngữ BÀI PHỎNG VẤN của chiến dịch (không phải ngôn ngữ giao diện). Câu hỏi, nhận xét
+ * và câu trả lời mẫu do AI sinh đều theo giá trị này. Backend chỉ nhận 'vi' | 'en'.
+ */
+export type CampaignLanguage = 'vi' | 'en';
+
+/** 2 ngôn ngữ + nhãn cho ô chọn. */
+export const CAMPAIGN_LANGUAGE_OPTIONS: ReadonlyArray<{
+  value: CampaignLanguage;
+  label: string;
+}> = [
+  { value: 'vi', label: 'Tiếng Việt' },
+  { value: 'en', label: 'Tiếng Anh' },
+];
+
 /** Nguồn tiêu chí (HrEdited = HR khai; AiSuggested = AI gợi ý). */
 export type CriterionSource = 'HrEdited' | 'AiSuggested';
 
@@ -161,6 +176,8 @@ export interface CampaignResponse {
   domain?: string | null;
   /** Cấp độ ứng viên — AI định độ khó câu hỏi theo mức này. Backend mặc định 'Junior'. */
   seniority?: CampaignSeniority | null;
+  /** Ngôn ngữ bài phỏng vấn. Backend mặc định 'vi'; chiến dịch cũ có thể không trả field này. */
+  language?: CampaignLanguage | null;
   status: CampaignStatus;
   maxCandidates?: number | null;
   timeLimitMinutes?: number | null;
@@ -223,6 +240,8 @@ export interface CreateCampaignRequest {
   domain?: string | null;
   /** Không gửi → backend mặc định 'Junior'. **Không bao giờ gửi chuỗi rỗng** (→ 400). */
   seniority?: CampaignSeniority;
+  /** Không gửi → backend mặc định 'vi'. **Không bao giờ gửi chuỗi rỗng** (→ 400, cùng luật seniority). */
+  language?: CampaignLanguage;
   maxCandidates?: number | null;
   timeLimitMinutes?: number | null;
   antiCheatEnabled: boolean;
@@ -251,6 +270,8 @@ export interface UpdateCampaignRequest {
    * (có chủ đích: `""` từng âm thầm hạ mức đã chọn về Junior). Kiểu ở đây cấm luôn `''`.
    */
   seniority?: CampaignSeniority | null;
+  /** undefined/null = KHÔNG đổi. Chuỗi rỗng → 400 (kiểu ở đây cấm luôn `''`). */
+  language?: CampaignLanguage | null;
   maxCandidates?: number | null;
   timeLimitMinutes?: number | null;
   antiCheatEnabled?: boolean;

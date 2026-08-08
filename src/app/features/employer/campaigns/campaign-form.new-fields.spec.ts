@@ -229,4 +229,47 @@ describe('CampaignForm — cấp độ, mô tả tiêu chí, trần thi đồng 
     const cmp = renderEditing().componentInstance;
     expect(cmp.form.controls.maxConcurrentInterviews.value).toBe(5);
   });
+  // ── language ────────────────────────────────────────────────────────────────
+  /**
+   * `language` mang ĐÚNG bẫy của `seniority` (BK35): backend coi `null` là "không khai" và mặc
+   * định 'vi', nhưng trả **400** với chuỗi rỗng — trước đó `''` âm thầm hạ campaign 'en' về 'vi'.
+   * Vì thế khoá cả hai lớp giống hệt seniority.
+   */
+  it('mặc định gửi vi khi HR không đổi gì', () => {
+    const cmp = renderNew().componentInstance;
+    cmp.form.patchValue({ title: 'T' });
+    cmp.questions.at(0).patchValue({ questionText: 'Q' });
+
+    cmp.submit();
+
+    expect(api['createCampaign'].mock.calls[0][0].language).toBe('vi');
+  });
+
+  it('ngôn ngữ đã lưu được nạp lại khi sửa', () => {
+    const cmp = renderEditing(campaign({ language: 'en' })).componentInstance;
+    expect(cmp.form.controls.language.value).toBe('en');
+  });
+
+  it('lớp 1 — ô ngôn ngữ rỗng làm form invalid, KHÔNG gửi request nào', () => {
+    const cmp = renderEditing().componentInstance;
+    cmp.form.controls.language.setValue('' as never);
+
+    cmp.submit();
+
+    expect(api['updateCampaign']).not.toHaveBeenCalled();
+    expect(notify['warn']).toHaveBeenCalled();
+  });
+
+  it('lớp 2 — dù lọt qua validator, payload BỎ HẲN field chứ không mang chuỗi rỗng', () => {
+    const cmp = renderEditing().componentInstance;
+    cmp.form.controls.language.setValue('' as never);
+    cmp.form.controls.language.clearValidators();
+    cmp.form.controls.language.updateValueAndValidity();
+
+    cmp.submit();
+
+    const body = api['updateCampaign'].mock.calls[0][1];
+    expect(body.language).toBeUndefined();
+    expect(body.language).not.toBe('');
+  });
 });

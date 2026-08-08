@@ -14,8 +14,10 @@ import { extractErrorMessage } from '../../../core/api/http-utils';
 import { CampaignApi } from '../../../core/api/campaign.api';
 import { NotifyService } from '../../../core/notify.service';
 import {
+  CAMPAIGN_LANGUAGE_OPTIONS,
   CAMPAIGN_SENIORITY_OPTIONS,
   CampaignResponse,
+  CampaignLanguage,
   CampaignSeniority,
   CampaignStatus,
   CreateInvitationsResponse,
@@ -68,6 +70,10 @@ const STATUS_LABEL: Record<CampaignStatus, string> = {
           <div class="item">
             <span class="k">Cấp độ ứng viên</span>
             <span class="v">{{ seniorityLabel(c.seniority) }}</span>
+          </div>
+          <div class="item">
+            <span class="k">Ngôn ngữ bài phỏng vấn</span>
+            <span class="v">{{ languageLabel(c.language) }}</span>
           </div>
           <div class="item">
             <span class="k">Số ứng viên tối đa</span>
@@ -634,6 +640,12 @@ export class CampaignDetail implements OnInit {
   seniorityLabel(s: CampaignSeniority | null | undefined): string {
     if (!s) return 'Junior (mặc định)';
     return CAMPAIGN_SENIORITY_OPTIONS.find((o) => o.value === s)?.label ?? s;
+  }
+
+  /** Cùng lý do như seniority: chiến dịch cũ không trả language → nói rõ mặc định backend. */
+  languageLabel(l: CampaignLanguage | null | undefined): string {
+    if (!l) return 'Tiếng Việt (mặc định)';
+    return CAMPAIGN_LANGUAGE_OPTIONS.find((o) => o.value === l)?.label ?? l;
   }
 
   // ── Tài liệu PDF ────────────────────────────────────────────────────────────

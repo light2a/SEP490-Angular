@@ -22,8 +22,10 @@ import { extractErrorMessage } from '../../../core/api/http-utils';
 import { CampaignApi } from '../../../core/api/campaign.api';
 import { NotifyService } from '../../../core/notify.service';
 import {
+  CAMPAIGN_LANGUAGE_OPTIONS,
   CAMPAIGN_SENIORITY_OPTIONS,
   CampaignResponse,
+  CampaignLanguage,
   CampaignSeniority,
   CreateCampaignRequest,
   CriterionItem,
@@ -108,6 +110,18 @@ function toIso(local: string | null | undefined): string | null {
                 }
               </mat-select>
               <mat-hint>AI ra đề khó/dễ theo mức này</mat-hint>
+            </mat-form-field>
+          </div>
+
+          <div class="two">
+            <mat-form-field appearance="outline">
+              <mat-label>Ngôn ngữ bài phỏng vấn</mat-label>
+              <mat-select formControlName="language">
+                @for (o of languageOptions; track o.value) {
+                  <mat-option [value]="o.value">{{ o.label }}</mat-option>
+                }
+              </mat-select>
+              <mat-hint>Câu hỏi + nhận xét AI theo ngôn ngữ này (không phải ngôn ngữ giao diện)</mat-hint>
             </mat-form-field>
           </div>
 
@@ -529,12 +543,15 @@ export class CampaignForm implements OnInit {
   readonly criteriaTextLength = signal(0);
 
   readonly seniorityOptions = CAMPAIGN_SENIORITY_OPTIONS;
+  readonly languageOptions = CAMPAIGN_LANGUAGE_OPTIONS;
 
   readonly form = this.fb.group({
     title: ['', [Validators.required]],
     domain: [''],
     // Luôn có giá trị hợp lệ trong 4 mức — ô này KHÔNG có lựa chọn rỗng, vì backend trả 400 với ''.
     seniority: ['Junior' as CampaignSeniority, [Validators.required]],
+    // Cùng luật với seniority: không có lựa chọn rỗng, vì backend trả 400 với ''.
+    language: ['vi' as CampaignLanguage, [Validators.required]],
     jdText: ['', [Validators.maxLength(JD_TEXT_MAX_CHARS)]],
     criteriaText: ['', [Validators.maxLength(JD_TEXT_MAX_CHARS)]],
     maxCandidates: [null as number | null],
@@ -609,6 +626,8 @@ export class CampaignForm implements OnInit {
       domain: c.domain ?? '',
       // Chiến dịch cũ (trước khi có cột) không trả seniority → về mặc định backend, KHÔNG để rỗng.
       seniority: c.seniority ?? 'Junior',
+      // Chiến dịch tạo trước khi có cột không trả language → mặc định backend, KHÔNG để rỗng.
+      language: c.language ?? 'vi',
       jdText: c.jdText ?? '',
       criteriaText: c.criteriaText ?? '',
       maxCandidates: c.maxCandidates ?? null,
@@ -665,6 +684,15 @@ export class CampaignForm implements OnInit {
    */
   private seniorityValue(): CampaignSeniority | undefined {
     const v = this.form.controls.seniority.value;
+    return v ? v : undefined;
+  }
+
+  /**
+   * Giá trị `language` an toàn để gửi đi — cùng bẫy với `seniority`: backend coi `null` là
+   * "không khai" (mặc định 'vi') nhưng trả **400** với chuỗi rỗng. Bỏ hẳn field thay vì gửi ''.
+   */
+  private languageValue(): CampaignLanguage | undefined {
+    const v = this.form.controls.language.value;
     return v ? v : undefined;
   }
 
@@ -863,6 +891,7 @@ export class CampaignForm implements OnInit {
         title: v.title!,
         domain: v.domain || null,
         seniority: this.seniorityValue(),
+        language: this.languageValue(),
         jdText: v.jdText || null,
         criteriaText: v.criteriaText || null,
         maxCandidates: v.maxCandidates ?? null,
@@ -898,6 +927,7 @@ export class CampaignForm implements OnInit {
       title: v.title!,
       domain: v.domain || null,
       seniority: this.seniorityValue(),
+      language: this.languageValue(),
       jdText: v.jdText || null,
       criteriaText: v.criteriaText || null,
       maxCandidates: v.maxCandidates ?? null,
