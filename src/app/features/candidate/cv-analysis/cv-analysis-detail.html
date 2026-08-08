@@ -1,0 +1,57 @@
+<a mat-button routerLink="/candidate/cv-analysis"><mat-icon>arrow_back</mat-icon> Phân tích CV</a>
+
+@if (loading()) {
+  <app-spinner message="Đang tải kết quả phân tích..." />
+} @else if (notFound()) {
+  <p class="muted">Không tìm thấy kết quả phân tích này.</p>
+} @else if (analysis(); as a) {
+  <div class="head">
+    <mat-icon>insights</mat-icon>
+    <h1>{{ a.jobCategory | jobCategory }}</h1>
+  </div>
+  <p class="sub">{{ a.createdAt | date: 'medium' }}</p>
+
+  <mat-card class="card">
+    <p class="summary">{{ a.summary }}</p>
+
+    @if (a.strengths.length) {
+      <h4>Điểm mạnh</h4>
+      <mat-chip-set>
+        @for (s of a.strengths; track s) {
+          <mat-chip>{{ s }}</mat-chip>
+        }
+      </mat-chip-set>
+    }
+
+    @if (a.weaknesses.length) {
+      <h4>Điểm yếu</h4>
+      <ul>
+        @for (w of a.weaknesses; track w) {
+          <li>{{ w }}</li>
+        }
+      </ul>
+    }
+
+    @if (a.suggestions.length) {
+      <h4>Gợi ý cải thiện</h4>
+      <ul>
+        @for (s of a.suggestions; track s) {
+          <li>{{ s }}</li>
+        }
+      </ul>
+    }
+
+    <!--
+      `jdMatch` chỉ có khi lần phân tích đó CÓ nội dung JD. JD nhập tay thì `jdId` là null nhưng
+      `jdMatch` VẪN có (BE gate theo "có nội dung JD") ⇒ phải kiểm chính `jdMatch`, đừng suy từ jdId.
+    -->
+    @if (a.jdMatch; as jd) {
+      <h4>Khớp JD ({{ jd.score }}%)</h4>
+      <p>Kỹ năng khớp: {{ jd.matchedSkills.join(', ') || '—' }}</p>
+      <p>Còn thiếu: {{ jd.missingSkills.join(', ') || '—' }}</p>
+    } @else {
+      <h4>Khớp JD</h4>
+      <p class="muted">Lần phân tích này không kèm JD nên chưa chấm độ khớp.</p>
+    }
+  </mat-card>
+}

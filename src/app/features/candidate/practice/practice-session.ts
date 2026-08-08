@@ -25,7 +25,6 @@ import { NotifyService } from '../../../core/notify.service';
 import {
   ADAPTIVE_ACTION_MESSAGE,
   AnswerScore,
-  CRITERION_EVIDENCE_STATE_LABEL,
   PracticeSession as SessionData,
   QUESTION_KIND_LABEL,
   QuestionCitation,
@@ -38,6 +37,8 @@ import { AnswerStatusPipe, JobCategoryPipe, SessionStatusPipe } from '../../../s
 import { createCountdown } from '../../../shared/timing/countdown';
 import { Spinner } from '../../../shared/ui/spinner';
 import { AudioRecorder, RecordedAudio } from './audio-recorder';
+import { CriterionEvidencePanel } from './criterion-evidence-panel';
+import { CvVsAnswerPanel } from './cv-vs-answer-panel';
 import { DeliveryMetricsPanel } from './delivery-metrics';
 
 const POLL_STATUS = ['GeneratingQuestions', 'Scoring', 'Completed'];
@@ -55,6 +56,8 @@ const ANSWER_PENDING = ['Uploaded', 'Transcribing', 'Scoring'];
     MatDividerModule,
     MatProgressBarModule,
     AudioRecorder,
+    CriterionEvidencePanel,
+    CvVsAnswerPanel,
     DeliveryMetricsPanel,
     InterviewAvatar,
     RadarChart,
@@ -231,22 +234,6 @@ export class PracticeSession implements OnInit {
   }
 
   /**
-   * BC8 — đối chiếu CV ↔ câu trả lời. Chỉ có khi buổi luyện gắn CV (BE dựng read-time bằng cách
-   * giao "tiêu chí cần cải thiện" với "điểm mạnh trích từ CV").
-   *
-   * Trả `null` khi KHÔNG có nội dung nào để nói (không có CV, hoặc cả hai mảng đều rỗng) — bày một
-   * mục trống thì người đọc phải tự đoán vì sao nó trống.
-   */
-  readonly cvVsAnswer = computed(() => {
-    const cva = this.result()?.cvVsAnswer;
-    if (!cva) return null;
-    const gaps = cva.gaps ?? [];
-    const cvStrengths = cva.cvStrengths ?? [];
-    if (!gaps.length && !cvStrengths.length) return null;
-    return { gaps, cvStrengths };
-  });
-
-  /**
    * Evidence-Driven Interviewer — dẫn chứng AI thu được cho từng tiêu chí trong CẢ buổi.
    *
    * `null` = buổi cũ / chưa bật theo dõi ⇒ không hiện gì (khác hẳn "đã theo dõi mà không thu được
@@ -256,10 +243,6 @@ export class PracticeSession implements OnInit {
     const list = this.session()?.criterionEvidence;
     return list && list.length ? list : null;
   });
-
-  evidenceStateLabel(state: string): string {
-    return CRITERION_EVIDENCE_STATE_LABEL[state] ?? state;
-  }
 
   // ── Nghe lại bản ghi âm của chính mình ──────────────────────────────────────────────────
   /**

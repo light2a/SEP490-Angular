@@ -49,4 +49,56 @@ describe('PracticeApi', () => {
 
     req.flush({ id: 's-1', status: 'GeneratingQuestions', jobCategory: 'BE' });
   });
+
+  it('create() gửi `language` lên BE (hợp đồng song ngữ)', () => {
+    api.create({ jobCategory: 'BE', language: 'en' }).subscribe();
+
+    const req = httpMock.expectOne(BASE);
+    expect(req.request.body).toEqual(expect.objectContaining({ language: 'en' }));
+
+    req.flush({ id: 's-1', status: 'GeneratingQuestions', jobCategory: 'BE' });
+  });
+
+  /**
+   * SC3 — endpoint này KHÔNG nằm dưới `/sessions`; ghép nhầm vào `this.base` ra
+   * `/sessions/session-options` → 404, mà 404 rất dễ bị đọc thành "backend chưa có endpoint"
+   * (repo đã có nguyên một vòng e2e đọc nhầm đúng kiểu này với prefix `interview`).
+   */
+  it('sessionOptions() gọi ĐÚNG /practice/session-options, không phải dưới /sessions', () => {
+    api.sessionOptions('BE', 'en').subscribe();
+
+    const req = httpMock.expectOne(
+      (r) => r.url === `${environment.apiBase}/interview/practice/session-options`,
+    );
+    expect(req.request.method).toBe('GET');
+    expect(req.request.params.get('jobCategory')).toBe('BE');
+    expect(req.request.params.get('language')).toBe('en');
+
+    req.flush({ presets: [], preview: [] });
+  });
+
+  it('sessionOptions() bỏ hẳn param language khi không truyền (BE mặc định vi)', () => {
+    api.sessionOptions('BA').subscribe();
+
+    const req = httpMock.expectOne(
+      (r) => r.url === `${environment.apiBase}/interview/practice/session-options`,
+    );
+    expect(req.request.params.has('language')).toBe(false);
+
+    req.flush({ presets: [], preview: [] });
+  });
+
+  /**
+   * Phải xin `blob`: endpoint đòi JWT nên không gán thẳng vào `<audio src>` được, và nếu quên
+   * `responseType` thì Angular parse audio nhị phân như JSON → hỏng ở chỗ chẳng liên quan.
+   */
+  it('answerAudio() tải blob từ đúng đường answers/{id}/audio', () => {
+    api.answerAudio('sess-1', 'ans-9').subscribe();
+
+    const req = httpMock.expectOne(`${BASE}/sess-1/answers/ans-9/audio`);
+    expect(req.request.method).toBe('GET');
+    expect(req.request.responseType).toBe('blob');
+
+    req.flush(new Blob(['audio'], { type: 'audio/webm' }));
+  });
 });

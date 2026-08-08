@@ -31,7 +31,10 @@
             @for (f of group.items; track f.id) {
               <mat-list-item>
                 <mat-icon matListItemIcon>picture_as_pdf</mat-icon>
-                <span matListItemTitle>{{ f.originalName }}</span>
+                <!-- Tên file dẫn sang trang chi tiết: xem toàn văn AI bóc được + thay bản mới. -->
+                <a matListItemTitle class="file-link" [routerLink]="['/candidate/files', f.id]">
+                  {{ f.originalName }}
+                </a>
                 <span matListItemLine>{{ f.createdAt | date: 'short' }} · {{ f.parseStatus }}</span>
                 <span matListItemMeta>
                   <button mat-icon-button (click)="download(f)" aria-label="Xem">
