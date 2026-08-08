@@ -6,16 +6,20 @@ import {
   ApiKeyListItem,
   CampaignResponse,
   CampaignResultsResponse,
+  CampaignSlotResponse,
   CreateApiKeyRequest,
   CreateApiKeyResponse,
   CandidateDetailResponse,
   CandidateListItem,
   CreateCampaignRequest,
+  CreateCampaignSlotRequest,
   PatchCandidateRequest,
   CreateInvitationsRequest,
   CreateInvitationsResponse,
   FaceCheckResult,
   InvitationInfo,
+  InvitationListItem,
+  UpdateCampaignSlotRequest,
   InviteShortlistRequest,
   InviteShortlistResponse,
   OverrideResultRequest,
@@ -172,6 +176,64 @@ export class CampaignApi {
     return this.http.delete(`${this.base}/${id}`);
   }
 
+  // ── Khung giờ phỏng vấn (slot) ─────────────────────────────────────────────
+  /** GET /campaign/{id}/slots — sắp theo `startsAt`; ngoài org → 404. */
+  getSlots(id: string): Observable<CampaignSlotResponse[]> {
+    return this.http.get<CampaignSlotResponse[]>(`${this.base}/${id}/slots`);
+  }
+
+  /** POST /campaign/{id}/slots — 400 giờ/sức chứa không hợp lệ · 409 chồng lấn khung giờ khác. */
+  createSlot(id: string, body: CreateCampaignSlotRequest): Observable<CampaignSlotResponse> {
+    return this.http.post<CampaignSlotResponse>(`${this.base}/${id}/slots`, body);
+  }
+
+  /** PUT /campaign/{id}/slots/{slotId} — thêm 400 khi hạ sức chứa dưới số lời mời đã gán. */
+  updateSlot(
+    id: string,
+    slotId: string,
+    body: UpdateCampaignSlotRequest,
+  ): Observable<CampaignSlotResponse> {
+    return this.http.put<CampaignSlotResponse>(`${this.base}/${id}/slots/${slotId}`, body);
+  }
+
+  /** DELETE /campaign/{id}/slots/{slotId} → 204. Đang có ứng viên thi trong khung → 409. */
+  deleteSlot(id: string, slotId: string): Observable<unknown> {
+    return this.http.delete(`${this.base}/${id}/slots/${slotId}`);
+  }
+
+  // ── File JD / tiêu chí (PDF) ───────────────────────────────────────────────
+  /**
+   * POST /campaign/{id}/files — đính kèm lần đầu (multipart). Ít nhất 1 file, mỗi file ≤ 10MB.
+   *
+   * ⚠ C11 — **text ưu tiên file**: slot nào đã có `jdText`/`criteriaText` nhập tay thì backend
+   * BỎ QUA file gửi kèm cho slot đó (không lỗi, chỉ lặng lẽ không nhận). Phải nói rõ trên UI.
+   */
+  uploadCampaignFiles(
+    id: string,
+    files: { jdFile?: File | null; criteriaFile?: File | null },
+  ): Observable<CampaignResponse> {
+    return this.http.post<CampaignResponse>(`${this.base}/${id}/files`, buildFileForm(files));
+  }
+
+  /** PUT /campaign/{id}/files — thay file. **Chỉ khi Draft** (khác → 409). Cùng luật text-ưu-tiên. */
+  updateCampaignFiles(
+    id: string,
+    files: { jdFile?: File | null; criteriaFile?: File | null },
+  ): Observable<CampaignResponse> {
+    return this.http.put<CampaignResponse>(`${this.base}/${id}/files`, buildFileForm(files));
+  }
+
+  /**
+   * POST /campaign/{id}/files/download?fileType=jd|criteria — tải PDF (blob).
+   * Chưa upload file cho slot đó → **404** (không phải lỗi hệ thống, phải hiện thông báo tử tế).
+   */
+  downloadCampaignFile(id: string, fileType: 'jd' | 'criteria'): Observable<Blob> {
+    return this.http.post(`${this.base}/${id}/files/download`, null, {
+      params: new HttpParams().set('fileType', fileType),
+      responseType: 'blob',
+    });
+  }
+
   // ── Mời ứng viên (đường 1: email) ──────────────────────────────────────────
   /** POST /campaign/{id}/invitations — mời theo danh sách email → {created[], failed[]}. */
   createInvitations(
@@ -179,6 +241,23 @@ export class CampaignApi {
     body: CreateInvitationsRequest,
   ): Observable<CreateInvitationsResponse> {
     return this.http.post<CreateInvitationsResponse>(`${this.base}/${id}/invitations`, body);
+  }
+
+  /**
+   * GET /campaign/{id}/invitations — lời mời ĐÃ PHÁT của chiến dịch (HR theo dõi + lấy `id` để
+   * gửi lại). Lọc `status`/`search` chạy ở SQL nên đúng trên toàn bộ tập, không chỉ trang hiện tại.
+   * Keyset-paged: `cursor`/`limit` opt-in, mặc định trả tối đa 500 (đủ cho mọi campaign hiện có).
+   */
+  getInvitations(
+    id: string,
+    opts?: { status?: string; search?: string; cursor?: string; limit?: number },
+  ): Observable<InvitationListItem[]> {
+    let params = new HttpParams();
+    if (opts?.status) params = params.set('status', opts.status);
+    if (opts?.search) params = params.set('search', opts.search);
+    if (opts?.cursor) params = params.set('cursor', opts.cursor);
+    if (opts?.limit != null) params = params.set('limit', String(opts.limit));
+    return this.http.get<InvitationListItem[]>(`${this.base}/${id}/invitations`, { params });
   }
 
   /** POST /campaign/{id}/invitations/{invId}/reissue — cấp lại token + gửi mail. */
@@ -264,6 +343,18 @@ export class CampaignApi {
     return this.http.patch(`${this.base}/${id}/candidates/${candidateId}`, body);
   }
 
+  /**
+   * POST /campaign/{id}/candidates/{cid}/rescreen → **202** — đẩy lại sàng CV cho 1 ứng viên
+   * (điền `fullName`/điểm còn thiếu, hoặc retry `AnalysisFailed`).
+   *
+   * **409** khi trạng thái không cho phép: `Invited` (kết quả đã chốt, chạy tiếp chỉ đốt token
+   * rồi vứt) và `Analyzing` (job đang bay — đây cũng chính là cooldown chống bấm liên tục, không
+   * phải lỗi). Chỉ `Filtered`/`Analyzed`/`AnalysisFailed` mới đẩy lại được.
+   */
+  rescreenCandidate(id: string, candidateId: string): Observable<unknown> {
+    return this.http.post(`${this.base}/${id}/candidates/${candidateId}/rescreen`, null);
+  }
+
   /** POST /campaign/{id}/candidates/invite — mời shortlist theo candidateIds. */
   inviteShortlist(
     id: string,
@@ -294,4 +385,16 @@ export class CampaignApi {
   revokeApiKey(id: string): Observable<unknown> {
     return this.http.delete(`${this.base}/api-keys/${id}`);
   }
+}
+
+/**
+ * Multipart cho POST/PUT `/campaign/{id}/files`. Tên field khớp `UploadCampaignFilesRequest`
+ * (`JdFile`/`CriteriaFile`) — model binding của ASP.NET không phân biệt hoa/thường.
+ * Chỉ append file thật sự có: gửi phần rỗng sẽ bị bind thành `IFormFile` độ dài 0 thay vì null.
+ */
+function buildFileForm(files: { jdFile?: File | null; criteriaFile?: File | null }): FormData {
+  const form = new FormData();
+  if (files.jdFile) form.append('jdFile', files.jdFile, files.jdFile.name);
+  if (files.criteriaFile) form.append('criteriaFile', files.criteriaFile, files.criteriaFile.name);
+  return form;
 }
