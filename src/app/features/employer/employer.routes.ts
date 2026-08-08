@@ -59,5 +59,12 @@ export const EMPLOYER_ROUTES: Routes = [
     path: 'payment/:result',
     loadComponent: () => import('./credits/employer-payment-return').then((m) => m.EmployerPaymentReturn),
   },
+  {
+    // Màn "Gói của tôi" dùng chung cho cả hai khu vực (backend suy chủ thuê bao từ JWT).
+    // File nằm bên candidate/credits vì vòng này worker chỉ được sửa hai thư mục credits.
+    path: 'subscription',
+    loadComponent: () =>
+      import('../candidate/credits/my-subscription').then((m) => m.MySubscription),
+  },
   { path: '**', redirectTo: 'dashboard' },
 ];

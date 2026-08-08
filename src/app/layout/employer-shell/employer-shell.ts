@@ -53,6 +53,7 @@ export class EmployerShell {
     { path: 'api-keys', icon: 'vpn_key', label: 'API key', orgAdminOnly: true },
     { path: 'credits', icon: 'account_balance_wallet', label: 'Credit & Thanh toán', orgAdminOnly: true },
     { path: 'invoices', icon: 'receipt_long', label: 'Hoá đơn', orgAdminOnly: true },
+    { path: 'subscription', icon: 'card_membership', label: 'Gói của tổ chức', orgAdminOnly: true },
   ];
 
   readonly nav = computed(() =>

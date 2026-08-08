@@ -52,5 +52,9 @@ export const CANDIDATE_ROUTES: Routes = [
     path: 'payment/:result',
     loadComponent: () => import('./credits/payment-return').then((m) => m.PaymentReturn),
   },
+  {
+    path: 'subscription',
+    loadComponent: () => import('./credits/my-subscription').then((m) => m.MySubscription),
+  },
   { path: '**', redirectTo: 'dashboard' },
 ];
