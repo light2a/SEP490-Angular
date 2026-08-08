@@ -16,12 +16,15 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatSelectModule } from '@angular/material/select';
 import { MatDialog } from '@angular/material/dialog';
 import { extractErrorMessage } from '../../../core/api/http-utils';
 import { CampaignApi } from '../../../core/api/campaign.api';
 import { NotifyService } from '../../../core/notify.service';
 import {
+  CAMPAIGN_SENIORITY_OPTIONS,
   CampaignResponse,
+  CampaignSeniority,
   CreateCampaignRequest,
   CriterionItem,
   JD_TEXT_MAX_CHARS,
@@ -59,6 +62,7 @@ function toIso(local: string | null | undefined): string | null {
     MatButtonModule,
     MatIconModule,
     MatSlideToggleModule,
+    MatSelectModule,
     MatCheckboxModule,
     Spinner,
   ],
@@ -91,10 +95,21 @@ function toIso(local: string | null | undefined): string | null {
             <input matInput formControlName="title" maxlength="200" />
           </mat-form-field>
 
-          <mat-form-field appearance="outline" class="full">
-            <mat-label>Lĩnh vực / vị trí</mat-label>
-            <input matInput formControlName="domain" />
-          </mat-form-field>
+          <div class="two">
+            <mat-form-field appearance="outline">
+              <mat-label>Lĩnh vực / vị trí</mat-label>
+              <input matInput formControlName="domain" />
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Cấp độ ứng viên</mat-label>
+              <mat-select formControlName="seniority">
+                @for (o of seniorityOptions; track o.value) {
+                  <mat-option [value]="o.value">{{ o.label }}</mat-option>
+                }
+              </mat-select>
+              <mat-hint>AI ra đề khó/dễ theo mức này</mat-hint>
+            </mat-form-field>
+          </div>
 
           <mat-form-field appearance="outline" class="full">
             <mat-label>Mô tả công việc (JD)</mat-label>
@@ -124,6 +139,25 @@ function toIso(local: string | null | undefined): string | null {
             <mat-form-field appearance="outline">
               <mat-label>Điểm đạt (%)</mat-label>
               <input matInput type="number" formControlName="passScorePct" min="0" max="100" />
+            </mat-form-field>
+            <!--
+              Trần thi đồng thời: guard backend là "running >= max", nên 0/số âm khoá chiến dịch
+              vĩnh viễn ngay từ ứng viên ĐẦU TIÊN (mọi lượt Start trả 429). Chặn min=1 ở cả
+              validator lẫn thuộc tính input.
+            -->
+            <mat-form-field appearance="outline">
+              <mat-label>Số người thi cùng lúc tối đa</mat-label>
+              <input
+                matInput
+                type="number"
+                formControlName="maxConcurrentInterviews"
+                min="1"
+              />
+              @if (form.controls.maxConcurrentInterviews.hasError('min')) {
+                <mat-error>Phải từ 1 trở lên — đặt 0 sẽ khoá chiến dịch.</mat-error>
+              } @else {
+                <mat-hint>Để trống = không giới hạn</mat-hint>
+              }
             </mat-form-field>
           </div>
 
@@ -176,6 +210,29 @@ function toIso(local: string | null | undefined): string | null {
             </div>
           </div>
           <p class="hint">Tổng trọng số nên xấp xỉ 1.00 (backend chuẩn hoá về 1).</p>
+
+          <!--
+            Ô mô tả tiêu chí dạng tự do. Backend đã nhận criteriaText từ lâu nhưng chưa màn hình
+            nào cho nhập ⇒ HR không có cách nào mô tả tiêu chí bằng lời. Danh sách có cấu trúc bên
+            dưới ƯU TIÊN CAO HƠN: có dòng nào ở đó thì lúc xuất bản backend dùng nó và bỏ qua text.
+          -->
+          <mat-form-field appearance="outline" class="full">
+            <mat-label>Mô tả tiêu chí (tuỳ chọn)</mat-label>
+            <textarea
+              matInput
+              formControlName="criteriaText"
+              rows="4"
+              [maxlength]="jdTextMaxChars"
+              placeholder="Ví dụ: ưu tiên ứng viên có kinh nghiệm hệ phân tán, giao tiếp tiếng Anh tốt…"
+            ></textarea>
+            <mat-hint align="end">{{ criteriaTextLength() }} / {{ jdTextMaxChars }}</mat-hint>
+          </mat-form-field>
+          @if (criteria.length > 0 && criteriaTextLength() > 0) {
+            <p class="hint warn-hint">
+              Đang có tiêu chí dạng bảng bên dưới — khi xuất bản, hệ thống dùng bảng đó và
+              <strong>bỏ qua phần mô tả tự do</strong>.
+            </p>
+          }
 
           <div formArrayName="criteria">
             @for (g of criteria.controls; track $index; let i = $index) {
@@ -388,6 +445,12 @@ function toIso(local: string | null | undefined): string | null {
         font-size: 13px;
         margin: 0 0 12px;
       }
+      .warn-hint {
+        padding: 8px 12px;
+        border-radius: 8px;
+        background: #fff8e1;
+        color: #6d4c00;
+      }
       .w-total {
         font-weight: 600;
       }
@@ -462,13 +525,23 @@ export class CampaignForm implements OnInit {
   /** Độ dài JD hiện tại cho bộ đếm dưới textarea (theo dõi cả patchValue lúc load bản nháp). */
   readonly jdTextLength = signal(0);
 
+  /** Độ dài mô tả tiêu chí — cùng ngưỡng với JD (BE dùng chung `TextInputLimits.JdTextMaxChars`). */
+  readonly criteriaTextLength = signal(0);
+
+  readonly seniorityOptions = CAMPAIGN_SENIORITY_OPTIONS;
+
   readonly form = this.fb.group({
     title: ['', [Validators.required]],
     domain: [''],
+    // Luôn có giá trị hợp lệ trong 4 mức — ô này KHÔNG có lựa chọn rỗng, vì backend trả 400 với ''.
+    seniority: ['Junior' as CampaignSeniority, [Validators.required]],
     jdText: ['', [Validators.maxLength(JD_TEXT_MAX_CHARS)]],
+    criteriaText: ['', [Validators.maxLength(JD_TEXT_MAX_CHARS)]],
     maxCandidates: [null as number | null],
     timeLimitMinutes: [15 as number | null, [Validators.required, Validators.min(1)]],
     passScorePct: [null as number | null],
+    // >= 1 bắt buộc: 0/âm biến `running >= max` thành đúng luôn ⇒ khoá chiến dịch vĩnh viễn.
+    maxConcurrentInterviews: [null as number | null, [Validators.min(1)]],
     startsAt: [''],
     expiresAt: [''],
     antiCheatEnabled: [false],
@@ -487,6 +560,9 @@ export class CampaignForm implements OnInit {
     this.form.controls.jdText.valueChanges
       .pipe(takeUntilDestroyed())
       .subscribe((v) => this.jdTextLength.set(v?.length ?? 0));
+    this.form.controls.criteriaText.valueChanges
+      .pipe(takeUntilDestroyed())
+      .subscribe((v) => this.criteriaTextLength.set(v?.length ?? 0));
   }
 
   get criteria(): FormArray<FormGroup> {
@@ -531,10 +607,14 @@ export class CampaignForm implements OnInit {
     this.form.patchValue({
       title: c.title,
       domain: c.domain ?? '',
+      // Chiến dịch cũ (trước khi có cột) không trả seniority → về mặc định backend, KHÔNG để rỗng.
+      seniority: c.seniority ?? 'Junior',
       jdText: c.jdText ?? '',
+      criteriaText: c.criteriaText ?? '',
       maxCandidates: c.maxCandidates ?? null,
       timeLimitMinutes: c.timeLimitMinutes ?? 15,
       passScorePct: c.passScorePct ?? null,
+      maxConcurrentInterviews: c.maxConcurrentInterviews ?? null,
       startsAt: toLocalInput(c.startsAt),
       expiresAt: toLocalInput(c.expiresAt),
       antiCheatEnabled: c.antiCheatEnabled,
@@ -576,6 +656,16 @@ export class CampaignForm implements OnInit {
   weightOk(): boolean {
     const t = this.totalWeight();
     return t >= 0.99 && t <= 1.01;
+  }
+
+  /**
+   * Giá trị `seniority` an toàn để gửi đi. Trả `undefined` (⇒ bỏ hẳn field) thay vì `''` khi ô
+   * bằng cách nào đó rỗng: chuỗi rỗng bị backend trả **400** — có chủ đích, vì trước đây nó
+   * âm thầm hạ mức đã chọn về Junior. Bỏ field = "không đổi" (update) / "mặc định Junior" (create).
+   */
+  private seniorityValue(): CampaignSeniority | undefined {
+    const v = this.form.controls.seniority.value;
+    return v ? v : undefined;
   }
 
   // ── Questions ────────────────────────────────────────────────────────────────
@@ -740,6 +830,15 @@ export class CampaignForm implements OnInit {
       this.notify.warn('Chiến dịch đã xuất bản — không thể sửa.');
       return;
     }
+    // Nói thẳng hậu quả thay vì để rơi vào câu "điền đủ trường bắt buộc" chung chung: đây là ô
+    // duy nhất mà một giá trị "hợp lệ về kiểu" (0) lại khoá chiến dịch không ai vào thi được.
+    if (this.form.controls.maxConcurrentInterviews.hasError('min')) {
+      this.form.markAllAsTouched();
+      this.notify.warn(
+        'Số người thi cùng lúc phải từ 1 trở lên. Bỏ trống nếu không muốn giới hạn.',
+      );
+      return;
+    }
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       this.notify.warn('Vui lòng điền đủ các trường bắt buộc.');
@@ -763,10 +862,13 @@ export class CampaignForm implements OnInit {
       const body: CreateCampaignRequest = {
         title: v.title!,
         domain: v.domain || null,
+        seniority: this.seniorityValue(),
         jdText: v.jdText || null,
+        criteriaText: v.criteriaText || null,
         maxCandidates: v.maxCandidates ?? null,
         timeLimitMinutes: v.timeLimitMinutes ?? null,
         passScorePct: v.passScorePct ?? null,
+        maxConcurrentInterviews: v.maxConcurrentInterviews ?? null,
         antiCheatEnabled: !!v.antiCheatEnabled,
         faceVerifyEnabled: !!v.faceVerifyEnabled,
         adaptiveEnabled: !!v.adaptiveEnabled,   // INT-17
@@ -795,10 +897,13 @@ export class CampaignForm implements OnInit {
     const body: UpdateCampaignRequest = {
       title: v.title!,
       domain: v.domain || null,
+      seniority: this.seniorityValue(),
       jdText: v.jdText || null,
+      criteriaText: v.criteriaText || null,
       maxCandidates: v.maxCandidates ?? null,
       timeLimitMinutes: v.timeLimitMinutes ?? null,
       passScorePct: v.passScorePct ?? null,
+      maxConcurrentInterviews: v.maxConcurrentInterviews ?? null,
       antiCheatEnabled: !!v.antiCheatEnabled,
       faceVerifyEnabled: !!v.faceVerifyEnabled,
       adaptiveEnabled: !!v.adaptiveEnabled,   // INT-17
