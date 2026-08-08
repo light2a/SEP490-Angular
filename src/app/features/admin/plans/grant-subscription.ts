@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { DatePipe } from '@angular/common';
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -204,11 +204,17 @@ export class GrantSubscription implements OnInit {
    * Chỉ gói ĐANG BÁN và ĐÚNG catalog của loại ví: ví cá nhân ↔ B2C, ví tổ chức ↔ B2B. Backend từ
    * chối cấp chéo, nên lọc ở đây là để admin không chọn được thứ chắc chắn hỏng — không phải lớp
    * bảo vệ (lớp đó nằm ở DB).
+   *
+   * ⚠ CỐ Ý là hàm thường, KHÔNG phải `computed()`: nó phụ thuộc `ownerType` — một field thường do
+   * `[(ngModel)]` ghi, không phải signal. `computed()` chỉ vô hiệu hoá cache khi một SIGNAL nó đọc
+   * đổi, nên đổi loại ví sẽ không làm nó tính lại: danh sách đứng im ở catalog cũ, admin chọn một
+   * gói sai catalog rồi ăn 400 từ máy chủ mà không hiểu vì sao. Danh sách chỉ vài gói nên tính lại
+   * mỗi vòng kiểm tra thay đổi là rẻ.
    */
-  readonly eligiblePlans = computed(() => {
+  eligiblePlans(): PlanResponse[] {
     const want = this.ownerType === OwnerType.Org ? PlanAudience.B2B : PlanAudience.B2C;
     return this.plans().filter((p) => p.isActive && p.audience === want);
-  });
+  }
 
   private attemptKey: string | null = null;
   private attemptFor: string | null = null;
