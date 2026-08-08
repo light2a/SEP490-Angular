@@ -1,6 +1,6 @@
 import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, OnInit, inject, input, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -234,6 +234,60 @@ import {
           </mat-card>
         }
       }
+
+      <!--
+        R7 — ứng viên CÓ CỜ mà CHƯA được chấm. Nằm NGOÀI nhánh "results rỗng" có chủ đích: buổi bỏ
+        ngang không bao giờ được chấm, nên chiến dịch hoàn toàn có thể có 0 dòng xếp hạng mà vẫn có
+        người cần HR để mắt. Trước đây bảng chỉ liệt kê người đã chấm ⇒ cờ của đúng nhóm đáng ngờ
+        nhất (bỏ ngang giữa chừng) nằm trong DB, nằm trong response, mà HR không bao giờ thấy.
+      -->
+      @if (unscored().length > 0) {
+        <mat-card class="tbl-card unscored">
+          <div class="unscored-head">
+            <mat-icon>flag</mat-icon>
+            <div>
+              <h2>Chưa chấm — có cờ đáng chú ý ({{ unscored().length }})</h2>
+              <p class="muted">
+                Những người này bỏ ngang hoặc đang thi nên chưa có điểm và không nằm trong bảng xếp
+                hạng. Cờ là <strong>gợi ý để HR xem lại</strong>, hệ thống không tự loại ai.
+              </p>
+            </div>
+          </div>
+          <table mat-table [dataSource]="unscored()">
+            <ng-container matColumnDef="candidate">
+              <th mat-header-cell *matHeaderCellDef>Ứng viên</th>
+              <td mat-cell *matCellDef="let r">
+                @if (r.fullName || r.email) {
+                  <span>{{ r.fullName || r.email }}</span>
+                  @if (r.fullName && r.email) {
+                    <span class="sub">{{ r.email }}</span>
+                  }
+                } @else {
+                  <span class="mono" [matTooltip]="r.candidateId">{{ short(r.candidateId) }}</span>
+                }
+                <span class="mono sub" [matTooltip]="r.sessionId">buổi {{ short(r.sessionId) }}</span>
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="flags">
+              <th mat-header-cell *matHeaderCellDef>Cờ gian lận</th>
+              <td mat-cell *matCellDef="let r">
+                <div class="flags">
+                  @for (f of r.flags; track f.type) {
+                    <mat-chip class="chip-flag" [matTooltip]="f.note || f.type" highlighted>
+                      <mat-icon matChipAvatar>warning</mat-icon>
+                      {{ flagLabel(f.type) }} ×{{ f.count }}
+                    </mat-chip>
+                  }
+                </div>
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="unscoredCols"></tr>
+            <tr mat-row *matRowDef="let row; columns: unscoredCols"></tr>
+          </table>
+        </mat-card>
+      }
     }
   `,
   styles: [
@@ -308,6 +362,27 @@ import {
         margin-left: 6px;
         font-size: 11px;
       }
+      .unscored {
+        margin-top: 24px;
+      }
+      .unscored-head {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 16px 16px 8px;
+      }
+      .unscored-head h2 {
+        margin: 0;
+        font-size: 17px;
+      }
+      .unscored-head .muted {
+        margin: 4px 0 0;
+        font-size: 13px;
+        max-width: 640px;
+      }
+      .unscored-head mat-icon {
+        color: #b26a00;
+      }
       .edit-card {
         margin-top: 16px;
         padding: 20px;
@@ -369,6 +444,13 @@ export class CampaignResults implements OnInit {
   readonly loading = signal(true);
   readonly exporting = signal(false);
   readonly cols = ['rank', 'candidate', 'score', 'result', 'scoredAt', 'flags', 'actions'];
+  readonly unscoredCols = ['candidate', 'flags'];
+
+  /**
+   * R7 — `?? []` chứ không bind thẳng: field là additive, deploy backend cũ hơn không gửi nó và
+   * `mat-table` sẽ nổ với `undefined`.
+   */
+  readonly unscored = computed(() => this.data()?.unscoredFlagged ?? []);
 
   /** F4 — nhãn tiếng Việt của cờ gian lận; loại lạ → giữ nguyên mã thô. */
   flagLabel(type: string): string {

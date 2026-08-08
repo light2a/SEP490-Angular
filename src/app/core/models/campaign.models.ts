@@ -112,6 +112,25 @@ export interface FaceCheckResult {
 /** Nguồn câu hỏi B2B (CustomHr = HR khai tay; AiGenerated = sinh từ JD). */
 export type QuestionSource = 'CustomHr' | 'AiGenerated';
 
+/**
+ * Cấp độ ứng viên của chiến dịch — AI dùng để định độ khó câu hỏi.
+ * Backend `ValidateSeniority` phân biệt HOA/thường và **từ chối chuỗi rỗng bằng 400**
+ * (trước đó `""` âm thầm ghi đè về `Junior` = mất dữ liệu không báo). Vì thế FE không
+ * bao giờ được gửi `''` — hoặc gửi một trong 4 giá trị dưới, hoặc bỏ hẳn field.
+ */
+export type CampaignSeniority = 'Fresher' | 'Junior' | 'Middle' | 'Senior';
+
+/** 4 mức seniority + nhãn tiếng Việt cho ô chọn. */
+export const CAMPAIGN_SENIORITY_OPTIONS: ReadonlyArray<{
+  value: CampaignSeniority;
+  label: string;
+}> = [
+  { value: 'Fresher', label: 'Fresher (mới ra trường)' },
+  { value: 'Junior', label: 'Junior (dưới 2 năm)' },
+  { value: 'Middle', label: 'Middle (2–5 năm)' },
+  { value: 'Senior', label: 'Senior (trên 5 năm)' },
+];
+
 /** Nguồn tiêu chí (HrEdited = HR khai; AiSuggested = AI gợi ý). */
 export type CriterionSource = 'HrEdited' | 'AiSuggested';
 
@@ -140,12 +159,20 @@ export interface CampaignResponse {
   orgId: string;
   title: string;
   domain?: string | null;
+  /** Cấp độ ứng viên — AI định độ khó câu hỏi theo mức này. Backend mặc định 'Junior'. */
+  seniority?: CampaignSeniority | null;
   status: CampaignStatus;
   maxCandidates?: number | null;
   timeLimitMinutes?: number | null;
   antiCheatEnabled: boolean;
   faceVerifyEnabled: boolean;
   passScorePct?: number | null;
+  /**
+   * Trần ứng viên thi ĐỒNG THỜI. null = không giới hạn.
+   * PHẢI >= 1 khi có: guard backend là `running >= max`, nên 0/số âm làm MỌI lượt Start trả 429
+   * ⇒ khoá chiến dịch vĩnh viễn ngay từ ứng viên đầu tiên.
+   */
+  maxConcurrentInterviews?: number | null;
   /** INT-17: bật phỏng vấn THÍCH ỨNG cho chiến dịch (AI hỏi thêm ở đuôi sau khi hết câu seed). */
   adaptiveEnabled: boolean;
   /** INT-17: trần câu thích ứng / tổng câu. null = dùng mặc định phía backend. */
@@ -194,11 +221,15 @@ export interface QuestionItem {
 export interface CreateCampaignRequest {
   title: string;
   domain?: string | null;
+  /** Không gửi → backend mặc định 'Junior'. **Không bao giờ gửi chuỗi rỗng** (→ 400). */
+  seniority?: CampaignSeniority;
   maxCandidates?: number | null;
   timeLimitMinutes?: number | null;
   antiCheatEnabled: boolean;
   faceVerifyEnabled: boolean;
   passScorePct?: number | null;
+  /** Trần thi đồng thời — null = không giới hạn; có giá trị thì phải >= 1 (ngược lại 400). */
+  maxConcurrentInterviews?: number | null;
   /** INT-17: bật phỏng vấn thích ứng (không gửi → backend mặc định false = luồng tĩnh). */
   adaptiveEnabled: boolean;
   maxFollowUps?: number | null;
@@ -215,11 +246,22 @@ export interface CreateCampaignRequest {
 export interface UpdateCampaignRequest {
   title: string;
   domain?: string | null;
+  /**
+   * undefined/null = KHÔNG đổi (giữ mức cũ). ⚠ Chuỗi rỗng KHÔNG phải "không đổi" — backend trả 400
+   * (có chủ đích: `""` từng âm thầm hạ mức đã chọn về Junior). Kiểu ở đây cấm luôn `''`.
+   */
+  seniority?: CampaignSeniority | null;
   maxCandidates?: number | null;
   timeLimitMinutes?: number | null;
   antiCheatEnabled?: boolean;
   faceVerifyEnabled?: boolean;
   passScorePct?: number | null;
+  /**
+   * null = KHÔNG đổi (giữ trần cũ) — đồng nếp với các trần khác.
+   * ⚠ Hệ quả: đã đặt trần thì KHÔNG gỡ về "không giới hạn" qua API được; muốn bỏ trần thì đặt
+   * một số lớn hơn số ứng viên của chiến dịch.
+   */
+  maxConcurrentInterviews?: number | null;
   /** INT-17: undefined/null = KHÔNG đổi (giữ giá trị cũ), như antiCheatEnabled. */
   adaptiveEnabled?: boolean;
   maxFollowUps?: number | null;
@@ -252,6 +294,53 @@ export interface FailedInvitationItem {
 export interface CreateInvitationsResponse {
   created: InvitationItem[];
   failed: FailedInvitationItem[];
+}
+
+/**
+ * Trạng thái giao lời mời — backend **suy read-time** từ các mốc thời gian, không lưu cột riêng.
+ * Thứ tự ưu tiên khi suy: Revoked → Joined → Expired → Sent → Queued. (Revoked đứng TRƯỚC Joined
+ * có chủ ý: sau reissue, lời mời cũ phải hiện Revoked chứ không "thơm lây" trạng thái Joined của
+ * lời mời mới cùng email.)
+ */
+export type InvitationDeliveryStatus = 'Revoked' | 'Joined' | 'Expired' | 'Sent' | 'Queued';
+
+/** Nhãn tiếng Việt; giá trị lạ → `invitationStatusLabel` trả nguyên chuỗi thô. */
+export const INVITATION_STATUS_LABEL: Record<string, string> = {
+  Revoked: 'Đã thu hồi',
+  Joined: 'Đã tham gia',
+  Expired: 'Hết hạn',
+  Sent: 'Đã gửi mail',
+  Queued: 'Đang chờ gửi',
+};
+
+export function invitationStatusLabel(status: string): string {
+  return INVITATION_STATUS_LABEL[status] ?? status;
+}
+
+/**
+ * GET /campaign/{id}/invitations — 1 dòng lời mời ĐÃ PHÁT.
+ *
+ * Trước endpoint này, `created[]` chỉ sống trong đúng response của lần POST ⇒ HR đóng tab là
+ * mất dấu hoàn toàn, và đường-1 (mời thẳng email) không sinh row `cv_submission` nên
+ * `GET /candidates` cũng không thấy. Đây cũng là chỗ DUY NHẤT lấy được `id` để bấm "Gửi lại" (D4).
+ *
+ * ⚠ DB23 — **không bao giờ có token** (DB chỉ giữ hash). Đừng chờ field đó.
+ */
+export interface InvitationListItem {
+  id: string;
+  email: string;
+  status: InvitationDeliveryStatus | string;
+  /** Producer-side: đã vào outbox. */
+  sentAt?: string | null;
+  /** Consumer-side: SMTP đã gửi thật. */
+  emailSentAt?: string | null;
+  expiresAt: string;
+  revokedAt?: string | null;
+  /** Từ membership (D2); null = chưa tham gia. */
+  joinedAt?: string | null;
+  /** Đường-2 (mời từ shortlist CV): link về `cv_submission`. Đường-1 = null. */
+  campaignCandidateId?: string | null;
+  createdAt: string;
 }
 
 // ── Kết quả + xếp hạng (E5/E6) ──────────────────────────────────────────────
@@ -291,11 +380,35 @@ export interface OverrideResultRequest {
   result?: string | null;
   note: string;
 }
+/**
+ * R7 — ứng viên CÓ CỜ chống gian lận nhưng CHƯA được chấm (bỏ ngang / đang thi).
+ *
+ * `campaign_rankings` chỉ có row cho ứng viên `Scored` (CAMP-11) ⇒ bảng xếp hạng giấu mất
+ * nhóm này, mà **bỏ ngang giữa chừng lại chính là hành vi đáng ngờ nhất**. Không rank/không
+ * điểm (chưa chấm) — chỉ danh tính + cờ để HR tự đánh giá (D13: cờ = gợi ý, không auto-hủy).
+ * Backend đã sắp nhiều-cờ-trước.
+ */
+export interface UnscoredFlaggedRow {
+  candidateId: string;
+  sessionId: string;
+  /** F5 — có thể null với membership "đường-1" cũ; BE cố ý không đoán. */
+  fullName?: string | null;
+  email?: string | null;
+  flags: FlagDto[];
+}
+
 export interface CampaignResultsResponse {
   campaignId: string;
   passScorePct?: number | null;
   totalCandidates: number;
   results: CampaignResultRow[];
+  /**
+   * R7 — additive (BE luôn gửi, nhưng deploy cũ thì không) ⇒ optional; nơi đọc phải `?? []`.
+   * CỐ Ý là interface RIÊNG chứ không tái dùng `CampaignResultRow` với field optional:
+   * `CampaignResultRow.flags`/`rank`/`totalScore` đang là non-optional và nhiều template bind
+   * thẳng, nới lỏng chúng sẽ làm `strictTemplates` fail ở chỗ khác.
+   */
+  unscoredFlagged?: UnscoredFlaggedRow[];
 }
 
 // ── Transcript + dẫn chứng chấm điểm cho HR (AI4) ───────────────────────────
@@ -391,6 +504,41 @@ export interface CandidateDetailResponse {
 export interface PatchCandidateRequest {
   email?: string | null;
   fullName?: string | null;
+}
+
+// ── Khung giờ phỏng vấn (slot) ──────────────────────────────────────────────
+/**
+ * 1 khung giờ của chiến dịch. Ứng viên được gán slot chỉ vào thi được trong khoảng đó, và
+ * `deadline` buổi thi = min(slot.endsAt, campaign.expiresAt).
+ *
+ * `assignedCount`/`startedCount` là số ĐỌC (BE tính), không gửi lên khi tạo/sửa.
+ */
+export interface CampaignSlotResponse {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  capacity: number;
+  /** Số lời mời chưa thu hồi đã gán vào khung giờ này. */
+  assignedCount: number;
+  /** Số ứng viên ĐANG thi trong khung giờ này. */
+  startedCount: number;
+}
+
+/** POST /campaign/{id}/slots — `endsAt` phải sau `startsAt`, `capacity` >= 1; chồng lấn giờ → 409. */
+export interface CreateCampaignSlotRequest {
+  startsAt: string;
+  endsAt: string;
+  capacity: number;
+}
+
+/**
+ * PUT /campaign/{id}/slots/{slotId} — cùng ràng buộc với tạo, thêm:
+ * hạ `capacity` xuống dưới số lời mời đã gán → 400.
+ */
+export interface UpdateCampaignSlotRequest {
+  startsAt: string;
+  endsAt: string;
+  capacity: number;
 }
 
 /** GET /campaign/admin/campaigns — Admin oversight: 1 campaign cross-org. */
