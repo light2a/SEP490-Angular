@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
@@ -537,5 +538,212 @@ describe('PracticeSession — khoá ghi âm khi avatar đọc câu hỏi', () =>
 
       expect(el.querySelectorAll('.cite').length).toBe(2);
     });
+  });
+});
+
+/**
+ * Ba khối UI mà BE đã trả dữ liệu từ lâu nhưng FE chưa render: nghe lại bản thu · dẫn chứng theo
+ * tiêu chí · đối chiếu CV ↔ câu trả lời.
+ */
+describe('PracticeSession — nghe lại bản thu · dẫn chứng · CV↔câu trả lời', () => {
+  let api: {
+    get: ReturnType<typeof vi.fn>;
+    speech: ReturnType<typeof vi.fn>;
+    answerAudio: ReturnType<typeof vi.fn>;
+    uploadAnswer: ReturnType<typeof vi.fn>;
+    submit: ReturnType<typeof vi.fn>;
+  };
+  let notify: { success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn> };
+
+  const scored = (over: Partial<SessionData> = {}): SessionData =>
+    ({
+      id: 's1',
+      status: 'Scored',
+      jobCategory: 'BE',
+      createdAt: new Date().toISOString(),
+      questions: [
+        {
+          id: 'q1',
+          orderNo: 1,
+          content: 'Giới thiệu bản thân?',
+          timeLimitSec: 120,
+          answer: {
+            id: 'a1',
+            status: 'Scored',
+            durationSec: 30,
+            transcript: 'xin chao',
+            needsReview: false,
+            scores: [],
+            audioUrl: '/api/v1/interview/practice/sessions/s1/answers/a1/audio',
+          },
+        },
+      ],
+      ...over,
+    }) as SessionData;
+
+  beforeEach(() => {
+    api = {
+      get: vi.fn().mockReturnValue(of(scored())),
+      speech: vi.fn().mockReturnValue(new Subject<Blob>()),
+      answerAudio: vi.fn().mockReturnValue(of(new Blob(['x'], { type: 'audio/webm' }))),
+      uploadAnswer: vi.fn(),
+      submit: vi.fn(),
+    };
+    notify = { success: vi.fn(), error: vi.fn(), warn: vi.fn() };
+
+    TestBed.configureTestingModule({
+      imports: [PracticeSession],
+      providers: [
+        provideRouter([]),
+        { provide: PracticeApi, useValue: api },
+        { provide: NotifyService, useValue: { ...notify, info: vi.fn() } },
+      ],
+    });
+  });
+
+  function render() {
+    const fixture = TestBed.createComponent(PracticeSession);
+    fixture.componentRef.setInput('sessionId', 's1');
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  /**
+   * Phải TẢI BLOB rồi mới dựng `<audio>`. Gán thẳng `audioUrl` vào `src` là 401 câm: thẻ `<audio>`
+   * không đính Authorization header, và trình phát chỉ hiện "không phát được".
+   */
+  it('nghe lại: tải blob qua API rồi mới dựng <audio>, không gán thẳng audioUrl', () => {
+    const fixture = render();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // Trước khi bấm: chỉ có nút, chưa có thẻ audio nào trỏ vào URL cần JWT.
+    expect(el.querySelector('audio')).toBeNull();
+    expect(el.textContent).toContain('Nghe lại bản thu');
+
+    fixture.componentInstance.loadAudio('a1');
+    fixture.detectChanges();
+
+    expect(api.answerAudio).toHaveBeenCalledWith('s1', 'a1');
+    const audio = el.querySelector('audio') as HTMLAudioElement;
+    expect(audio).toBeTruthy();
+    expect(audio.getAttribute('src')).toContain('blob:');
+    expect(audio.getAttribute('src')).not.toContain('/api/v1/');
+
+    fixture.destroy();
+  });
+
+  it('audioUrl null → KHÔNG hiện nút nghe lại (file đã bị dọn, đừng hứa suông)', () => {
+    const s = scored();
+    s.questions[0].answer!.audioUrl = null;
+    api.get.mockReturnValue(of(s));
+
+    const el = render().nativeElement as HTMLElement;
+    expect(el.textContent).not.toContain('Nghe lại bản thu');
+  });
+
+  it('404 khi nghe lại → nói đúng lý do (file bị dọn), không phải lỗi chung chung', () => {
+    api.answerAudio.mockReturnValue(
+      throwError(() => new HttpErrorResponse({ status: 404, error: {} })),
+    );
+    const fixture = render();
+
+    fixture.componentInstance.loadAudio('a1');
+    expect(notify.error).toHaveBeenCalledWith('Bản ghi âm không còn trên hệ thống.');
+
+    fixture.destroy();
+  });
+
+  // ── Dẫn chứng theo tiêu chí ───────────────────────────────────────────────────────────────
+  it('criterionEvidence vắng → KHÔNG dựng khối (buổi cũ/B2B không theo dõi thứ này)', () => {
+    const el = render().nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="criterion-evidence"]')).toBeNull();
+  });
+
+  it('criterionEvidence có → hiện dẫn chứng đã thu và phần còn thiếu', () => {
+    api.get.mockReturnValue(
+      of(
+        scored({
+          criterionEvidence: [
+            {
+              criterionId: 'c1',
+              criterionName: 'Thiết kế hệ thống',
+              state: 'PARTIAL',
+              evidenceFound: ['Có nhắc tới caching'],
+              missingEvidence: ['Chưa nói về đánh đổi nhất quán'],
+              deepCount: 1,
+              updatedAt: new Date().toISOString(),
+            },
+          ],
+        }),
+      ),
+    );
+
+    const el = render().nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="criterion-evidence"]')).toBeTruthy();
+    expect(el.textContent).toContain('Thiết kế hệ thống');
+    expect(el.textContent).toContain('Có nhắc tới caching');
+    expect(el.textContent).toContain('Chưa nói về đánh đổi nhất quán');
+    // Nhãn tiếng Việt, không phơi mã trạng thái thô ra người dùng.
+    expect(el.textContent).toContain('Có một phần');
+  });
+
+  // ── BC8: CV ↔ câu trả lời ─────────────────────────────────────────────────────────────────
+  it('cvVsAnswer vắng → không dựng khối (buổi không gắn CV)', () => {
+    const el = render().nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="cv-vs-answer"]')).toBeNull();
+  });
+
+  it('cvVsAnswer có gap → hiện tiêu chí hụt kèm trích dẫn từ CV', () => {
+    api.get.mockReturnValue(
+      of(
+        scored({
+          result: {
+            overallScore: 60,
+            answeredCount: 1,
+            totalQuestions: 1,
+            criteriaScores: [],
+            needsImprovement: [],
+            cvVsAnswer: {
+              cvStrengths: ['Docker'],
+              gaps: [
+                {
+                  criterionId: 'c1',
+                  criterionName: 'Kubernetes',
+                  percentage: 40,
+                  maxScore: 5,
+                  cvEvidence: ['Triển khai k8s cho 3 dịch vụ'],
+                },
+              ],
+            },
+          },
+        } as Partial<SessionData>),
+      ),
+    );
+
+    const el = render().nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="cv-vs-answer"]')).toBeTruthy();
+    expect(el.textContent).toContain('Kubernetes');
+    expect(el.textContent).toContain('Triển khai k8s cho 3 dịch vụ');
+    expect(el.textContent).toContain('Docker');
+  });
+
+  it('cvVsAnswer rỗng cả hai vế → KHÔNG bày mục trống bắt người đọc tự đoán', () => {
+    api.get.mockReturnValue(
+      of(
+        scored({
+          result: {
+            overallScore: 90,
+            answeredCount: 1,
+            totalQuestions: 1,
+            criteriaScores: [],
+            needsImprovement: [],
+            cvVsAnswer: { cvStrengths: [], gaps: [] },
+          },
+        } as Partial<SessionData>),
+      ),
+    );
+
+    const el = render().nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="cv-vs-answer"]')).toBeNull();
   });
 });

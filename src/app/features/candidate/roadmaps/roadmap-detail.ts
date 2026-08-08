@@ -72,6 +72,20 @@ export class RoadmapDetail implements OnInit {
     }));
   });
 
+  /**
+   * BC15 — nhãn delta của 1 tiêu chí ở chặng (`MilestoneImprovement.deltaPct`).
+   *
+   * Luôn kèm DẤU: `+5` và `−5` là hai kết luận trái ngược về việc người học có khá lên không,
+   * in trần "5" thì người đọc mặc định hiểu là tiến bộ ⇒ ca tụt điểm bị đọc thành ca tiến bộ.
+   * Dùng dấu trừ thật (U+2212) cho khỏi lẫn với gạch nối khi font hẹp.
+   */
+  deltaLabel(deltaPct: number): string {
+    const rounded = Math.round(deltaPct * 10) / 10;
+    if (rounded > 0) return `+${rounded}%`;
+    if (rounded < 0) return `−${Math.abs(rounded)}%`;
+    return '0%';
+  }
+
   ngOnInit(): void {
     this.api.get(this.id()).subscribe({
       next: (r) => {

@@ -1,6 +1,7 @@
 import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
@@ -16,6 +17,7 @@ import { Spinner } from '../../../shared/ui/spinner';
   selector: 'app-files',
   imports: [
     DatePipe,
+    RouterLink,
     MatCardModule,
     MatListModule,
     MatIconModule,

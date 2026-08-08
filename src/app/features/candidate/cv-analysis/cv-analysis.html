@@ -107,6 +107,11 @@
           <p>Kỹ năng khớp: {{ a.jdMatch.matchedSkills.join(', ') || '—' }}</p>
           <p>Còn thiếu: {{ a.jdMatch.missingSkills.join(', ') || '—' }}</p>
         }
+
+        <!-- Trang riêng để lưu/chia sẻ được bằng URL; panel này vẫn giữ đủ nội dung như cũ. -->
+        <a mat-stroked-button [routerLink]="['/candidate/cv-analysis', a.id]">
+          <mat-icon>open_in_new</mat-icon> Mở trang riêng
+        </a>
       </mat-expansion-panel>
     }
   </mat-accordion>

@@ -1,0 +1,108 @@
+<h1>Xin chào{{ name() ? ', ' + name() : '' }} 👋</h1>
+<p class="sub">Bắt đầu luyện phỏng vấn hoặc phân tích CV của bạn.</p>
+
+<div class="stats">
+  <mat-card class="stat">
+    <span class="stat-label">Credit còn lại</span>
+    @if (loadingCredits()) {
+      <span class="stat-value">…</span>
+    } @else if (credits() === null) {
+      <!--
+        Không đọc được số dư KHÁC HẲN "còn 0 credit": hiện 0 ở đây là báo hết tiền cho người vẫn
+        còn credit, và họ sẽ đi mua thêm một cách vô ích.
+      -->
+      <span class="stat-value">—</span>
+      <span class="stat-note">Chưa đọc được số dư.</span>
+    } @else {
+      <span class="stat-value">{{ credits() }}</span>
+      @if (credits() === 0) {
+        <span class="stat-note warn">Hết credit — cần nạp thêm để tạo buổi luyện.</span>
+      } @else {
+        <span class="stat-note">1 credit cho mỗi buổi luyện / lần phân tích.</span>
+      }
+    }
+  </mat-card>
+
+  <mat-card class="stat">
+    <span class="stat-label">Buổi đã luyện</span>
+    <span class="stat-value">{{ loadingSessions() ? '…' : sessions().length }}</span>
+    <span class="stat-note">Tính cả buổi đang làm dở.</span>
+  </mat-card>
+
+  <mat-card class="stat">
+    <span class="stat-label">Chiến dịch đang mở</span>
+    <span class="stat-value">{{ loadingCampaigns() ? '…' : openCampaigns().length }}</span>
+    <span class="stat-note">Lời mời phỏng vấn chưa hoàn thành.</span>
+  </mat-card>
+</div>
+
+<div class="cols">
+  <mat-card class="list-card">
+    <div class="list-head">
+      <h2>Buổi luyện gần đây</h2>
+      <a mat-button routerLink="/candidate/practice">Tất cả</a>
+    </div>
+    @if (loadingSessions()) {
+      <p class="muted">Đang tải…</p>
+    } @else if (recentSessions().length === 0) {
+      <p class="muted">Chưa có buổi luyện nào.</p>
+    } @else {
+      <mat-list>
+        @for (s of recentSessions(); track s.id) {
+          <mat-list-item [routerLink]="['/candidate/practice', s.id]">
+            <mat-icon matListItemIcon>graphic_eq</mat-icon>
+            <span matListItemTitle>
+              {{ s.jobCategory | jobCategory }} · {{ s.status | sessionStatus }}
+            </span>
+            <span matListItemLine>{{ s.createdAt | date: 'short' }}</span>
+            <span matListItemMeta>
+              @if (s.overallScore != null) {
+                <b>{{ s.overallScore | number: '1.0-1' }}</b>
+              }
+            </span>
+          </mat-list-item>
+        }
+      </mat-list>
+    }
+  </mat-card>
+
+  <mat-card class="list-card">
+    <div class="list-head">
+      <h2>Chiến dịch cần làm</h2>
+      <a mat-button routerLink="/candidate/campaigns">Tất cả</a>
+    </div>
+    @if (loadingCampaigns()) {
+      <p class="muted">Đang tải…</p>
+    } @else if (openCampaigns().length === 0) {
+      <p class="muted">Không có chiến dịch nào đang chờ bạn.</p>
+    } @else {
+      <mat-list>
+        @for (c of openCampaigns(); track c.campaignId) {
+          <mat-list-item [routerLink]="['/candidate/campaigns', c.campaignId]">
+            <mat-icon matListItemIcon>work</mat-icon>
+            <span matListItemTitle>{{ c.title }}</span>
+            <span matListItemLine>
+              {{ c.jobTitle }}
+              @if (c.deadline) {
+                · hạn {{ c.deadline | date: 'short' }}
+              }
+            </span>
+          </mat-list-item>
+        }
+      </mat-list>
+    }
+  </mat-card>
+</div>
+
+<h2>Lối tắt</h2>
+<div class="grid">
+  @for (a of actions; track a.path) {
+    <mat-card class="card" [routerLink]="a.path">
+      <mat-icon>{{ a.icon }}</mat-icon>
+      <div class="body">
+        <h3>{{ a.title }}</h3>
+        <p>{{ a.desc }}</p>
+      </div>
+    </mat-card>
+  }
+</div>

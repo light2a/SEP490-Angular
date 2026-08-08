@@ -244,3 +244,13 @@
   font-weight: 500;
   margin: 12px 0;
 }
+
+/* Nghe lại bản thu của chính mình. */
+.playback {
+  margin: 8px 0;
+
+  audio {
+    width: 100%;
+    max-width: 420px;
+  }
+}

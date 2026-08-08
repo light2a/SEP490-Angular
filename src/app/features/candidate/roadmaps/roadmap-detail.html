@@ -22,6 +22,29 @@
         </mat-chip-set>
       }
 
+      <!--
+        BC15 — tiến bộ đo được ở chặng này (BE trả `improvement[]`, trước giờ không render).
+        `deltaPct` là chênh lệch so với baseline lúc tạo lộ trình: DƯƠNG = tiến bộ, ÂM = tụt.
+        Phải hiện cả dấu (`+`/`−`) chứ không chỉ con số — "5" một mình không nói được chiều nào,
+        và nhầm chiều ở đây là nói với người học rằng họ đang khá lên trong khi họ đang tệ đi.
+      -->
+      @if (m.improvement?.length) {
+        <div class="improvement" data-testid="milestone-improvement">
+          <h4>Tiến bộ ở chặng này</h4>
+          <ul>
+            @for (im of m.improvement; track im.criterionName) {
+              <li>
+                <mat-icon [class.up]="im.deltaPct > 0" [class.down]="im.deltaPct < 0">
+                  {{ im.deltaPct > 0 ? 'trending_up' : im.deltaPct < 0 ? 'trending_down' : 'trending_flat' }}
+                </mat-icon>
+                <span class="im-name">{{ im.criterionName }}</span>
+                <b class="im-delta">{{ deltaLabel(im.deltaPct) }}</b>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+
       <mat-accordion class="lessons">
         @for (l of m.lessons; track l.id) {
           <mat-expansion-panel (opened)="loadTheory(l)">
@@ -130,6 +153,19 @@
         <ul>
           @for (w of rep.weaknesses; track w) {
             <li>{{ w }}</li>
+          }
+        </ul>
+      }
+      <!--
+        BC15 — `improvements` là NHẬN ĐỊNH bằng lời của AI về tiến bộ chung của cả lộ trình
+        (mảng chuỗi), khác `milestone.improvement[]` ở trên vốn là con số delta theo từng tiêu chí.
+        Hai thứ tên gần giống nhau nhưng KHÔNG thay thế nhau — đừng gộp làm một mục.
+      -->
+      @if (rep.improvements.length) {
+        <h4>Đã tiến bộ</h4>
+        <ul data-testid="report-improvements">
+          @for (im of rep.improvements; track im) {
+            <li>{{ im }}</li>
           }
         </ul>
       }

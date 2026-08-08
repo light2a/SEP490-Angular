@@ -237,4 +237,57 @@ describe('RoadmapDetail', () => {
       expect(el.textContent).not.toContain('Tài liệu tham khảo');
     });
   });
+
+  /**
+   * BC15 — tiến bộ. Hai thứ tên gần giống nhau nhưng KHÔNG thay thế nhau:
+   *  - `report.improvements` = nhận định bằng lời cho cả lộ trình (string[])
+   *  - `milestone.improvement[]` = số delta theo từng tiêu chí của MỘT chặng
+   * Cả hai BE trả từ lâu mà FE chưa render.
+   */
+  describe('BC15 — tiến bộ', () => {
+    it('hiện nhận định tiến bộ của cả lộ trình', () => {
+      api.report.mockReturnValue(of(report({ improvements: ['Trả lời có cấu trúc hơn'] })));
+
+      const el = render().nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="report-improvements"]')).toBeTruthy();
+      expect(el.textContent).toContain('Trả lời có cấu trúc hơn');
+    });
+
+    it('không có nhận định nào → KHÔNG dựng mục trống', () => {
+      const el = render().nativeElement as HTMLElement;
+      expect(el.querySelector('[data-testid="report-improvements"]')).toBeNull();
+    });
+
+    it('milestone chưa có delta (BC12 luôn null) → không dựng khối', () => {
+      const el = render().nativeElement as HTMLElement;
+      expect(el.querySelector('[data-testid="milestone-improvement"]')).toBeNull();
+    });
+
+    it('hiện delta theo tiêu chí của chặng', () => {
+      const r = roadmap();
+      r.milestones[0].improvement = [{ criterionName: 'Kiến thức', deltaPct: 12.34 }];
+      api.get.mockReturnValue(of(r));
+
+      const el = render().nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="milestone-improvement"]')).toBeTruthy();
+      expect(el.textContent).toContain('Kiến thức');
+      expect(el.textContent).toContain('+12.3%');
+    });
+
+    /**
+     * Ca quan trọng nhất: +5 và −5 là hai kết luận TRÁI NGƯỢC về việc người học có khá lên không.
+     * In trần "5" thì người đọc mặc định hiểu là tiến bộ ⇒ ca tụt điểm bị đọc thành ca tiến bộ,
+     * và kiểu sai nghiêng về phía KHEN thì không ai đi báo.
+     */
+    it('delta âm phải mang dấu trừ, không được in trần như delta dương', () => {
+      const cmp = render().componentInstance;
+
+      expect(cmp.deltaLabel(5)).toBe('+5%');
+      expect(cmp.deltaLabel(-5)).toBe('\u22125%');
+      expect(cmp.deltaLabel(-5)).not.toBe('5%');
+      expect(cmp.deltaLabel(0)).toBe('0%');
+    });
+  });
 });

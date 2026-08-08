@@ -59,6 +59,48 @@ app-radar-chart {
   color: var(--mat-sys-error);
 }
 
+/* BC15 — tiến bộ theo chặng. Màu chỉ là lớp phụ: chiều tiến/lùi đã nằm ở icon + dấu của số,
+   nên người không phân biệt được màu vẫn đọc đúng. */
+.improvement {
+  margin: 10px 0 4px;
+
+  h4 {
+    margin: 0 0 4px;
+    font-size: 0.95rem;
+  }
+
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0;
+  }
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+
+  mat-icon.up {
+    color: #2e7d32;
+  }
+
+  mat-icon.down {
+    color: var(--mat-sys-error);
+  }
+
+  .im-name {
+    flex: 1;
+  }
+}
+
 /* F15 — tài liệu học gợi ý. Nhãn "chưa kiểm chứng" cố ý ĐỦ TƯƠNG PHẢN để đọc được, không phải
    chữ mờ ở góc: người dùng cần thấy nó trước khi bấm link, không phải sau. */
 .resources {
