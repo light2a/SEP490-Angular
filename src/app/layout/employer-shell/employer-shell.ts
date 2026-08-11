@@ -51,6 +51,7 @@ export class EmployerShell {
     { path: 'campaigns', icon: 'work', label: 'Chiến dịch' },
     { path: 'members', icon: 'group', label: 'Thành viên', orgAdminOnly: true },
     { path: 'api-keys', icon: 'vpn_key', label: 'API key', orgAdminOnly: true },
+    { path: 'plans', icon: 'workspace_premium', label: 'Gói dịch vụ', orgAdminOnly: true },
     { path: 'credits', icon: 'account_balance_wallet', label: 'Credit & Thanh toán', orgAdminOnly: true },
     { path: 'invoices', icon: 'receipt_long', label: 'Hoá đơn', orgAdminOnly: true },
     { path: 'subscription', icon: 'card_membership', label: 'Gói của tổ chức', orgAdminOnly: true },

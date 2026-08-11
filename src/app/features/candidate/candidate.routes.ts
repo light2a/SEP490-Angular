@@ -47,6 +47,7 @@ export const CANDIDATE_ROUTES: Routes = [
     loadComponent: () =>
       import('../account/account-profile').then((m) => m.AccountProfile),
   },
+  { path: 'plans', loadComponent: () => import('./plans/plans').then((m) => m.CandidatePlans) },
   { path: 'credits', loadComponent: () => import('./credits/credits').then((m) => m.Credits) },
   {
     path: 'payment/:result',

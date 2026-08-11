@@ -11,3 +11,4 @@ export * from './knowledge.models';
 export * from './payment.models';
 export * from './campaign.models';
 export * from './org.models';
+export * from './plan.models';

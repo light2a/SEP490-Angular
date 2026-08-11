@@ -1,0 +1,108 @@
+@if (mine(); as me) {
+  <mat-card class="current-plan">
+    <mat-card-content>
+      <div class="current-head">
+        <div>
+          <span class="current-label">Gói hiện tại</span>
+          <h2>{{ me.tierName }}</h2>
+        </div>
+        @if (me.isPaid && me.expiresAt) {
+          <mat-chip-set>
+            <mat-chip highlighted>Có hiệu lực tới {{ me.expiresAt | date: 'dd/MM/yyyy' }}</mat-chip>
+          </mat-chip-set>
+        }
+      </div>
+
+      @if (me.monthlyQuota) {
+        <div class="quota">
+          <div class="quota-line">
+            <span>Hạn mức tháng này</span>
+            <strong>{{ me.quotaRemaining }} / {{ me.monthlyQuota }} lượt còn lại</strong>
+          </div>
+          <div class="quota-bar"><div class="quota-fill" [style.width.%]="quotaPercent()"></div></div>
+          @if (me.quotaReserved) {
+            <!-- Lượt đang giữ CŨNG đã tiêu hạn mức (server gác `used + reserved + 1 <= quota`) —
+                 không nói ra thì người dùng thấy số không khớp với số buổi đã chấm xong. -->
+            <p class="quota-note">
+              Đang có {{ me.quotaReserved }} buổi giữ chỗ (chưa chấm xong) — đã tính vào hạn mức.
+            </p>
+          }
+          @if (me.periodStart) {
+            <p class="quota-note">Kỳ tính từ {{ me.periodStart | date: 'dd/MM/yyyy' }}</p>
+          }
+        </div>
+      }
+    </mat-card-content>
+  </mat-card>
+}
+
+@if (!tieringEnabled()) {
+  <!-- Cờ Tiering:Enabled đang tắt: quyền lợi gói chưa có hiệu lực lúc chạy ⇒ không được bán. -->
+  <mat-card class="notice">
+    <mat-card-content>
+      <mat-icon>info</mat-icon>
+      <span>Gói dịch vụ đang tạm khoá mua. Bạn vẫn dùng được credit lẻ như bình thường.</span>
+    </mat-card-content>
+  </mat-card>
+}
+
+@if (loading()) {
+  <app-spinner />
+} @else if (!plans().length) {
+  <app-empty-state icon="sell" message="Chưa có gói nào đang mở bán." />
+} @else {
+  <div class="plan-grid">
+    @for (plan of plans(); track plan.id) {
+      <mat-card class="plan-card" [class.plan-card--current]="isCurrent(plan)">
+        <mat-card-content>
+          <div class="plan-head">
+            <h3>{{ plan.name }}</h3>
+            @if (isCurrent(plan)) {
+              <mat-chip-set><mat-chip highlighted>Đang dùng</mat-chip></mat-chip-set>
+            }
+          </div>
+
+          <div class="price">
+            @if (plan.packages.length) {
+              <strong>{{ plan.packages[0].priceVnd | vnd }}</strong>
+              @if (plan.packages[0].durationDays) {
+                <span class="per">/ {{ plan.packages[0].durationDays }} ngày</span>
+              }
+            } @else {
+              <strong>Miễn phí</strong>
+            }
+          </div>
+
+          <ul class="features">
+            @for (f of features(plan); track f.label) {
+              <li [class.off]="!f.included">
+                <mat-icon>{{ f.included ? f.icon : 'remove' }}</mat-icon>
+                <span>{{ f.label }}</span>
+              </li>
+            }
+          </ul>
+        </mat-card-content>
+
+        <mat-card-actions align="end">
+          @if (isCurrent(plan)) {
+            <button matButton disabled>Gói hiện tại</button>
+          } @else if (!plan.packages.length) {
+            <button matButton disabled>Không cần mua</button>
+          } @else if (isLower(plan)) {
+            <button matButton disabled>Thấp hơn gói hiện tại</button>
+          } @else {
+            @for (opt of plan.packages; track opt.packageId) {
+              <button
+                matButton="filled"
+                [disabled]="buying() !== null || !tieringEnabled()"
+                (click)="buy(opt)"
+              >
+                {{ buying() === opt.packageId ? 'Đang tạo đơn…' : 'Mua ' + opt.name }}
+              </button>
+            }
+          }
+        </mat-card-actions>
+      </mat-card>
+    }
+  </div>
+}

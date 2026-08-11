@@ -49,6 +49,13 @@ export const EMPLOYER_ROUTES: Routes = [
     loadComponent: () => import('./api-keys/api-keys').then((m) => m.ApiKeys),
   },
   {
+    path: 'plans',
+    // Nav đánh dấu orgAdminOnly nên route phải có guard tương ứng — thiếu nó thì HrMember gõ tay URL
+    // vẫn vào được màn mua gói (mua gói là money-mutation, AUTH-6: HrMember → 403).
+    canActivate: [orgAdminGuard],
+    loadComponent: () => import('./plans/employer-plans').then((m) => m.EmployerPlans),
+  },
+  {
     path: 'credits',
     canActivate: [orgAdminGuard],
     loadComponent: () => import('./credits/employer-credits').then((m) => m.EmployerCredits),
