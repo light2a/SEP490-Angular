@@ -199,9 +199,15 @@ export class MySubscription {
   readonly justCancelled = signal(false);
   readonly cancelledUntil = signal<string | null>(null);
 
-  /** Khu vực Employer mua gói ở trang credit của tổ chức, Candidate ở trang credit cá nhân. */
+  /**
+   * "Xem các gói" trỏ sang BẢNG GIÁ (`/plans`), không phải trang credit.
+   *
+   * Trước đây phải trỏ tạm sang trang credit vì catalog gói chỉ có ở endpoint admin nên không dựng
+   * được bảng giá cho người mua — trang credit bán credit LẺ, không bán gói định kỳ, nên người bấm
+   * "Xem các gói" không tìm thấy gói nào.
+   */
   readonly buyLink = computed(() =>
-    this.router.url.startsWith('/employer') ? '/employer/credits' : '/candidate/credits',
+    this.router.url.startsWith('/employer') ? '/employer/plans' : '/candidate/plans',
   );
 
   readonly cycleLabel = computed(() => {

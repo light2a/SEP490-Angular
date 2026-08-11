@@ -51,6 +51,7 @@ export class CandidateShell {
     { path: 'repo-analysis', icon: 'code', label: 'Phân tích repo GitHub' },
     { path: 'roadmaps', icon: 'map', label: 'Lộ trình ôn' },
     { path: 'rubrics', icon: 'rule', label: 'Tiêu chí (rubric)' },
+    { path: 'plans', icon: 'workspace_premium', label: 'Gói dịch vụ' },
     { path: 'credits', icon: 'account_balance_wallet', label: 'Credit & Thanh toán' },
     { path: 'subscription', icon: 'card_membership', label: 'Gói của tôi' },
   ];

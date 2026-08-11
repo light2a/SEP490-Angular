@@ -2,7 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { environment } from '../../../../environments/environment';
 import { SubscriptionResponse } from '../../../core/models';
@@ -120,5 +120,46 @@ describe('MySubscription (F8) — gói của tôi', () => {
 
     expect(fixture.componentInstance.justCancelled()).toBe(false);
     expect(text(fixture)).not.toContain('Đã huỷ gia hạn');
+  });
+});
+
+describe('MySubscription — nút "Xem các gói" trỏ về bảng giá', () => {
+  let httpMock: HttpTestingController;
+
+  afterEach(() => httpMock.verify());
+
+  /**
+   * Link này TỪNG trỏ sang trang credit (bán credit LẺ, không bán gói định kỳ) vì lúc đó chưa có
+   * bảng giá cho người mua. Khoá lại: hỏng nữa thì triệu chứng chỉ là "bấm Xem các gói ra trang
+   * không có gói nào" — kiểu lỗi người dùng bỏ đi chứ không đi báo.
+   */
+  function buyLinkFor(url: string): string {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        { provide: NotifyService, useValue: { success: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn() } },
+        { provide: MatDialog, useValue: { open: () => ({ afterClosed: () => of(true) }) } },
+      ],
+    });
+    httpMock = TestBed.inject(HttpTestingController);
+    // Router THẬT (RouterLink trong template cần nó) — chỉ giả `url`. Phải spy TRƯỚC khi đọc
+    // `buyLink()`: đó là `computed` phụ thuộc `router.url` (không phải signal) nên nó cache lần đầu.
+    vi.spyOn(TestBed.inject(Router), 'url', 'get').mockReturnValue(url);
+    const fixture = TestBed.createComponent(MySubscription);
+    fixture.detectChanges();
+    httpMock.expectOne(SUB_URL).flush(NO_SUB);
+    fixture.detectChanges();
+    return fixture.componentInstance.buyLink();
+  }
+
+  it('khu vực Candidate → /candidate/plans', () => {
+    expect(buyLinkFor('/candidate/subscription')).toBe('/candidate/plans');
+  });
+
+  it('khu vực Employer → /employer/plans', () => {
+    expect(buyLinkFor('/employer/subscription')).toBe('/employer/plans');
   });
 });
