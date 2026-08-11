@@ -159,10 +159,24 @@ describe('PlanPricing (bảng giá dùng chung B2C/B2B)', () => {
     expect(fixture.nativeElement.textContent).toContain('đã tính vào hạn mức');
   });
 
-  it('gói không bán SKU nào thì không có nút mua', () => {
+  it('gói nền (rank 0) không có SKU → "Miễn phí / Không cần mua"', () => {
     setup(PlanAudience.B2C, [plan({ code: 'free', rank: 0, packages: [] })], mine({ tierCode: 'x' }));
 
+    expect(fixture.nativeElement.textContent).toContain('Miễn phí');
     expect(fixture.nativeElement.textContent).toContain('Không cần mua');
+  });
+
+  /**
+   * 🔴 Gói TRẢ PHÍ mà admin chưa tạo SKU cũng có `packages` rỗng. Gộp chung với gói nền thì Plus/Pro
+   * hiện "Miễn phí — Không cần mua": vừa sai giá, vừa khiến người dùng tưởng đã có sẵn quyền lợi và
+   * không bao giờ đi mua. Đây đúng là trạng thái production hiện tại (0 SKU trên cả 6 gói).
+   */
+  it('gói trả phí chưa có SKU → "Chưa mở bán", KHÔNG phải "Miễn phí"', () => {
+    setup(PlanAudience.B2C, [plan({ code: 'pro', rank: 2, packages: [] })], mine({ tierCode: 'free' }));
+
+    expect(fixture.nativeElement.textContent).toContain('Chưa mở bán');
+    expect(fixture.nativeElement.textContent).not.toContain('Miễn phí');
+    expect(fixture.nativeElement.textContent).not.toContain('Không cần mua');
   });
 
   it('mua gói tạo order với packageId + returnUrl theo returnBase', () => {

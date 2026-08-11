@@ -11,6 +11,7 @@ import { AdminApi } from '../../../core/api/admin.api';
 import { extractErrorMessage } from '../../../core/api/http-utils';
 import { NotifyService } from '../../../core/notify.service';
 import { GrantCreditResponse, OwnerType } from '../../../core/models';
+import { OwnerPicker } from '../../../shared/admin/owner-picker';
 
 /**
  * Cấp credit khuyến mãi vào 1 ví (F20, Admin).
@@ -28,6 +29,7 @@ import { GrantCreditResponse, OwnerType } from '../../../core/models';
 @Component({
   selector: 'app-grant-credits',
   imports: [
+    OwnerPicker,
     FormsModule,
     MatButtonModule,
     MatCardModule,
@@ -57,10 +59,7 @@ import { GrantCreditResponse, OwnerType } from '../../../core/models';
               </mat-select>
             </mat-form-field>
 
-            <mat-form-field appearance="outline" class="f-id">
-              <mat-label>{{ ownerType === OwnerType.Org ? 'Id tổ chức' : 'Id người dùng' }} *</mat-label>
-              <input matInput [(ngModel)]="ownerId" name="ownerId" placeholder="GUID" />
-            </mat-form-field>
+            <app-owner-picker class="f-id" [ownerType]="ownerType" [(ownerId)]="ownerId" />
 
             <mat-form-field appearance="outline" class="f-credits">
               <mat-label>Số credit *</mat-label>

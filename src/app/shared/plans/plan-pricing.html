@@ -68,8 +68,12 @@
               @if (plan.packages[0].durationDays) {
                 <span class="per">/ {{ plan.packages[0].durationDays }} ngày</span>
               }
-            } @else {
+            } @else if (isFreeTier(plan)) {
               <strong>Miễn phí</strong>
+            } @else {
+              <!-- Gói TRẢ PHÍ chưa có SKU: nói thẳng là chưa mở bán. Hiện "Miễn phí" ở đây là nói dối
+                   về giá, và người dùng sẽ tưởng mình đã có sẵn quyền lợi của gói. -->
+              <strong class="unavailable">Chưa mở bán</strong>
             }
           </div>
 
@@ -87,7 +91,9 @@
           @if (isCurrent(plan)) {
             <button matButton disabled>Gói hiện tại</button>
           } @else if (!plan.packages.length) {
-            <button matButton disabled>Không cần mua</button>
+            <button matButton disabled>
+              {{ isFreeTier(plan) ? 'Không cần mua' : 'Chưa mở bán' }}
+            </button>
           } @else if (isLower(plan)) {
             <button matButton disabled>Thấp hơn gói hiện tại</button>
           } @else {

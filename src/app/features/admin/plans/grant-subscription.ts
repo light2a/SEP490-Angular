@@ -11,6 +11,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { AdminApi } from '../../../core/api/admin.api';
 import { extractErrorMessage } from '../../../core/api/http-utils';
 import { NotifyService } from '../../../core/notify.service';
+import { OwnerPicker } from '../../../shared/admin/owner-picker';
 import {
   OwnerType,
   PlanAudience,
@@ -36,6 +37,7 @@ import {
 @Component({
   selector: 'app-grant-subscription',
   imports: [
+    OwnerPicker,
     DatePipe,
     FormsModule,
     MatButtonModule,
@@ -66,12 +68,7 @@ import {
               </mat-select>
             </mat-form-field>
 
-            <mat-form-field appearance="outline" class="f-id">
-              <mat-label>
-                {{ ownerType === OwnerType.Org ? 'Id tổ chức' : 'Id người dùng' }} *
-              </mat-label>
-              <input matInput [(ngModel)]="ownerId" name="ownerId" placeholder="GUID" />
-            </mat-form-field>
+            <app-owner-picker class="f-id" [ownerType]="ownerType" [(ownerId)]="ownerId" />
 
             <mat-form-field appearance="outline" class="f-plan">
               <mat-label>Gói *</mat-label>

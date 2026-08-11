@@ -10,14 +10,18 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatTableModule } from '@angular/material/table';
+import { AdminApi } from '../../../core/api/admin.api';
 import { PaymentApi } from '../../../core/api/payment.api';
 import { extractErrorMessage } from '../../../core/api/http-utils';
 import { NotifyService } from '../../../core/notify.service';
 import {
   CreatePackageRequest,
   PACKAGE_TYPE_LABEL,
+  PLAN_AUDIENCE_LABEL,
   PackageResponse,
   PackageType,
+  PlanAudience,
+  PlanResponse,
   UpdatePackageRequest,
 } from '../../../core/models';
 import { EmptyState } from '../../../shared/ui/empty-state';
@@ -73,6 +77,24 @@ import { Spinner } from '../../../shared/ui/spinner';
               <mat-form-field appearance="outline" class="f-num">
                 <mat-label>Số ngày</mat-label>
                 <input matInput type="number" formControlName="durationDays" min="1" />
+              </mat-form-field>
+              <!--
+                Gói định kỳ BẮT BUỘC gắn plan (BE 400 nếu thiếu). Audience KHÔNG cho nhập tay mà suy
+                từ plan đã chọn: BE đòi hai giá trị phải trùng nhau, để người dùng chọn cả hai chỉ đẻ
+                thêm một cách gõ sai mà lỗi lại nổ ở tận server.
+              -->
+              <mat-form-field appearance="outline" class="f-plan">
+                <mat-label>Gói dịch vụ áp dụng</mat-label>
+                <mat-select formControlName="planId">
+                  @for (p of sellablePlans(); track p.id) {
+                    <mat-option [value]="p.id">
+                      {{ p.name }} — {{ audienceLabel(p.audience) }}
+                    </mat-option>
+                  }
+                </mat-select>
+                @if (!sellablePlans().length) {
+                  <mat-hint>Chưa có gói dịch vụ nào để bán.</mat-hint>
+                }
               </mat-form-field>
             }
             <button mat-flat-button color="primary" type="submit" [disabled]="creating() || form.invalid">
@@ -243,6 +265,7 @@ import { Spinner } from '../../../shared/ui/spinner';
 export class AdminPackages {
   private fb = inject(FormBuilder);
   private api = inject(PaymentApi);
+  private admin = inject(AdminApi);
   private notify = inject(NotifyService);
 
   readonly OneTime = PackageType.OneTime;
@@ -267,10 +290,20 @@ export class AdminPackages {
     priceVnd: [0, [Validators.required, Validators.min(0)]],
     interviewCredits: [null as number | null],
     durationDays: [null as number | null],
+    planId: [null as string | null],
   });
+
+  /**
+   * Gói dịch vụ còn bán được — nguồn cho ô "Gói dịch vụ áp dụng".
+   *
+   * Lọc `isActive`: gắn SKU vào một gói đã ngừng bán tạo ra thứ khách trả tiền được mà bảng giá
+   * `GET /payment/plans` (chỉ trả plan active) **không bao giờ hiện**.
+   */
+  readonly sellablePlans = signal<PlanResponse[]>([]);
 
   constructor() {
     this.load();
+    this.loadPlans();
   }
 
   isOneTime(): boolean {
@@ -279,6 +312,18 @@ export class AdminPackages {
 
   label(t: PackageType): string {
     return PACKAGE_TYPE_LABEL[t] ?? String(t);
+  }
+
+  audienceLabel(a: PlanAudience): string {
+    return PLAN_AUDIENCE_LABEL[a] ?? String(a);
+  }
+
+  loadPlans(): void {
+    this.admin.plans().subscribe({
+      next: (list) => this.sellablePlans.set(list.filter((p) => p.isActive)),
+      // Không chặn cả trang: phần gói credit lẻ vẫn dùng được khi catalog gói dịch vụ lỗi.
+      error: () => this.sellablePlans.set([]),
+    });
   }
 
   load(): void {
@@ -311,19 +356,29 @@ export class AdminPackages {
       this.notify.warn('Gói định kỳ cần số ngày.');
       return;
     }
+    // Chặn tại chỗ thay vì để BE trả 400: thiếu plan là ca thường gặp nhất và thông báo của server
+    // ("Subscription packages require PlanId and Audience") không nói cho admin biết phải bấm vào đâu.
+    const plan = oneTime ? null : this.sellablePlans().find((p) => p.id === v.planId);
+    if (!oneTime && !plan) {
+      this.notify.warn('Gói định kỳ phải chọn gói dịch vụ áp dụng.');
+      return;
+    }
     const body: CreatePackageRequest = {
       name,
       type: v.type ?? PackageType.OneTime,
       priceVnd: v.priceVnd ?? 0,
       interviewCredits: oneTime ? v.interviewCredits : null,
       durationDays: oneTime ? null : v.durationDays,
+      planId: plan?.id ?? null,
+      // Suy từ plan, KHÔNG nhận từ ô nhập riêng — BE bắt hai giá trị phải trùng (`PackageService.cs:127`).
+      audience: plan?.audience ?? null,
     };
     this.creating.set(true);
     this.api.createPackage(body).subscribe({
       next: () => {
         this.creating.set(false);
         this.notify.success('Đã tạo gói.');
-        this.form.reset({ name: '', type: PackageType.OneTime, priceVnd: 0, interviewCredits: null, durationDays: null });
+        this.form.reset({ name: '', type: PackageType.OneTime, priceVnd: 0, interviewCredits: null, durationDays: null, planId: null });
         this.load();
       },
       error: (e: HttpErrorResponse) => {

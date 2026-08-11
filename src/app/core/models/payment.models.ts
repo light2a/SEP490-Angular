@@ -53,13 +53,22 @@ export interface CreateOrderRequest {
   cancelUrl?: string | null;
 }
 
-/** POST /payment/package (Admin) — tạo gói. interviewCredits required nếu OneTime; durationDays nếu Subscription. */
+/**
+ * POST /payment/package (Admin) — tạo gói. interviewCredits required nếu OneTime; durationDays nếu Subscription.
+ *
+ * ⚠ Gói `Subscription` BẮT BUỘC có `planId` + `audience` (`PackageService.cs:123`), và `audience` phải
+ * TRÙNG audience của plan (`:127`). Thiếu/lệch → 400. Đây là thứ biến một gói thành "mua được": bảng giá
+ * `GET /payment/plans` chỉ nhận SKU có `planId`, nên gói Subscription không gắn plan là gói **không ai
+ * mua được và cũng không hiện ở đâu**.
+ */
 export interface CreatePackageRequest {
   name: string;
   type: PackageType;
   priceVnd: number;
   interviewCredits?: number | null;
   durationDays?: number | null;
+  planId?: string | null;
+  audience?: PlanAudience | null;
 }
 
 /** PUT /payment/package/{id} (Admin) — sửa gói (chỉ trường gửi lên). */
@@ -69,6 +78,8 @@ export interface UpdatePackageRequest {
   interviewCredits?: number | null;
   durationDays?: number | null;
   isActive?: boolean | null;
+  planId?: string | null;
+  audience?: PlanAudience | null;
 }
 
 /** POST /payment/admin/invoices/close (Admin) — chốt kỳ postpaid 1 org. */
