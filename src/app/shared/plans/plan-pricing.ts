@@ -104,6 +104,17 @@ export class PlanPricing implements OnInit {
     return this.mine()?.tierCode === plan.code;
   }
 
+  /**
+   * Gói nền ai cũng đang có (`free` / `starter`, `rank = 0`) — thứ duy nhất đúng nghĩa "miễn phí".
+   *
+   * Phân biệt bằng `rank` chứ không bằng "có SKU hay không": gói TRẢ PHÍ chưa được admin tạo SKU cũng
+   * có `packages` rỗng, mà gộp hai ca đó lại thì `plus`/`pro` hiện "Miễn phí — không cần mua", tức là
+   * vừa nói sai giá vừa khiến người dùng tưởng mình đã có sẵn quyền lợi của gói.
+   */
+  isFreeTier(plan: PublicPlanResponse): boolean {
+    return plan.rank === 0;
+  }
+
   /** Gói thấp hơn gói đang dùng: không cho "mua lùi" vì hệ thống không có đường hạ cấp có hoàn tiền. */
   isLower(plan: PublicPlanResponse): boolean {
     const me = this.mine();
