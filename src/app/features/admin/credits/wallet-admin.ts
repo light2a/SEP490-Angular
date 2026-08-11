@@ -23,6 +23,7 @@ import {
 } from '../../../core/models';
 import { EmptyState } from '../../../shared/ui/empty-state';
 import { Spinner } from '../../../shared/ui/spinner';
+import { OwnerPicker } from '../../../shared/admin/owner-picker';
 
 /**
  * Tra cứu ví BẤT KỲ + duyệt chế độ thanh toán (Admin).
@@ -38,6 +39,7 @@ import { Spinner } from '../../../shared/ui/spinner';
 @Component({
   selector: 'app-wallet-admin',
   imports: [
+    OwnerPicker,
     DatePipe,
     FormsModule,
     MatButtonModule,
@@ -67,12 +69,7 @@ import { Spinner } from '../../../shared/ui/spinner';
               </mat-select>
             </mat-form-field>
 
-            <mat-form-field appearance="outline" class="f-id">
-              <mat-label>
-                {{ ownerType === OwnerType.Org ? 'Id tổ chức' : 'Id người dùng' }} *
-              </mat-label>
-              <input matInput [(ngModel)]="ownerId" name="ownerId" placeholder="GUID" />
-            </mat-form-field>
+            <app-owner-picker class="f-id" [ownerType]="ownerType" [(ownerId)]="ownerId" />
 
             <button mat-flat-button color="primary" type="submit" [disabled]="loading()">
               <mat-icon>search</mat-icon>
