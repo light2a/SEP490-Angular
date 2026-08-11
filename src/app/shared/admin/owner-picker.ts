@@ -52,11 +52,20 @@ const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       } @else if (ownerId()) {
         <mat-icon matSuffix class="ok">check_circle</mat-icon>
       }
+      <!--
+        Trạng thái phải nói ra bằng chữ. Không có nó thì "chưa gõ gì", "đang tìm" và "tìm không ra"
+        đều hiện ra y hệt nhau: một ô trống không phản ứng — người dùng không biết nên chờ, gõ thêm,
+        hay đi tìm chỗ khác.
+      -->
       <mat-hint>
         @if (selected(); as s) {
           Đã chọn: {{ s.primary }}{{ s.secondary ? ' — ' + s.secondary : '' }}
         } @else if (ownerId()) {
           Dùng GUID đã nhập.
+        } @else if (loading()) {
+          Đang tìm…
+        } @else if (noMatch()) {
+          Không tìm thấy {{ isOrg() ? 'tổ chức' : 'người dùng' }} nào khớp “{{ query().trim() }}”.
         } @else {
           {{ isOrg() ? 'Tìm theo tên tổ chức.' : 'Tìm theo email (chưa tìm được theo tên).' }}
         }
@@ -69,6 +78,10 @@ const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
               <span class="opt-secondary">{{ o.secondary }}</span>
             }
           </mat-option>
+        }
+        @if (noMatch()) {
+          <!-- Option disabled để panel THẬT SỰ mở ra: panel không mở nhìn giống hệt "app đơ". -->
+          <mat-option disabled>Không có kết quả</mat-option>
         }
       </mat-autocomplete>
     </mat-form-field>
@@ -102,6 +115,13 @@ export class OwnerPicker implements OnInit {
   readonly options = signal<OwnerOption[]>([]);
   readonly selected = signal<OwnerOption | null>(null);
   readonly loading = signal(false);
+  /** Đã có ít nhất một lượt tra cứu TRẢ VỀ cho từ khoá hiện tại — để phân biệt "chưa tìm" với "tìm rồi mà không ra". */
+  readonly searched = signal(false);
+
+  /** Tìm xong và không ra gì. Chỉ đúng sau khi có kết quả về, không đúng lúc đang gõ dở. */
+  readonly noMatch = computed(
+    () => this.searched() && !this.loading() && this.options().length === 0 && !this.ownerId(),
+  );
 
   readonly isOrg = computed(() => this.ownerType() === OwnerType.Org);
 
@@ -135,6 +155,7 @@ export class OwnerPicker implements OnInit {
       .subscribe({
         next: (rows) => {
           this.loading.set(false);
+          this.searched.set(true);
           this.options.set(this.isOrg()
             ? (rows as OrganizationResponse[]).map(toOrgOption)
             : (rows as AdminUserResponse[]).map(toUserOption));
@@ -142,6 +163,7 @@ export class OwnerPicker implements OnInit {
         // Lỗi tra cứu không được khoá cả màn: admin vẫn dán được GUID để làm việc.
         error: () => {
           this.loading.set(false);
+          this.searched.set(true);
           this.options.set([]);
         },
       });
@@ -156,11 +178,15 @@ export class OwnerPicker implements OnInit {
     if (GUID.test(term)) {
       this.ownerId.set(term);
       this.options.set([]);
+      this.searched.set(false);
       return;
     }
 
     this.ownerId.set('');
-    if (term.length < 2) {
+    this.searched.set(false);
+    // Tìm ngay từ 1 ký tự. Ngưỡng 2 ký tự (bản đầu) làm ô nhập câm lặng ở đúng lần gõ đầu tiên, mà
+    // dữ liệu ở đây nhỏ (hàng chục org, hàng trăm user) nên chẳng tiết kiệm được gì đáng kể.
+    if (term.length < 1) {
       this.options.set([]);
       return;
     }
@@ -168,6 +194,7 @@ export class OwnerPicker implements OnInit {
   }
 
   pick(option: OwnerOption): void {
+    this.searched.set(false);
     this.selected.set(option);
     this.ownerId.set(option.id);
     this.query.set(option.primary);
@@ -183,6 +210,7 @@ export class OwnerPicker implements OnInit {
     this.ownerId.set('');
     this.selected.set(null);
     this.options.set([]);
+    this.searched.set(false);
   }
 }
 

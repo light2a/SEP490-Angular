@@ -92,13 +92,68 @@ describe('OwnerPicker — chọn chủ ví cho màn admin', () => {
     httpMock.expectNone((r) => r.url === USERS);
   });
 
-  it('gõ dưới 2 ký tự → không bắn request', () => {
+  /**
+   * 🔴 Bản đầu đặt ngưỡng 2 ký tự nên gõ 1 chữ thì ô nhập CÂM LẶNG — không request, không thông báo,
+   * nhìn hệt như app đơ. Dữ liệu ở đây nhỏ (hàng chục org) nên ngưỡng đó chẳng tiết kiệm gì.
+   */
+  it('gõ 1 ký tự VẪN tìm', () => {
+    const c = setup(OwnerType.Org);
+    c.onQuery('p');
+    vi.advanceTimersByTime(300);
+
+    const req = httpMock.expectOne((r) => r.url === ORGS);
+    expect(req.request.params.get('search')).toBe('p');
+    req.flush([{ id: 'o1', name: 'PMT Org', taxCode: null, createdAt: '', memberCount: 1 }]);
+    expect(c.options().length).toBe(1);
+  });
+
+  it('xoá trắng ô nhập → không bắn request', () => {
     const c = setup(OwnerType.User);
-    c.onQuery('d');
+    c.onQuery('   ');
     vi.advanceTimersByTime(300);
 
     httpMock.expectNone((r) => r.url === USERS);
     expect(c.options().length).toBe(0);
+  });
+
+  /**
+   * 🔴 Ba tình huống KHÁC NHAU từng hiện ra y hệt nhau (ô trống không phản ứng): chưa gõ gì, đang
+   * tìm, và tìm rồi không ra. Người dùng không biết nên chờ, gõ thêm, hay đi tìm chỗ khác.
+   */
+  it('phân biệt "chưa tìm" / "đang tìm" / "tìm không ra"', () => {
+    const c = setup(OwnerType.Org);
+    expect(c.noMatch()).toBe(false); // chưa gõ gì
+
+    c.onQuery('zzz');
+    vi.advanceTimersByTime(300);
+    expect(c.loading()).toBe(true); // đang tìm
+    expect(c.noMatch()).toBe(false);
+
+    httpMock.expectOne((r) => r.url === ORGS).flush([]);
+    expect(c.loading()).toBe(false);
+    expect(c.noMatch()).toBe(true); // tìm rồi, không ra
+  });
+
+  it('gõ tiếp sau khi không ra kết quả → thôi báo "không tìm thấy"', () => {
+    const c = setup(OwnerType.Org);
+    c.onQuery('zzz');
+    vi.advanceTimersByTime(300);
+    httpMock.expectOne((r) => r.url === ORGS).flush([]);
+    expect(c.noMatch()).toBe(true);
+
+    c.onQuery('zzza');
+    expect(c.noMatch()).toBe(false);
+    vi.advanceTimersByTime(300);
+    httpMock.expectOne((r) => r.url === ORGS).flush([]);
+  });
+
+  it('dán GUID → không báo "không tìm thấy" dù chưa tra ai', () => {
+    const c = setup(OwnerType.User);
+    c.onQuery(GUID);
+    vi.advanceTimersByTime(300);
+
+    expect(c.noMatch()).toBe(false);
+    httpMock.expectNone((r) => r.url === USERS);
   });
 
   it('gõ nhanh nhiều ký tự → chỉ một request (debounce)', () => {
