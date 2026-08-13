@@ -290,6 +290,26 @@ const STATUS_LABEL: Record<CampaignStatus, string> = {
         </a>
       </mat-card>
 
+      <!--
+        Chiến dịch đang chạy vẫn phải có đường vào biểu mẫu: backend nay cho sửa tiêu chí + mốc
+        điểm ở trạng thái này (câu hỏi thì không). Thiếu lối vào ở đây thì cả quyền vừa mở ra
+        không ai dùng được — đúng kiểu tính năng "có mà không tới được".
+      -->
+      @if (c.status === 'Active') {
+        <mat-card class="section actions-card">
+          <a
+            mat-stroked-button
+            color="primary"
+            [routerLink]="['/employer/campaigns', c.id, 'edit']"
+            data-testid="edit-ruler-link"
+          >
+            <mat-icon>tune</mat-icon>
+            Sửa tiêu chí & mốc điểm
+          </a>
+          <span class="muted">Câu hỏi đã chốt, không sửa được nữa.</span>
+        </mat-card>
+      }
+
       <!-- Actions theo trạng thái -->
       @if (c.status === 'Draft') {
         <mat-card class="section actions-card">
@@ -299,7 +319,7 @@ const STATUS_LABEL: Record<CampaignStatus, string> = {
           </a>
           @if (confirmPublish()) {
             <span class="confirm">
-              Xuất bản chiến dịch? Sau khi xuất bản không sửa được tiêu chí/câu hỏi.
+              Xuất bản chiến dịch? Sau khi xuất bản, CÂU HỎI không sửa được nữa (mọi ứng viên phải nhận cùng bộ đề). Tiêu chí và mốc điểm vẫn sửa được, nhưng mỗi lần sửa sẽ tạo một phiên bản thước đo mới.
               <button mat-flat-button color="primary" [disabled]="busy()" (click)="publish()">
                 Xác nhận
               </button>

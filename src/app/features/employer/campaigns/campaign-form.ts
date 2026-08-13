@@ -118,8 +118,7 @@ function toIso(local: string | null | undefined): string | null {
         <mat-card class="notice">
           <mat-icon>lock</mat-icon>
           <span
-            >Chiến dịch không ở trạng thái Nháp nên không thể chỉnh sửa tiêu chí/câu hỏi. Chỉ có thể
-            xem.</span
+            >Chiến dịch đã đóng hoặc lưu trữ — chỉ có thể xem, không chỉnh sửa được gì.</span
           >
         </mat-card>
       }
@@ -367,9 +366,16 @@ function toIso(local: string | null | undefined): string | null {
 
         <mat-card class="section">
           <h2>Câu hỏi phỏng vấn *</h2>
-          <p class="hint">Cần ít nhất 1 câu hỏi.</p>
+          @if (questionsReadOnly() && !readOnly()) {
+            <p class="hint warn-hint" data-testid="questions-locked-note">
+              Chiến dịch đã xuất bản nên <strong>câu hỏi không sửa được nữa</strong> — mọi ứng viên
+              phải nhận cùng một bộ đề. Tiêu chí và mốc điểm thì vẫn sửa được ở phần trên.
+            </p>
+          } @else {
+            <p class="hint">Cần ít nhất 1 câu hỏi.</p>
+          }
 
-          @if (!readOnly()) {
+          @if (!questionsReadOnly()) {
             <div class="ai-gen">
               <div class="ai-gen-row">
                 <mat-form-field appearance="outline" class="ai-count">
@@ -410,7 +416,7 @@ function toIso(local: string | null | undefined): string | null {
             </div>
           }
 
-          @if (!readOnly()) {
+          @if (!questionsReadOnly()) {
             <div class="import-box">
               <div class="import-row">
                 <button mat-stroked-button type="button" (click)="downloadTemplate()">
@@ -511,6 +517,7 @@ function toIso(local: string | null | undefined): string | null {
                 <button
                   mat-icon-button
                   type="button"
+                  [disabled]="questionsReadOnly()"
                   (click)="removeQuestion(i)"
                   aria-label="Xoá câu hỏi"
                 >
@@ -519,10 +526,12 @@ function toIso(local: string | null | undefined): string | null {
               </div>
             }
           </div>
-          <button mat-stroked-button type="button" (click)="addQuestion()">
-            <mat-icon>add</mat-icon>
-            Thêm câu hỏi
-          </button>
+          @if (!questionsReadOnly()) {
+            <button mat-stroked-button type="button" (click)="addQuestion()">
+              <mat-icon>add</mat-icon>
+              Thêm câu hỏi
+            </button>
+          }
         </mat-card>
 
         <!--
@@ -735,7 +744,20 @@ export class CampaignForm implements OnInit {
 
   readonly loading = signal(false);
   readonly saving = signal(false);
+  /**
+   * Khoá TOÀN BỘ biểu mẫu — chỉ `Closed`/`Archived`.
+   *
+   * Trước đây cờ này bật cho mọi trạng thái khác `Draft`, nên chiến dịch `Active` bị khoá cứng và
+   * quyền "sửa mốc điểm khi đang chạy" không có đường nào dùng được từ giao diện.
+   */
   readonly readOnly = signal(false);
+
+  /**
+   * Khoá riêng phần CÂU HỎI. Bật cho mọi trạng thái khác `Draft` vì CAMP-2 giữ nguyên cho câu hỏi:
+   * `PUT /campaign/{id}/questions` trên `Active` vẫn trả **409**. Tiêu chí + mốc điểm thì backend
+   * đã mở, nên hai thứ này KHÔNG còn dùng chung một cờ được nữa.
+   */
+  readonly questionsReadOnly = signal(false);
   /** Đang gọi AI sinh câu hỏi (F9) — khoá nút để không bắn 2 lần. */
   readonly generating = signal(false);
   /** Đang gọi AI gợi ý mốc điểm — khoá cả nút chung lẫn nút từng hàng. */
@@ -866,8 +888,15 @@ export class CampaignForm implements OnInit {
       next: (c) => {
         this.original.set(c);
         this.hydrate(c);
-        this.readOnly.set(c.status !== 'Draft');
-        if (this.readOnly()) this.form.disable();
+        this.readOnly.set(c.status === 'Closed' || c.status === 'Archived');
+        this.questionsReadOnly.set(c.status !== 'Draft');
+        if (this.readOnly()) {
+          this.form.disable();
+        } else if (this.questionsReadOnly()) {
+          // Chỉ khoá mảng câu hỏi: phần còn lại (metadata + tiêu chí + mốc) vẫn sửa được, và
+          // `getRawValue()` lúc gửi vẫn đọc được giá trị của control đã khoá.
+          this.questions.disable();
+        }
         this.loading.set(false);
       },
       error: (e: HttpErrorResponse) => {
@@ -1181,7 +1210,7 @@ export class CampaignForm implements OnInit {
    * rõ ràng. Chặn trước ở đây và nói thẳng lý do.
    */
   canGenerate(): boolean {
-    return !!this.campaignId() && !this.readOnly() && !this.generating();
+    return !!this.campaignId() && !this.questionsReadOnly() && !this.generating();
   }
 
   /** Ô trống = để backend tự quyết số câu (null), không phải 0. */
@@ -1280,7 +1309,7 @@ export class CampaignForm implements OnInit {
       this.notify.warn('Hãy tạo (lưu) chiến dịch trước — AI cần JD đã lưu để sinh câu hỏi.');
       return;
     }
-    if (this.readOnly()) {
+    if (this.questionsReadOnly()) {
       this.notify.warn('Chiến dịch đã xuất bản — không sửa được câu hỏi nữa.');
       return;
     }
@@ -1453,6 +1482,72 @@ export class CampaignForm implements OnInit {
       return;
     }
 
+    // Sửa thước đo của chiến dịch ĐANG CHẠY là hành động khó đảo: nó tăng phiên bản và làm điểm
+    // của người thi sau không so trực tiếp được với người đã chấm. Hỏi trước khi gửi.
+    if (this.isActive() && this.rubricChanged()) {
+      const data: ConfirmDialogData = {
+        title: `Lưu thay đổi sẽ tạo thước đo v${this.nextRubricVersion()}?`,
+        message:
+          'Chiến dịch đang chạy và bạn vừa đổi tiêu chí hoặc mốc điểm. Thay đổi này KHÔNG hồi tố.',
+        bullets: [
+          `Ứng viên đã chấm bằng thước đo v${this.rubricVersion() ?? 1} giữ nguyên điểm.`,
+          'Ứng viên thi SAU khi lưu sẽ được chấm bằng thước đo mới.',
+          'Bảng xếp hạng sẽ hiện cột "Thước đo" vì hai nhóm không so sánh trực tiếp được.',
+        ],
+        confirmLabel: 'Lưu và tạo phiên bản mới',
+      };
+      this.dialog
+        .open(ConfirmDialog, { data, width: '520px' })
+        .afterClosed()
+        .subscribe((ok) => {
+          if (ok) this.performSave();
+        });
+      return;
+    }
+
+    this.performSave();
+  }
+
+  /**
+   * Bộ tiêu chí + mốc có khác bản đã lưu không.
+   *
+   * So bằng cùng cách backend so (chuẩn hoá số về 4 chữ số thập phân) để `0.5` và `0.5000` không
+   * bị coi là đổi — cảnh báo oan mỗi lần bấm Lưu sẽ nhanh chóng bị bấm qua theo phản xạ, và lúc
+   * đó nó hết tác dụng đúng vào lần thay đổi thật.
+   */
+  private rubricChanged(): boolean {
+    const before = (this.original()?.criteria ?? []).map((c) => ({
+      name: c.name,
+      weight: c.weight,
+      maxScore: c.maxScore,
+      levels: c.levels ?? [],
+    }));
+    const after = this.criteria.controls.map((g) => ({
+      name: (g.get('name')?.value as string) ?? '',
+      weight: Number(g.get('weight')?.value),
+      maxScore: Number(g.get('maxScore')?.value),
+      levels: readLevels(g),
+    }));
+    return this.criteriaFingerprint(before) !== this.criteriaFingerprint(after);
+  }
+
+  private criteriaFingerprint(
+    rows: { name: string; weight: number; maxScore: number; levels: CriterionLevelItem[] }[],
+  ): string {
+    return JSON.stringify(
+      [...rows]
+        .map((r) => [
+          r.name.trim().toLowerCase(),
+          Number(r.weight).toFixed(4),
+          Number(r.maxScore).toFixed(4),
+          canonicalLevels(r.levels),
+        ])
+        .sort(),
+    );
+  }
+
+  /** Gửi thật — tách khỏi `submit()` để nhánh hỏi-xác-nhận không phải nhân bản cả thân hàm. */
+  private performSave(): void {
     const v = this.form.getRawValue();
     const criteria = this.buildCriteria();
     this.saving.set(true);
@@ -1519,6 +1614,17 @@ export class CampaignForm implements OnInit {
     };
     this.api.updateCampaign(id, body).subscribe({
       next: () => {
+        // 🔴 Chiến dịch đã xuất bản: CAMP-2 vẫn giữ nguyên cho câu hỏi, `PUT /questions` trả 409.
+        // Gọi nó ở đây là tự tạo ra kiểu hỏng tệ nhất của đường Lưu: request thứ nhất ĐÃ THÀNH
+        // CÔNG (tiêu chí + mốc đã ghi, phiên bản thước đo có thể đã tăng) mà người dùng lại thấy
+        // thông báo lỗi ⇒ họ bấm Lưu lại, hoặc tưởng mất hết và sửa lại từ đầu.
+        // Xử tường minh bằng một nhánh, KHÔNG gộp hai request rồi bắt lỗi chung.
+        if (this.questionsReadOnly()) {
+          this.saving.set(false);
+          this.notify.success('Đã lưu thay đổi.');
+          this.router.navigate(['/employer/campaigns', id]);
+          return;
+        }
         this.api.updateQuestions(id, this.buildQuestions()).subscribe({
           next: () => {
             this.saving.set(false);

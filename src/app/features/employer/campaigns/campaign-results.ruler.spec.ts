@@ -4,6 +4,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { MatDialog } from '@angular/material/dialog';
 import { provideRouter } from '@angular/router';
 import { CampaignResults } from './campaign-results';
+import { CampaignDetail } from './campaign-detail';
 import { NotifyService } from '../../../core/notify.service';
 import { CampaignResultRow, CampaignResultsResponse } from '../../../core/models';
 import { environment } from '../../../../environments/environment';
@@ -149,5 +150,62 @@ describe('CampaignResults — nhãn phiên bản thước đo', () => {
     const cmp = setup([row({ sessionId: 's1', rubricVersion: 1 })]).componentInstance;
     cmp.versionFilter = 99 as number;
     expect(cmp.rows()).toHaveLength(1);
+  });
+});
+
+/**
+ * Lối vào biểu mẫu cho chiến dịch ĐANG CHẠY. Backend đã mở quyền sửa tiêu chí + mốc điểm ở
+ * trạng thái này, nhưng trang chi tiết trước đó chỉ hiện nút "Sửa" khi Draft — quyền mở ra mà
+ * không có đường tới thì đúng bằng không có.
+ */
+describe('CampaignDetail — lối vào sửa thước đo khi Active', () => {
+  let httpMock2: HttpTestingController;
+
+  function detail(status: string) {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        {
+          provide: NotifyService,
+          useValue: { success: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn() },
+        },
+      ],
+    });
+    httpMock2 = TestBed.inject(HttpTestingController);
+    const fixture = TestBed.createComponent(CampaignDetail);
+    fixture.componentRef.setInput('campaignId', 'c1');
+    fixture.detectChanges();
+    httpMock2
+      .expectOne((r) => r.url === `${environment.apiBase}/campaign/c1`)
+      .flush({
+        id: 'c1',
+        orgId: 'o1',
+        title: 'T',
+        status,
+        antiCheatEnabled: false,
+        faceVerifyEnabled: false,
+        adaptiveEnabled: false,
+        rubricVersion: 2,
+        criteria: [],
+        questions: [],
+        createdAt: '2026-08-01T00:00:00Z',
+        updatedAt: '2026-08-01T00:00:00Z',
+      });
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  afterEach(() => httpMock2.verify());
+
+  it('Active → có nút "Sửa tiêu chí & mốc điểm"', () => {
+    const fixture = detail('Active');
+    expect(fixture.nativeElement.querySelector('[data-testid="edit-ruler-link"]')).toBeTruthy();
+  });
+
+  it('Closed → KHÔNG có lối sửa nào', () => {
+    const fixture = detail('Closed');
+    expect(fixture.nativeElement.querySelector('[data-testid="edit-ruler-link"]')).toBeNull();
   });
 });

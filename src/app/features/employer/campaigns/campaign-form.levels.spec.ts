@@ -369,6 +369,98 @@ describe('CampaignForm — mốc điểm (levels)', () => {
     });
   });
 
+  // ── Sửa mốc trên chiến dịch ĐANG CHẠY ──────────────────────────────────────
+  describe('chiến dịch Active: mốc mở, câu hỏi khoá', () => {
+    const active = () => campaign({ status: 'Active' });
+
+    it('ô mô tả mốc ENABLE, ô câu hỏi DISABLE', () => {
+      const fixture = render(active());
+      const cmp = fixture.componentInstance;
+
+      expect(cmp.readOnly()).toBe(false);
+      expect(cmp.questionsReadOnly()).toBe(true);
+      expect(levelsArrayOf(cmp).at(0).get('descriptor')!.enabled).toBe(true);
+      expect(cmp.criteria.at(0).get('name')!.enabled).toBe(true);
+      expect(cmp.questions.at(0).get('questionText')!.enabled).toBe(false);
+    });
+
+    it('Closed → khoá TOÀN BỘ như cũ', () => {
+      const cmp = render(campaign({ status: 'Closed' })).componentInstance;
+
+      expect(cmp.readOnly()).toBe(true);
+      expect(cmp.criteria.at(0).get('name')!.enabled).toBe(false);
+      expect(levelsArrayOf(cmp).at(0).get('descriptor')!.enabled).toBe(false);
+      cmp.submit();
+      expect(api.updateCampaign).not.toHaveBeenCalled();
+    });
+
+    it('Active + Lưu → gọi PUT /campaign, KHÔNG gọi PUT /questions (409 sẽ làm vỡ đường Lưu)', () => {
+      const cmp = render(active()).componentInstance;
+      cmp.form.controls.title.setValue('Đổi tiêu đề');
+      cmp.submit();
+
+      expect(api.updateCampaign).toHaveBeenCalledOnce();
+      expect(api.updateQuestions).not.toHaveBeenCalled();
+      // Người dùng phải thấy "đã lưu", không phải lỗi của một request lẽ ra không nên gửi.
+      expect(notify['success']).toHaveBeenCalled();
+      expect(notify['error']).not.toHaveBeenCalled();
+    });
+
+    it('Draft + Lưu → vẫn gọi CẢ HAI (hành vi cũ không được đổi khi nới khoá)', () => {
+      const cmp = render().componentInstance;
+      cmp.submit();
+
+      expect(api.updateCampaign).toHaveBeenCalledOnce();
+      expect(api.updateQuestions).toHaveBeenCalledOnce();
+    });
+
+    it('Active + đổi mốc → hỏi xác nhận TRƯỚC khi gửi; huỷ thì không gọi API nào', () => {
+      dialogResult = false;
+      const cmp = render(active()).componentInstance;
+      levelsArrayOf(cmp).at(0).get('descriptor')!.setValue('CÓ: mô tả mới đủ dài để hợp lệ nhé');
+      cmp.submit();
+
+      expect(api.updateCampaign).not.toHaveBeenCalled();
+      expect(api.updateQuestions).not.toHaveBeenCalled();
+    });
+
+    it('Active + đổi mốc + xác nhận → mới gửi, và có gửi levels', () => {
+      const cmp = render(active()).componentInstance;
+      levelsArrayOf(cmp).at(0).get('descriptor')!.setValue('CÓ: mô tả mới đủ dài để hợp lệ nhé');
+      cmp.submit();
+
+      expect(api.updateCampaign).toHaveBeenCalledOnce();
+      expect(savedCriteria()[0].levels).toBeDefined();
+    });
+
+    it('Active mà KHÔNG đụng thước đo → không hỏi gì, lưu thẳng', () => {
+      const cmp = render(active()).componentInstance;
+      cmp.form.controls.title.setValue('Chỉ đổi tiêu đề');
+      cmp.submit();
+
+      expect(api.updateCampaign).toHaveBeenCalledOnce();
+    });
+
+    it('0.5 và 0.5000 không bị coi là đổi thước đo (khớp cách backend so)', () => {
+      const c = active();
+      c.criteria[0].weight = 1;
+      const cmp = render(c).componentInstance;
+      cmp.criteria.at(0).get('weight')!.setValue(1.0);
+      // Không đổi gì thật ⇒ đi thẳng, không qua hộp thoại.
+      cmp.submit();
+      expect(api.updateCampaign).toHaveBeenCalledOnce();
+    });
+
+    it('banner cảnh báo không hồi tố hiện đúng lúc (Active) và không hiện ở Draft', () => {
+      const a = render(active());
+      expect(a.nativeElement.querySelector('[data-testid="active-ruler-banner"]')).toBeTruthy();
+      expect(a.nativeElement.querySelector('[data-testid="questions-locked-note"]')).toBeTruthy();
+
+      const d = render();
+      expect(d.nativeElement.querySelector('[data-testid="active-ruler-banner"]')).toBeNull();
+    });
+  });
+
   it('chiến dịch cũ không có field levels → không vỡ trang sửa', () => {
     const c = campaign();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
