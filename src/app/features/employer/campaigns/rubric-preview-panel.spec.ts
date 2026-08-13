@@ -7,7 +7,7 @@ import { CampaignApi } from '../../../core/api/campaign.api';
 import { NotifyService } from '../../../core/notify.service';
 import { RubricPreviewBand, RubricPreviewRun, RubricPreviewSample } from '../../../core/models';
 import { RubricPreviewPanel } from './rubric-preview-panel';
-import { actualPointsCollapsed } from './rubric-scale-strip';
+import { actualPointsCollapsed } from '../../../shared/rubric/rubric-scale-strip';
 
 /**
  * CHẤM THỬ THƯỚC ĐO — bộ test khoá 4 chỗ mà hỏng thì không có triệu chứng:

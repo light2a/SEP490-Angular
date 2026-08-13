@@ -25,7 +25,7 @@ import {
   CriterionLevelItem,
 } from '../../../core/models';
 import { Spinner } from '../../../shared/ui/spinner';
-import { RubricScaleStrip } from './rubric-scale-strip';
+import { RubricScaleStrip } from '../../../shared/rubric/rubric-scale-strip';
 
 const STATUS_LABEL: Record<CampaignStatus, string> = {
   Draft: 'Nháp',

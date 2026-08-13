@@ -29,6 +29,7 @@ import {
   QUESTION_KIND_LABEL,
   QuestionCitation,
   QuestionResponse,
+  SessionResult,
   UploadAnswerResult,
 } from '../../../core/models';
 import { InterviewAvatar } from '../../../shared/avatar/interview-avatar';
@@ -226,6 +227,24 @@ export class PracticeSession implements OnInit {
    * thanh ngang bên dưới đã nói đủ, khỏi vẽ.
    */
   readonly showRadar = computed(() => this.radarPoints().length >= 3);
+
+  /**
+   * Buổi này được chấm bằng thước đo nào — câu trả lời cho *"điểm thấp là do hệ thống hay do tiêu
+   * chí tôi tự đặt?"*.
+   *
+   * ⚠ `rubricVersion` **null** nghĩa là buổi cũ chưa có con dấu ⇒ chỉ nói nguồn, KHÔNG vẽ thành
+   * "bản 1": bịa ra một số phiên bản để người dùng đem so với các bản thật là sai kiểu tệ nhất —
+   * nó trông giống một dữ kiện.
+   * `rubricSource` null (buổi trước khi có tính năng này) ⇒ không hiện gì, còn hơn đoán.
+   */
+  rulerLabel(r: SessionResult): string | null {
+    if (r.rubricSource !== 'Custom' && r.rubricSource !== 'SystemDefault') return null;
+    const base =
+      r.rubricSource === 'Custom'
+        ? 'Chấm bằng rubric riêng của bạn'
+        : 'Chấm bằng bộ chuẩn hệ thống';
+    return r.rubricVersion != null ? `${base} (bản ${r.rubricVersion})` : base;
+  }
 
   /** Mốc của 1 tiêu chí (hiện cạnh thanh ngang, cho cả ca radar không vẽ). */
   targetOf(criterionId: string): number | null {

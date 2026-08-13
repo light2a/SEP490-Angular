@@ -188,6 +188,20 @@
   font-size: 18px;
   color: var(--mat-sys-on-surface-variant);
 }
+/* Nhãn thước đo: nói ra nguồn chấm nhưng không tranh chỗ với điểm số. */
+.ruler-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--mat-sys-on-surface-variant);
+  margin: 4px 0 8px;
+}
+.ruler-note mat-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+}
 .comment {
   background: var(--mat-sys-surface-container);
   padding: 12px;

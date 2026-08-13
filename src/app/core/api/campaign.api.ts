@@ -4,6 +4,8 @@ import { Observable, timeout } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   ApiKeyListItem,
+  CampaignLanguage,
+  JobCategory,
   RubricPreviewRun,
   RunRubricPreviewRequest,
   SuggestCriterionLevelsResponse,
@@ -34,6 +36,7 @@ import {
   QuestionItem,
   ScreenCandidatesResponse,
   SessionTranscriptResponse,
+  SystemDefaultPreviewResponse,
   StartInterviewResult,
   TransitionStatusRequest,
   UpdateCampaignRequest,
@@ -208,6 +211,43 @@ export class CampaignApi {
       `${this.base}/${id}/criteria/levels/suggest`,
       {},
     );
+  }
+
+  /**
+   * GET /campaign/criteria/system-default/preview — xem trước bộ chuẩn của một nghề.
+   *
+   * **CHỈ ĐỌC, không ghi gì** — dùng để nhà tuyển dụng nhìn thấy mình sắp chép về cái gì trước khi
+   * bấm. Không có `{id}` vì nó không thuộc chiến dịch nào.
+   *
+   * ⚠ **404 KHÔNG phải lỗi**: quản trị viên chưa soạn bộ chuẩn cho tổ hợp (nghề, ngôn ngữ) đó.
+   * Đây là câu hỏi *"có sẵn không"*, khác hẳn 502 của đường chép (*"chép hộ tôi"* mà hỏng).
+   */
+  previewSystemDefaultCriteria(
+    jobCategory: JobCategory,
+    language: CampaignLanguage,
+  ): Observable<SystemDefaultPreviewResponse> {
+    return this.http.get<SystemDefaultPreviewResponse>(
+      `${this.base}/criteria/system-default/preview`,
+      { params: new HttpParams().set('jobCategory', jobCategory).set('language', language) },
+    );
+  }
+
+  /**
+   * POST /campaign/{id}/criteria/from-system-default — chép bộ chuẩn của hệ thống theo nghề vào
+   * chiến dịch.
+   *
+   * **CHÉP chứ không tham chiếu**: quản trị viên sửa bộ gốc về sau sẽ KHÔNG đổi thước đo của các
+   * chiến dịch đang tuyển — đúng thứ mà cơ chế phiên bản thước đo sinh ra để chặn.
+   *
+   * ⚠ Ghi thẳng DB (khác {@link suggestCriterionLevels} vốn chỉ trả về để xem): thao tác này
+   * **THAY THẾ** toàn bộ tiêu chí đang có, nên phải hỏi lại trước khi gọi.
+   * ⚠ `jobCategory` do HR **chọn**, không suy từ `domain` — `domain` là chuỗi tự do.
+   */
+  copyCriteriaFromSystemDefault(
+    id: string,
+    body: { jobCategory: JobCategory; language: CampaignLanguage },
+  ): Observable<unknown> {
+    return this.http.post(`${this.base}/${id}/criteria/from-system-default`, body);
   }
 
   /**

@@ -71,5 +71,9 @@ export const ADMIN_ROUTES: Routes = [
     path: 'prompts',
     loadComponent: () => import('./prompts/admin-prompts').then((m) => m.AdminPrompts),
   },
+  {
+    path: 'rubrics',
+    loadComponent: () => import('./rubrics/admin-rubrics').then((m) => m.AdminRubrics),
+  },
   { path: '**', redirectTo: 'dashboard' },
 ];
