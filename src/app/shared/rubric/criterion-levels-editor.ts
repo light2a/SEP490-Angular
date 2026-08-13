@@ -12,7 +12,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { CriterionLevelItem } from '../../../core/models';
+import { CriterionLevelItem } from '../../core/models';
 
 /**
  * Nguồn của mốc điểm trong PHIÊN SỬA hiện tại — chỉ để chọn nhãn hiển thị, KHÔNG gửi lên server.

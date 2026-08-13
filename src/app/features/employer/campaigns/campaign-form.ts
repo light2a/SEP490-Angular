@@ -46,7 +46,7 @@ import {
   criterionLevelsValidator,
   levelErrorMessages,
   readLevels,
-} from './criterion-levels-editor';
+} from '../../../shared/rubric/criterion-levels-editor';
 import { PreviewQuestionOption, RubricPreviewPanel } from './rubric-preview-panel';
 
 /** ISO → giá trị datetime-local (theo giờ máy). */
