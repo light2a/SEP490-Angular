@@ -25,6 +25,7 @@ describe('CampaignForm — mốc điểm (levels)', () => {
     updateQuestions: ReturnType<typeof vi.fn>;
     createCampaign: ReturnType<typeof vi.fn>;
     suggestCriterionLevels: ReturnType<typeof vi.fn>;
+    getRubricPreviewRuns: ReturnType<typeof vi.fn>;
   };
   let notify: Record<string, ReturnType<typeof vi.fn>>;
   let dialogResult: boolean;
@@ -82,6 +83,8 @@ describe('CampaignForm — mốc điểm (levels)', () => {
       updateQuestions: vi.fn().mockReturnValue(of(c)),
       createCampaign: vi.fn().mockReturnValue(of(c)),
       suggestCriterionLevels: vi.fn().mockReturnValue(of({ criteria: [] })),
+      // Biểu mẫu nhúng panel chấm thử — nó đọc lịch sử ngay lúc mở.
+      getRubricPreviewRuns: vi.fn().mockReturnValue(of([])),
     };
     notify = { success: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn() };
     TestBed.configureTestingModule({

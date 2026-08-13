@@ -46,6 +46,7 @@ import {
   levelErrorMessages,
   readLevels,
 } from './criterion-levels-editor';
+import { PreviewQuestionOption, RubricPreviewPanel } from './rubric-preview-panel';
 
 /** ISO → giá trị datetime-local (theo giờ máy). */
 function toLocalInput(iso: string | null | undefined): string {
@@ -78,6 +79,7 @@ function toIso(local: string | null | undefined): string | null {
     MatCheckboxModule,
     Spinner,
     CriterionLevelsEditor,
+    RubricPreviewPanel,
   ],
   template: `
     <div class="head">
@@ -501,6 +503,21 @@ function toIso(local: string | null | undefined): string | null {
           </button>
         </mat-card>
 
+        <!--
+          Chấm thử chạy trên bộ tiêu chí + câu hỏi ĐÃ LƯU (không phải bản đang gõ dở), nên chỉ có
+          nghĩa khi chiến dịch đã tồn tại. Danh sách câu hỏi lấy từ bản tải về, không lấy từ form.
+        -->
+        @if (campaignId(); as cid) {
+          @if (previewQuestions().length > 0) {
+            <app-rubric-preview-panel
+              [campaignId]="cid"
+              [questions]="previewQuestions()"
+              [rubricVersion]="original()?.rubricVersion ?? null"
+              [formDirty]="form.dirty"
+            />
+          }
+        }
+
         <div class="actions">
           <button mat-button type="button" (click)="cancel()">Huỷ</button>
           <!--
@@ -698,7 +715,18 @@ export class CampaignForm implements OnInit {
    * thường. Nhờ thế file hỏng mã hoá chỉ làm HR thấy chữ lỗi ở đây rồi bấm Huỷ.
    */
   readonly importPreview = signal<ImportQuestionsResult | null>(null);
-  private original = signal<CampaignResponse | null>(null);
+  /** Bản tải về từ máy chủ — nguồn cho những thứ backend chấm/sinh dựa trên dữ liệu ĐÃ LƯU. */
+  readonly original = signal<CampaignResponse | null>(null);
+
+  /**
+   * Câu hỏi cho ô chọn của chấm thử — lấy từ bản ĐÃ LƯU chứ không phải từ form: máy chủ chấm thử
+   * theo `questionId` trong DB, câu vừa gõ chưa Lưu thì chưa có id để gửi đi.
+   */
+  previewQuestions(): PreviewQuestionOption[] {
+    return (this.original()?.questions ?? [])
+      .filter((q) => !!q.id)
+      .map((q) => ({ id: q.id, questionText: q.questionText }));
+  }
 
   /** Giới hạn ký tự JD nhập tay — khớp hằng số BE (vượt → 400). */
   readonly jdTextMaxChars = JD_TEXT_MAX_CHARS;

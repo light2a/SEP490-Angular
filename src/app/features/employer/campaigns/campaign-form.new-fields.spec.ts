@@ -50,6 +50,8 @@ describe('CampaignForm — cấp độ, mô tả tiêu chí, trần thi đồng 
       updateCampaign: vi.fn().mockReturnValue(of(campaign())),
       updateQuestions: vi.fn().mockReturnValue(of(campaign())),
       createCampaign: vi.fn().mockReturnValue(of(campaign())),
+      // Biểu mẫu nay nhúng panel chấm thử — nó đọc lịch sử ngay lúc mở, nên mock phải có.
+      getRubricPreviewRuns: vi.fn().mockReturnValue(of([])),
     };
     notify = { success: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn() };
 
