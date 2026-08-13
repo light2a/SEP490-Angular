@@ -17,6 +17,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSelectModule } from '@angular/material/select';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialog } from '@angular/material/dialog';
 import { extractErrorMessage } from '../../../core/api/http-utils';
 import { CampaignApi } from '../../../core/api/campaign.api';
@@ -77,6 +78,7 @@ function toIso(local: string | null | undefined): string | null {
     MatSlideToggleModule,
     MatSelectModule,
     MatCheckboxModule,
+    MatTooltipModule,
     Spinner,
     CriterionLevelsEditor,
     RubricPreviewPanel,
@@ -87,11 +89,31 @@ function toIso(local: string | null | undefined): string | null {
         <mat-icon>arrow_back</mat-icon>
       </button>
       <h1>{{ campaignId() ? 'Sửa chiến dịch' : 'Tạo chiến dịch' }}</h1>
+      @if (rubricVersion(); as v) {
+        <span class="ruler-chip" [matTooltip]="rulerTooltip()" data-testid="ruler-chip"
+          >Thước đo v{{ v }}</span
+        >
+      }
     </div>
 
     @if (loading()) {
       <app-spinner message="Đang tải..." />
     } @else {
+      <!--
+        Sửa mốc trên chiến dịch ĐANG CHẠY không hồi tố: người đã chấm giữ nguyên điểm, người thi
+        sau dùng thước mới. Nói trước, vì "sửa tiêu chí" nghe như sửa cho cả bảng xếp hạng.
+      -->
+      @if (isActive()) {
+        <mat-card class="notice ruler-notice" data-testid="active-ruler-banner">
+          <mat-icon>published_with_changes</mat-icon>
+          <span>
+            Chiến dịch đang chạy. Sửa mốc điểm sẽ tạo <strong>thước đo v{{ nextRubricVersion() }}</strong>
+            và chỉ áp cho ứng viên thi <strong>SAU khi lưu</strong> — người đã chấm bằng thước đo
+            v{{ rubricVersion() }} giữ nguyên điểm.
+          </span>
+        </mat-card>
+      }
+
       @if (readOnly()) {
         <mat-card class="notice">
           <mat-icon>lock</mat-icon>
@@ -598,6 +620,18 @@ function toIso(local: string | null | undefined): string | null {
         border-bottom: 1px solid var(--mat-sys-outline-variant);
         margin-bottom: 8px;
       }
+      .ruler-chip {
+        margin-left: auto;
+        padding: 3px 10px;
+        border-radius: 12px;
+        font-size: 12px;
+        background: var(--mat-sys-secondary-container);
+        color: var(--mat-sys-on-secondary-container);
+      }
+      .ruler-notice {
+        background: var(--mat-sys-secondary-container);
+        color: var(--mat-sys-on-secondary-container);
+      }
       .notice {
         display: flex;
         align-items: center;
@@ -722,6 +756,32 @@ export class CampaignForm implements OnInit {
    * Câu hỏi cho ô chọn của chấm thử — lấy từ bản ĐÃ LƯU chứ không phải từ form: máy chủ chấm thử
    * theo `questionId` trong DB, câu vừa gõ chưa Lưu thì chưa có id để gửi đi.
    */
+  /**
+   * Phiên bản thước đo hiện tại. `null` khi chiến dịch tạo trước tính năng này (hoặc deploy backend
+   * cũ hơn) — lúc đó KHÔNG vẽ chip, vì "không biết" mà hiện "v1" là bịa.
+   */
+  rubricVersion(): number | null {
+    return this.original()?.rubricVersion ?? null;
+  }
+
+  /** Số phiên bản sẽ nhận nếu HR sửa mốc bây giờ — dùng trong lời cảnh báo cho chiến dịch Active. */
+  nextRubricVersion(): number {
+    return (this.rubricVersion() ?? 1) + 1;
+  }
+
+  isActive(): boolean {
+    return this.original()?.status === 'Active';
+  }
+
+  rulerTooltip(): string {
+    const c = this.original();
+    if (!c?.rubricVersionUpdatedAt) return 'Thước đo gốc — chưa ai sửa mốc điểm.';
+    const when = new Date(c.rubricVersionUpdatedAt).toLocaleString('vi-VN');
+    return c.rubricVersionUpdatedBy
+      ? `Sửa lần cuối ${when} bởi ${c.rubricVersionUpdatedBy}`
+      : `Sửa lần cuối ${when}`;
+  }
+
   previewQuestions(): PreviewQuestionOption[] {
     return (this.original()?.questions ?? [])
       .filter((q) => !!q.id)

@@ -79,11 +79,38 @@ import {
         </button>
       </div>
 
-      @if (d.results.length === 0) {
+      <!--
+        Chỉ nói về thước đo khi bảng THẬT SỰ trộn nhiều phiên bản (hiếm — HR phải sửa mốc giữa
+        chừng). Hiện mặc định thì 95% chiến dịch nhận thêm một cột vô nghĩa.
+      -->
+      @if (mixedVersions()) {
+        <mat-card class="ruler-banner" data-testid="mixed-ruler-banner">
+          <mat-icon>rule</mat-icon>
+          <div>
+            <strong>Bảng này gồm ứng viên chấm bằng {{ versions().length }} phiên bản thước đo</strong>
+            <p>
+              Mốc điểm đã được sửa giữa chừng, nên điểm giữa hai nhóm
+              <strong>không so sánh trực tiếp được</strong>. Lọc theo từng phiên bản để xếp hạng
+              trong cùng một thước.
+            </p>
+          </div>
+          <mat-form-field appearance="outline" class="ruler-filter">
+            <mat-label>Thước đo</mat-label>
+            <mat-select [(ngModel)]="versionFilter">
+              <mat-option value="all">Tất cả</mat-option>
+              @for (v of versions(); track v) {
+                <mat-option [value]="v">{{ v === 'unknown' ? 'Không rõ' : 'v' + v }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        </mat-card>
+      }
+
+      @if (rows().length === 0) {
         <app-empty-state icon="leaderboard" message="Chưa có ứng viên nào được chấm" />
       } @else {
         <mat-card class="tbl-card">
-          <table mat-table [dataSource]="d.results">
+          <table mat-table [dataSource]="rows()">
             <ng-container matColumnDef="rank">
               <th mat-header-cell *matHeaderCellDef>Hạng</th>
               <td mat-cell *matCellDef="let r">{{ r.rank }}</td>
@@ -138,6 +165,26 @@ import {
               <td mat-cell *matCellDef="let r">{{ r.scoredAt | date: 'short' }}</td>
             </ng-container>
 
+            <!--
+              rubricVersion null = KHÔNG BIẾT (buổi chấm trước khi có versioning). Vẽ nó thành
+              "v1" là suy "biết" từ "không biết" — đúng lỗi BK23 — nên hiện dấu hỏi.
+            -->
+            <ng-container matColumnDef="ruler">
+              <th mat-header-cell *matHeaderCellDef>Thước đo</th>
+              <td mat-cell *matCellDef="let r">
+                @if (r.rubricVersion != null) {
+                  <mat-chip class="chip-ruler" highlighted>v{{ r.rubricVersion }}</mat-chip>
+                } @else {
+                  <mat-chip
+                    class="chip-ruler unknown"
+                    matTooltip="Buổi này được chấm trước khi hệ thống đánh phiên bản thước đo — không rõ dùng bộ mốc nào."
+                    highlighted
+                    >?</mat-chip
+                  >
+                }
+              </td>
+            </ng-container>
+
             <ng-container matColumnDef="flags">
               <th mat-header-cell *matHeaderCellDef>Cờ gian lận</th>
               <td mat-cell *matCellDef="let r">
@@ -177,8 +224,8 @@ import {
               </td>
             </ng-container>
 
-            <tr mat-header-row *matHeaderRowDef="cols"></tr>
-            <tr mat-row *matRowDef="let row; columns: cols"></tr>
+            <tr mat-header-row *matHeaderRowDef="cols()"></tr>
+            <tr mat-row *matRowDef="let row; columns: cols()"></tr>
           </table>
         </mat-card>
 
@@ -295,6 +342,27 @@ import {
       .head {
         margin-bottom: 8px;
       }
+      .ruler-banner {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 12px 16px;
+        margin-bottom: 12px;
+        background: var(--mat-sys-secondary-container);
+        color: var(--mat-sys-on-secondary-container);
+      }
+      .ruler-banner p {
+        margin: 4px 0 0;
+        font-size: 13px;
+      }
+      .ruler-filter {
+        min-width: 140px;
+        margin-left: auto;
+      }
+      .chip-ruler.unknown {
+        opacity: 0.75;
+      }
+
       .summary {
         display: flex;
         flex-wrap: wrap;
@@ -443,7 +511,44 @@ export class CampaignResults implements OnInit {
   readonly data = signal<CampaignResultsResponse | null>(null);
   readonly loading = signal(true);
   readonly exporting = signal(false);
-  readonly cols = ['rank', 'candidate', 'score', 'result', 'scoredAt', 'flags', 'actions'];
+  /**
+   * Cột `ruler` chỉ xuất hiện khi bảng trộn nhiều phiên bản thước đo. 95% chiến dịch chỉ có một
+   * phiên bản — hiện cột cho mọi trường hợp là thêm nhiễu vào đúng màn HR cần đọc nhanh.
+   */
+  cols(): string[] {
+    const base = ['rank', 'candidate', 'score', 'result', 'scoredAt', 'flags'];
+    return this.mixedVersions() ? [...base, 'ruler', 'actions'] : [...base, 'actions'];
+  }
+
+  /** Bộ lọc theo thước đo: `'all'` | số phiên bản | `'unknown'` cho buổi chấm trước versioning. */
+  versionFilter: number | 'all' | 'unknown' = 'all';
+
+  /**
+   * Các phiên bản thước đo có mặt trong bảng. `'unknown'` gom những dòng KHÔNG BIẾT — chúng là
+   * một nhóm riêng, không được nhập vào v1.
+   */
+  readonly versions = computed<(number | 'unknown')[]>(() => {
+    const rows = this.data()?.results ?? [];
+    const nums = [...new Set(rows.filter((r) => r.rubricVersion != null).map((r) => r.rubricVersion!))];
+    nums.sort((a, b) => a - b);
+    const out: (number | 'unknown')[] = [...nums];
+    if (rows.some((r) => r.rubricVersion == null)) out.push('unknown');
+    return out;
+  });
+
+  /** Có từ 2 nhóm thước đo trở lên ⇒ điểm không so sánh trực tiếp được (tiền lệ scoring_scope_version). */
+  mixedVersions(): boolean {
+    return this.versions().length >= 2;
+  }
+
+  /** Dòng hiển thị sau bộ lọc thước đo. */
+  rows(): CampaignResultRow[] {
+    const all = this.data()?.results ?? [];
+    if (this.versionFilter === 'all' || !this.mixedVersions()) return all;
+    if (this.versionFilter === 'unknown') return all.filter((r) => r.rubricVersion == null);
+    return all.filter((r) => r.rubricVersion === this.versionFilter);
+  }
+
   readonly unscoredCols = ['candidate', 'flags'];
 
   /**

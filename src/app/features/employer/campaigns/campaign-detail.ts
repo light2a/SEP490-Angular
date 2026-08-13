@@ -10,6 +10,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { extractErrorMessage } from '../../../core/api/http-utils';
 import { CampaignApi } from '../../../core/api/campaign.api';
 import { NotifyService } from '../../../core/notify.service';
@@ -21,8 +22,10 @@ import {
   CampaignSeniority,
   CampaignStatus,
   CreateInvitationsResponse,
+  CriterionLevelItem,
 } from '../../../core/models';
 import { Spinner } from '../../../shared/ui/spinner';
+import { RubricScaleStrip } from './rubric-scale-strip';
 
 const STATUS_LABEL: Record<CampaignStatus, string> = {
   Draft: 'Nháp',
@@ -44,7 +47,9 @@ const STATUS_LABEL: Record<CampaignStatus, string> = {
     MatDividerModule,
     MatFormFieldModule,
     MatInputModule,
+    MatTooltipModule,
     Spinner,
+    RubricScaleStrip,
   ],
   template: `
     <div class="head">
@@ -200,7 +205,24 @@ const STATUS_LABEL: Record<CampaignStatus, string> = {
       </mat-card>
 
       <mat-card class="section">
-        <h3>Tiêu chí đánh giá ({{ c.criteria.length }})</h3>
+        <div class="sec-head">
+          <h3>Tiêu chí đánh giá ({{ c.criteria.length }})</h3>
+          @if (c.rubricVersion; as v) {
+            <span class="ruler-chip" [matTooltip]="rulerTooltip(c)" data-testid="ruler-chip"
+              >Thước đo v{{ v }}</span
+            >
+          }
+        </div>
+
+        @if (c.status === 'Active') {
+          <p class="ruler-note" data-testid="active-ruler-banner">
+            Chiến dịch đang chạy. Sửa mốc điểm sẽ tạo
+            <strong>thước đo v{{ nextRubricVersion(c) }}</strong> và chỉ áp cho ứng viên thi
+            <strong>SAU khi lưu</strong> — người đã chấm bằng thước đo v{{ currentRubricVersion(c) }}
+            giữ nguyên điểm.
+          </p>
+        }
+
         @if (c.criteria.length === 0) {
           <p class="muted">Chưa có tiêu chí.</p>
         } @else {
@@ -218,6 +240,22 @@ const STATUS_LABEL: Record<CampaignStatus, string> = {
                   <span class="muted">tối đa {{ cr.maxScore }}</span>
                 </div>
               </div>
+              <!--
+                Mốc điểm chỉ ĐỌC ở đây. Không có mốc là trạng thái hợp lệ nhưng đáng nêu: lúc đó
+                bộ chấm không có mô tả nào để bám, nên không phân biệt được 3 với 6 điểm.
+              -->
+              <app-rubric-scale-strip
+                [maxScore]="cr.maxScore"
+                [levels]="levelsOf(cr)"
+                [criterionName]="''"
+              />
+              @if (levelsOf(cr).length > 0) {
+                <ul class="lv-list">
+                  @for (l of sortedLevels(levelsOf(cr)); track l.score) {
+                    <li><strong>{{ l.score }}</strong> — {{ l.descriptor }}</li>
+                  }
+                </ul>
+              }
             }
           </div>
         }
@@ -474,6 +512,37 @@ const STATUS_LABEL: Record<CampaignStatus, string> = {
         color: var(--mat-sys-on-surface-variant);
         font-size: 14px;
       }
+      .sec-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .ruler-chip {
+        padding: 3px 10px;
+        border-radius: 12px;
+        font-size: 12px;
+        background: var(--mat-sys-secondary-container);
+        color: var(--mat-sys-on-secondary-container);
+      }
+      .ruler-note {
+        margin: 4px 0 12px;
+        padding: 8px 12px;
+        border-radius: 8px;
+        font-size: 12px;
+        background: var(--mat-sys-secondary-container);
+        color: var(--mat-sys-on-secondary-container);
+      }
+      .lv-list {
+        margin: 0 0 14px;
+        padding-left: 18px;
+        font-size: 12px;
+        color: var(--mat-sys-on-surface-variant);
+      }
+      .lv-list li {
+        margin-bottom: 3px;
+      }
       .crit-list {
         display: flex;
         flex-direction: column;
@@ -634,6 +703,44 @@ export class CampaignDetail implements OnInit {
 
   statusLabel(s: CampaignStatus): string {
     return STATUS_LABEL[s];
+  }
+
+  /**
+   * Mốc điểm của một tiêu chí, đọc PHÒNG THỦ.
+   *
+   * Kiểu khai `levels` là bắt buộc theo hợp đồng backend, nhưng chiến dịch tạo trước tính năng
+   * này (hoặc deploy backend cũ hơn) trả về `undefined` lúc chạy — và `undefined.length` ở template
+   * làm trắng cả trang chi tiết. Bọc trong hàm thay vì `?? []` ngay trong template để trình biên
+   * dịch không báo "toán tử ?? thừa" (nó tin kiểu, còn ta phải sống với dữ liệu thật).
+   */
+  levelsOf(cr: { levels: CriterionLevelItem[] }): CriterionLevelItem[] {
+    return cr.levels ?? [];
+  }
+
+  /** Mốc điểm đọc theo thứ tự TĂNG DẦN — ở màn chỉ-đọc thì đọc như một cái thang là tự nhiên nhất. */
+  sortedLevels(levels: CriterionLevelItem[]): CriterionLevelItem[] {
+    return [...levels].sort((a, b) => a.score - b.score);
+  }
+
+  /**
+   * Phiên bản thước đo đang dùng. Kiểu khai là bắt buộc nhưng chiến dịch cũ trả `undefined` lúc
+   * chạy — bọc trong hàm để trình biên dịch không coi `?? 1` là thừa (nó tin kiểu, ta tin dữ liệu).
+   */
+  currentRubricVersion(c: CampaignResponse): number {
+    return c.rubricVersion ?? 1;
+  }
+
+  /** Số phiên bản sẽ nhận nếu sửa mốc bây giờ. */
+  nextRubricVersion(c: CampaignResponse): number {
+    return this.currentRubricVersion(c) + 1;
+  }
+
+  rulerTooltip(c: CampaignResponse): string {
+    if (!c.rubricVersionUpdatedAt) return 'Thước đo gốc — chưa ai sửa mốc điểm.';
+    const when = new Date(c.rubricVersionUpdatedAt).toLocaleString('vi-VN');
+    return c.rubricVersionUpdatedBy
+      ? `Sửa lần cuối ${when} bởi ${c.rubricVersionUpdatedBy}`
+      : `Sửa lần cuối ${when}`;
   }
 
   /** Chiến dịch cũ (trước khi có cột) không trả seniority → nói rõ mặc định, không hiện ô trống. */
