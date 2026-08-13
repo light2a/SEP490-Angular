@@ -186,6 +186,20 @@ describe('CampaignForm — mốc điểm (levels)', () => {
       expect(sent.levels?.map((l) => l.score)).toEqual([0, 6, 10]);
     });
 
+    it('server trả mốc theo thứ tự GIẢM DẦN → vẫn coi là "không đổi", không gửi levels', () => {
+      // Thứ tự mốc do server trả không có gì bảo đảm. Nếu ảnh chụp lúc nạp không được chuẩn hoá
+      // thứ tự thì MỌI lần Lưu đều thấy "đã đổi" ⇒ gửi lại y nguyên bộ mốc ⇒ trên chiến dịch
+      // đang chạy sẽ TĂNG PHIÊN BẢN THƯỚC ĐO mà chẳng ai sửa gì, và điểm của các nhóm ứng viên
+      // hết so sánh được với nhau. Hỏng kiểu này không có triệu chứng nào ở màn hình.
+      const c = campaign();
+      c.criteria[0].levels = [...c.criteria[0].levels].reverse();
+      const fixture = render(c);
+      fixture.componentInstance.form.controls.title.setValue('Đổi mỗi tiêu đề');
+      fixture.componentInstance.submit();
+
+      expect('levels' in savedCriteria()[0]).toBe(false);
+    });
+
     it('tiêu chí HR mới thêm (chưa có mốc) → không gửi levels rỗng thừa', () => {
       const fixture = render();
       fixture.componentInstance.addCriterion();
