@@ -36,6 +36,7 @@ import {
   QuestionItem,
   ScreenCandidatesResponse,
   SessionTranscriptResponse,
+  SystemDefaultPreviewResponse,
   StartInterviewResult,
   TransitionStatusRequest,
   UpdateCampaignRequest,
@@ -209,6 +210,25 @@ export class CampaignApi {
     return this.http.post<SuggestCriterionLevelsResponse>(
       `${this.base}/${id}/criteria/levels/suggest`,
       {},
+    );
+  }
+
+  /**
+   * GET /campaign/criteria/system-default/preview — xem trước bộ chuẩn của một nghề.
+   *
+   * **CHỈ ĐỌC, không ghi gì** — dùng để nhà tuyển dụng nhìn thấy mình sắp chép về cái gì trước khi
+   * bấm. Không có `{id}` vì nó không thuộc chiến dịch nào.
+   *
+   * ⚠ **404 KHÔNG phải lỗi**: quản trị viên chưa soạn bộ chuẩn cho tổ hợp (nghề, ngôn ngữ) đó.
+   * Đây là câu hỏi *"có sẵn không"*, khác hẳn 502 của đường chép (*"chép hộ tôi"* mà hỏng).
+   */
+  previewSystemDefaultCriteria(
+    jobCategory: JobCategory,
+    language: CampaignLanguage,
+  ): Observable<SystemDefaultPreviewResponse> {
+    return this.http.get<SystemDefaultPreviewResponse>(
+      `${this.base}/criteria/system-default/preview`,
+      { params: new HttpParams().set('jobCategory', jobCategory).set('language', language) },
     );
   }
 

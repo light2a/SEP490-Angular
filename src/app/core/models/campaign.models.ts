@@ -1,4 +1,4 @@
-import { CampaignStatus, CandidateInterviewStatus, QuestionKind } from './enums';
+import { CampaignStatus, CandidateInterviewStatus, JobCategory, QuestionKind } from './enums';
 
 /**
  * Tín hiệu proctoring (anti-cheat B2B) gửi lên backend — flag cho HR, KHÔNG auto-hủy.
@@ -176,6 +176,38 @@ export interface CampaignQuestionResponse {
 export interface CriterionLevelItem {
   score: number;
   descriptor: string;
+}
+
+/**
+ * 1 tiêu chí của BỘ CHUẨN HỆ THỐNG, ở dạng xem trước cho nhà tuyển dụng.
+ *
+ * Chỉ có `levelCount` chứ không có cả mảng mốc: xem trước là để trả lời *"chép về thì được những
+ * gì"*, không phải để đọc từng mô tả mốc — mốc chỉ nhà tuyển dụng thấy sau khi đã chép.
+ *
+ * ⚠ `levelCount = 0` là **HỢP LỆ** (quản trị viên chưa khai mốc cho tiêu chí đó) chứ không phải
+ * lỗi: không mốc thì bộ chấm rơi về dải mặc định, vẫn chấm được. Chặn thao tác chép vì lý do này
+ * là hiểu sai một trạng thái bình thường thành hỏng.
+ */
+export interface SystemDefaultPreviewCriterion {
+  name: string;
+  description?: string | null;
+  weight: number;
+  maxScore: number;
+  levelCount: number;
+}
+
+/**
+ * GET /campaign/criteria/system-default/preview — xem bộ chuẩn TRƯỚC khi chép về chiến dịch.
+ *
+ * **404 khác hẳn lỗi**: nghĩa là quản trị viên chưa soạn bộ chuẩn cho tổ hợp (nghề, ngôn ngữ) đó.
+ * Bộ chuẩn có 6 tổ hợp và nhiều khả năng được soạn dần từng cái, nên đây là ca thật chứ không phải
+ * biên hiếm — phải nói ra được thay vì hiện một lỗi đỏ chung chung.
+ */
+export interface SystemDefaultPreviewResponse {
+  jobCategory: JobCategory;
+  language: CampaignLanguage;
+  version: number;
+  criteria: SystemDefaultPreviewCriterion[];
 }
 
 /** 1 tiêu chí campaign có cấu trúc (đọc) — C12. */
