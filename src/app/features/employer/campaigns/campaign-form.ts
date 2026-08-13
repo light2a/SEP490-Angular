@@ -48,6 +48,11 @@ import {
   readLevels,
 } from '../../../shared/rubric/criterion-levels-editor';
 import { PreviewQuestionOption, RubricPreviewPanel } from './rubric-preview-panel';
+import {
+  SystemDefaultCriteriaChoice,
+  SystemDefaultCriteriaDialog,
+  SystemDefaultCriteriaDialogData,
+} from './system-default-criteria-dialog';
 
 /** ISO → giá trị datetime-local (theo giờ máy). */
 function toLocalInput(iso: string | null | undefined): string {
@@ -271,6 +276,24 @@ function toIso(local: string | null | undefined): string | null {
                 chí (một lời gọi cho mọi tiêu chí), không phải của riêng hàng nào.
               -->
               @if (!readOnly()) {
+                <!--
+                  Ngang cấp với "Nhờ AI gợi ý mốc" và đặt TRƯỚC nó: đây là cách nhanh nhất để có
+                  một thước đo tử tế, còn nhờ AI là bước tinh chỉnh sau đó.
+                -->
+                <button
+                  mat-stroked-button
+                  type="button"
+                  (click)="useSystemDefaultCriteria()"
+                  [disabled]="!canUseSystemDefault()"
+                  data-testid="use-system-default"
+                >
+                  @if (copyingSystemDefault()) {
+                    <mat-icon class="spin">progress_activity</mat-icon>
+                  } @else {
+                    <mat-icon>library_add</mat-icon>
+                  }
+                  Dùng bộ chuẩn theo nghề
+                </button>
                 <button
                   mat-stroked-button
                   type="button"
@@ -762,6 +785,7 @@ export class CampaignForm implements OnInit {
   readonly generating = signal(false);
   /** Đang gọi AI gợi ý mốc điểm — khoá cả nút chung lẫn nút từng hàng. */
   readonly suggestingLevels = signal(false);
+  readonly copyingSystemDefault = signal(false);
   /** Số câu muốn AI sinh (1..20); null = để backend tự quyết. */
   readonly aiCount = signal<number | null>(null);
   /** Đang đọc file CSV — khoá nút để không bắn 2 lần. */
@@ -1007,6 +1031,61 @@ export class CampaignForm implements OnInit {
   removeCriterion(i: number): void {
     this.criteria.removeAt(i);
   }
+  // ── Dùng bộ chuẩn hệ thống theo nghề ────────────────────────────────────────
+  canUseSystemDefault(): boolean {
+    return !!this.campaignId() && !this.readOnly() && !this.copyingSystemDefault();
+  }
+
+  /**
+   * Chép bộ chuẩn của hệ thống vào chiến dịch — lối tắt để có thước đo tử tế mà không phải tự nghĩ
+   * ra 7 tiêu chí rồi tự soạn mốc cho từng cái. Ai vội sẽ bỏ trống, mà bỏ trống nghĩa là quay về
+   * đúng thang rỗng nghĩa.
+   *
+   * 🔴 KHÔNG đoán nghề từ ô "Lĩnh vực": đó là chuỗi tự do (`"Fullstack"`, `"QA"`, để trống…) trong
+   * khi bộ chuẩn chỉ có ba nghề. Đoán sai ở đây là chấm ứng viên bằng thước đo của nghề khác — HR
+   * không có cách nào nhận ra qua màn hình.
+   */
+  useSystemDefaultCriteria(): void {
+    const id = this.campaignId();
+    if (!id) {
+      this.notify.warn('Hãy tạo (lưu) chiến dịch trước khi chép bộ chuẩn.');
+      return;
+    }
+    if (this.readOnly()) {
+      this.notify.warn('Chiến dịch đã đóng — không sửa được tiêu chí.');
+      return;
+    }
+
+    const data: SystemDefaultCriteriaDialogData = {
+      currentCount: this.criteria.length,
+      domain: (this.form.get('domain')?.value as string) ?? null,
+      language: (this.form.get('language')?.value as CampaignLanguage) ?? null,
+    };
+    this.dialog
+      .open(SystemDefaultCriteriaDialog, { data, width: '520px' })
+      .afterClosed()
+      .subscribe((choice: SystemDefaultCriteriaChoice | null | undefined) => {
+        if (choice) this.runCopySystemDefault(id, choice);
+      });
+  }
+
+  private runCopySystemDefault(id: string, choice: SystemDefaultCriteriaChoice): void {
+    this.copyingSystemDefault.set(true);
+    this.api.copyCriteriaFromSystemDefault(id, choice).subscribe({
+      next: () => {
+        this.copyingSystemDefault.set(false);
+        this.notify.success('Đã chép bộ chuẩn. Xem lại và sửa cho khớp vị trí bạn đang tuyển.');
+        // Backend GHI thẳng, nên phải nạp lại: giữ nguyên form cũ sẽ hiện tiêu chí đã bị thay thế,
+        // và lần Lưu kế tiếp sẽ ghi đè ngược lại bộ vừa chép.
+        this.ngOnInit();
+      },
+      error: (e: HttpErrorResponse) => {
+        this.copyingSystemDefault.set(false);
+        this.notify.error(extractErrorMessage(e) ?? 'Không chép được bộ chuẩn.');
+      },
+    });
+  }
+
   // ── Mốc điểm: nhờ AI gợi ý ──────────────────────────────────────────────────
   /**
    * Backend đọc bộ tiêu chí **đã lưu trong DB** (giống F9 đọc JD đã lưu), rồi trả mốc về cho HR

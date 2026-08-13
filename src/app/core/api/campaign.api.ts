@@ -4,6 +4,8 @@ import { Observable, timeout } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   ApiKeyListItem,
+  CampaignLanguage,
+  JobCategory,
   RubricPreviewRun,
   RunRubricPreviewRequest,
   SuggestCriterionLevelsResponse,
@@ -208,6 +210,24 @@ export class CampaignApi {
       `${this.base}/${id}/criteria/levels/suggest`,
       {},
     );
+  }
+
+  /**
+   * POST /campaign/{id}/criteria/from-system-default — chép bộ chuẩn của hệ thống theo nghề vào
+   * chiến dịch.
+   *
+   * **CHÉP chứ không tham chiếu**: quản trị viên sửa bộ gốc về sau sẽ KHÔNG đổi thước đo của các
+   * chiến dịch đang tuyển — đúng thứ mà cơ chế phiên bản thước đo sinh ra để chặn.
+   *
+   * ⚠ Ghi thẳng DB (khác {@link suggestCriterionLevels} vốn chỉ trả về để xem): thao tác này
+   * **THAY THẾ** toàn bộ tiêu chí đang có, nên phải hỏi lại trước khi gọi.
+   * ⚠ `jobCategory` do HR **chọn**, không suy từ `domain` — `domain` là chuỗi tự do.
+   */
+  copyCriteriaFromSystemDefault(
+    id: string,
+    body: { jobCategory: JobCategory; language: CampaignLanguage },
+  ): Observable<unknown> {
+    return this.http.post(`${this.base}/${id}/criteria/from-system-default`, body);
   }
 
   /**
