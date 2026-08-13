@@ -29,6 +29,7 @@ import {
   CampaignSeniority,
   CreateCampaignRequest,
   CriterionItem,
+  CriterionLevelItem,
   ImportQuestionsResult,
   JD_TEXT_MAX_CHARS,
   QuestionItem,
@@ -37,6 +38,14 @@ import {
 } from '../../../core/models';
 import { ConfirmDialog, ConfirmDialogData } from '../../../shared/ui/confirm-dialog';
 import { Spinner } from '../../../shared/ui/spinner';
+import {
+  CriterionLevelsEditor,
+  CriterionLevelsSource,
+  canonicalLevels,
+  criterionLevelsValidator,
+  levelErrorMessages,
+  readLevels,
+} from './criterion-levels-editor';
 
 /** ISO → giá trị datetime-local (theo giờ máy). */
 function toLocalInput(iso: string | null | undefined): string {
@@ -68,6 +77,7 @@ function toIso(local: string | null | undefined): string | null {
     MatSelectModule,
     MatCheckboxModule,
     Spinner,
+    CriterionLevelsEditor,
   ],
   template: `
     <div class="head">
@@ -232,8 +242,30 @@ function toIso(local: string | null | undefined): string | null {
         <mat-card class="section">
           <div class="section-head">
             <h2>Tiêu chí đánh giá</h2>
-            <div class="w-total" [class.bad]="criteria.length > 0 && !weightOk()">
-              Σ trọng số: {{ totalWeight().toFixed(2) }}
+            <div class="head-right">
+              <!--
+                Ngang cấp với "Nhờ AI sinh câu hỏi" ở card dưới: đây là hành động của CẢ bộ tiêu
+                chí (một lời gọi cho mọi tiêu chí), không phải của riêng hàng nào.
+              -->
+              @if (!readOnly()) {
+                <button
+                  mat-stroked-button
+                  type="button"
+                  (click)="suggestLevels(null)"
+                  [disabled]="!canSuggestLevels()"
+                  data-testid="suggest-levels-all"
+                >
+                  @if (suggestingLevels()) {
+                    <mat-icon class="spin">progress_activity</mat-icon>
+                  } @else {
+                    <mat-icon>auto_awesome</mat-icon>
+                  }
+                  {{ suggestingLevels() ? 'Đang gợi ý...' : 'Nhờ AI gợi ý mốc' }}
+                </button>
+              }
+              <div class="w-total" [class.bad]="criteria.length > 0 && !weightOk()">
+                Σ trọng số: {{ totalWeight().toFixed(2) }}
+              </div>
             </div>
           </div>
           <p class="hint">Tổng trọng số nên xấp xỉ 1.00 (backend chuẩn hoá về 1).</p>
@@ -263,31 +295,43 @@ function toIso(local: string | null | undefined): string | null {
 
           <div formArrayName="criteria">
             @for (g of criteria.controls; track $index; let i = $index) {
-              <div class="crit-row" [formGroupName]="i">
-                <mat-form-field appearance="outline" class="c-name">
-                  <mat-label>Tên tiêu chí *</mat-label>
-                  <input matInput formControlName="name" />
-                </mat-form-field>
-                <mat-form-field appearance="outline" class="c-num">
-                  <mat-label>Trọng số</mat-label>
-                  <input matInput type="number" formControlName="weight" step="0.05" min="0" />
-                </mat-form-field>
-                <mat-form-field appearance="outline" class="c-num">
-                  <mat-label>Điểm tối đa</mat-label>
-                  <input matInput type="number" formControlName="maxScore" min="1" />
-                </mat-form-field>
-                <mat-form-field appearance="outline" class="c-desc">
-                  <mat-label>Mô tả</mat-label>
-                  <input matInput formControlName="description" />
-                </mat-form-field>
-                <button
-                  mat-icon-button
-                  type="button"
-                  (click)="removeCriterion(i)"
-                  aria-label="Xoá tiêu chí"
-                >
-                  <mat-icon>delete</mat-icon>
-                </button>
+              <div class="crit-block">
+                <div class="crit-row" [formGroupName]="i">
+                  <mat-form-field appearance="outline" class="c-name">
+                    <mat-label>Tên tiêu chí *</mat-label>
+                    <input matInput formControlName="name" />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline" class="c-num">
+                    <mat-label>Trọng số</mat-label>
+                    <input matInput type="number" formControlName="weight" step="0.05" min="0" />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline" class="c-num">
+                    <mat-label>Điểm tối đa</mat-label>
+                    <input matInput type="number" formControlName="maxScore" min="1" />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline" class="c-desc">
+                    <mat-label>Mô tả</mat-label>
+                    <input matInput formControlName="description" />
+                  </mat-form-field>
+                  <button
+                    mat-icon-button
+                    type="button"
+                    (click)="removeCriterion(i)"
+                    aria-label="Xoá tiêu chí"
+                  >
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                </div>
+                <!--
+                  Mốc điểm nằm NGOÀI [formGroupName] ở trên: component con tự bind [formGroup] cho
+                  đúng hàng, nên lồng thêm một tầng tên nữa sẽ làm Angular tìm control sai đường.
+                -->
+                <app-criterion-levels-editor
+                  [group]="g"
+                  [disabled]="readOnly()"
+                  [aiBusy]="suggestingLevels()"
+                  (aiRequest)="suggestLevels(i)"
+                />
               </div>
             }
           </div>
@@ -459,11 +503,15 @@ function toIso(local: string | null | undefined): string | null {
 
         <div class="actions">
           <button mat-button type="button" (click)="cancel()">Huỷ</button>
+          <!--
+            Khoá luôn khi mốc hỏng: thang méo (thiếu mốc 0, mốc trùng điểm) KHÔNG sinh lỗi nào lúc
+            chấm — nó chỉ lặng lẽ cho điểm sai, nên phải chặn ngay tại chỗ nhập.
+          -->
           <button
             mat-flat-button
             color="primary"
             type="submit"
-            [disabled]="saving() || readOnly()"
+            [disabled]="saving() || readOnly() || hasLevelIssues()"
           >
             @if (saving()) {
               <mat-icon class="spin">progress_activity</mat-icon>
@@ -520,6 +568,18 @@ function toIso(local: string | null | undefined): string | null {
         display: flex;
         justify-content: space-between;
         align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .head-right {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .crit-block {
+        padding: 4px 0 8px;
+        border-bottom: 1px solid var(--mat-sys-outline-variant);
+        margin-bottom: 8px;
       }
       .notice {
         display: flex;
@@ -627,6 +687,8 @@ export class CampaignForm implements OnInit {
   readonly readOnly = signal(false);
   /** Đang gọi AI sinh câu hỏi (F9) — khoá nút để không bắn 2 lần. */
   readonly generating = signal(false);
+  /** Đang gọi AI gợi ý mốc điểm — khoá cả nút chung lẫn nút từng hàng. */
+  readonly suggestingLevels = signal(false);
   /** Số câu muốn AI sinh (1..20); null = để backend tự quyết. */
   readonly aiCount = signal<number | null>(null);
   /** Đang đọc file CSV — khoá nút để không bắn 2 lần. */
@@ -753,7 +815,18 @@ export class CampaignForm implements OnInit {
     });
     this.criteria.clear();
     c.criteria.forEach((cr) =>
-      this.criteria.push(this.critRow(cr.name, cr.weight, cr.maxScore, cr.description ?? '')),
+      this.criteria.push(
+        this.critRow(
+          cr.name,
+          cr.weight,
+          cr.maxScore,
+          cr.description ?? '',
+          // `?? []` chứ không bind thẳng: chiến dịch tạo trước tính năng mốc điểm (hoặc deploy
+          // backend cũ hơn) không có field này, `undefined.sort()` sẽ làm trắng cả trang sửa.
+          cr.levels ?? [],
+          'hr',
+        ),
+      ),
     );
     this.questions.clear();
     c.questions.forEach((q) =>
@@ -773,13 +846,43 @@ export class CampaignForm implements OnInit {
   }
 
   // ── Criteria ───────────────────────────────────────────────────────────────
-  private critRow(name = '', weight = 0.25, maxScore = 10, description = ''): FormGroup {
-    return this.fb.group({
-      name: [name, [Validators.required]],
-      weight: [weight, [Validators.required, Validators.min(0)]],
-      maxScore: [maxScore, [Validators.required, Validators.min(1)]],
-      description: [description],
-    });
+  /**
+   * Một hàng tiêu chí, kèm phần MỐC ĐIỂM.
+   *
+   * Ba control không hiện trên màn nhưng quyết định việc "có gửi `levels` lên server hay không":
+   * - `levels`: mảng mốc, giữ theo thứ tự GIẢM DẦN để khớp cách đọc của editor.
+   * - `levelsOriginal`: ảnh chụp chuẩn hoá lúc nạp. So với nó mới biết HR có đổi gì thật không —
+   *   nếu cứ gửi mảng hiện tại vô điều kiện thì mỗi lần Lưu là **xoá sạch mốc** (mảng khởi tạo
+   *   rỗng ⇒ BE hiểu `[]` = xoá), mà không có lỗi nào để ai nhận ra.
+   * - `originalName`: tên lúc nạp. BE ghép mốc cũ sang tiêu chí mới theo TÊN (vì PUT là
+   *   replace-all sinh id mới), nên đổi tên mà không gửi kèm `levels` là mốc bay mất.
+   */
+  private critRow(
+    name = '',
+    weight = 0.25,
+    maxScore = 10,
+    description = '',
+    levels: CriterionLevelItem[] = [],
+    source: CriterionLevelsSource = 'none',
+  ): FormGroup {
+    return this.fb.group(
+      {
+        name: [name, [Validators.required]],
+        weight: [weight, [Validators.required, Validators.min(0)]],
+        maxScore: [maxScore, [Validators.required, Validators.min(1)]],
+        description: [description],
+        // Hiển thị giảm dần: HR nghĩ theo "thế nào là điểm tối đa" rồi bóc dần xuống.
+        levels: this.fb.array<FormGroup>(
+          [...levels]
+            .sort((a, b) => b.score - a.score)
+            .map((l) => this.fb.group({ score: [l.score], descriptor: [l.descriptor] })),
+        ),
+        levelsOriginal: [canonicalLevels(levels)],
+        levelsSource: [levels.length ? source : 'none'],
+        originalName: [name || null],
+      },
+      { validators: criterionLevelsValidator },
+    );
   }
   addCriterion(): void {
     this.criteria.push(this.critRow());
@@ -787,6 +890,125 @@ export class CampaignForm implements OnInit {
   removeCriterion(i: number): void {
     this.criteria.removeAt(i);
   }
+  // ── Mốc điểm: nhờ AI gợi ý ──────────────────────────────────────────────────
+  /**
+   * Backend đọc bộ tiêu chí **đã lưu trong DB** (giống F9 đọc JD đã lưu), rồi trả mốc về cho HR
+   * xem/sửa — **không ghi gì**. Vì thế tiêu chí vừa gõ mà chưa Lưu sẽ không có trong kết quả:
+   * nói thẳng ra thay vì để HR tưởng AI "bỏ sót" tiêu chí của mình.
+   */
+  canSuggestLevels(): boolean {
+    return (
+      !!this.campaignId() &&
+      !this.readOnly() &&
+      !this.suggestingLevels() &&
+      this.criteria.length > 0
+    );
+  }
+
+  /** `index = null` → áp cho mọi tiêu chí; có số → chỉ áp cho đúng hàng đó. */
+  suggestLevels(index: number | null): void {
+    const id = this.campaignId();
+    if (!id) {
+      this.notify.warn('Hãy tạo (lưu) chiến dịch trước — AI cần bộ tiêu chí đã lưu.');
+      return;
+    }
+    if (this.readOnly()) {
+      this.notify.warn('Chiến dịch đã xuất bản — không sửa được tiêu chí ở đây.');
+      return;
+    }
+    if (this.criteria.length === 0) {
+      this.notify.warn('Hãy thêm ít nhất 1 tiêu chí trước khi nhờ AI gợi ý mốc.');
+      return;
+    }
+
+    const targets =
+      index == null ? this.criteria.controls : [this.criteria.controls[index]].filter(Boolean);
+    // Chỉ cảnh báo về mốc do NGƯỜI chốt (nạp từ chiến dịch đã lưu hoặc vừa sửa tay). Mốc AI gợi ý
+    // lần trước mà chưa ai đụng vào thì ghi đè không mất gì của HR.
+    const overwritten = targets
+      .filter(
+        (g) =>
+          (g.get('levels') as FormArray).length > 0 && g.get('levelsSource')?.value === 'hr',
+      )
+      .map((g) => (g.get('name')?.value as string) || '(chưa đặt tên)');
+
+    const run = () => this.runSuggestLevels(id, index);
+    if (overwritten.length === 0 && !this.form.dirty) {
+      run();
+      return;
+    }
+
+    const data: ConfirmDialogData = {
+      title: 'Nhờ AI gợi ý mốc điểm?',
+      message:
+        'AI đọc bộ tiêu chí đã lưu của chiến dịch rồi viết mốc điểm cho từng tiêu chí. Kết quả chỉ hiện trên biểu mẫu — bấm Lưu mới ghi lại.',
+      bullets: overwritten.length
+        ? [`Mốc hiện có sẽ bị THAY của: ${overwritten.join(', ')}.`]
+        : ['Chưa có mốc nào bị ghi đè.'],
+      warning: this.form.dirty
+        ? 'Biểu mẫu đang có thay đổi CHƯA LƯU. AI đọc bộ tiêu chí đã lưu trên máy chủ, nên tiêu chí bạn vừa thêm/đổi tên sẽ không có trong kết quả.'
+        : undefined,
+      confirmLabel: 'Gợi ý mốc',
+    };
+    this.dialog
+      .open(ConfirmDialog, { data, width: '520px' })
+      .afterClosed()
+      .subscribe((ok) => {
+        if (ok) run();
+      });
+  }
+
+  private runSuggestLevels(id: string, index: number | null): void {
+    this.suggestingLevels.set(true);
+    this.api.suggestCriterionLevels(id).subscribe({
+      next: (res) => {
+        this.suggestingLevels.set(false);
+        const applied = this.applySuggestedLevels(res.criteria ?? [], index);
+        if (applied === 0) {
+          this.notify.warn(
+            'AI không trả về mốc cho tiêu chí nào khớp. Kiểm tra xem tiêu chí đã được lưu chưa.',
+          );
+        } else {
+          this.notify.success(`Đã điền mốc cho ${applied} tiêu chí. Bấm Lưu để ghi lại.`);
+        }
+      },
+      error: (e: HttpErrorResponse) => {
+        this.suggestingLevels.set(false);
+        // Cố ý KHÔNG điền dải mặc định thay thế: mốc bịa ("Mức 3/10") trông y như mốc thật.
+        this.notify.error(extractErrorMessage(e) ?? 'Gợi ý mốc bằng AI thất bại.');
+      },
+    });
+  }
+
+  /**
+   * Ghép kết quả AI vào form theo **TÊN** (không phân biệt hoa/thường) chứ không theo id: PUT là
+   * replace-all mint id mới nên id trong form có thể đã cũ, còn tên chính là khoá BE dùng để ghép
+   * mốc — dùng chung một khoá thì hai bên không lệch nhau được.
+   */
+  private applySuggestedLevels(
+    suggested: { name: string; levels: CriterionLevelItem[] }[],
+    index: number | null,
+  ): number {
+    const byName = new Map(suggested.map((s) => [(s.name ?? '').trim().toLowerCase(), s]));
+    let applied = 0;
+    this.criteria.controls.forEach((g, i) => {
+      if (index != null && i !== index) return;
+      const hit = byName.get(((g.get('name')?.value as string) ?? '').trim().toLowerCase());
+      if (!hit?.levels?.length) return;
+      const arr = g.get('levels') as FormArray<FormGroup>;
+      arr.clear();
+      [...hit.levels]
+        .sort((a, b) => b.score - a.score)
+        .forEach((l) =>
+          arr.push(this.fb.group({ score: [l.score], descriptor: [l.descriptor] })),
+        );
+      g.get('levelsSource')?.setValue('ai');
+      g.updateValueAndValidity();
+      applied++;
+    });
+    return applied;
+  }
+
   totalWeight(): number {
     return this.criteria.controls.reduce((s, g) => s + Number(g.get('weight')?.value || 0), 0);
   }
@@ -1036,13 +1258,50 @@ export class CampaignForm implements OnInit {
   }
 
   // ── Submit ───────────────────────────────────────────────────────────────────
+  /**
+   * `levels` theo hợp đồng BA TRẠNG THÁI — đây là chỗ dễ mất dữ liệu nhất của cả tính năng, và
+   * kiểu mất là **im lặng** (HTTP 200, không lỗi, mốc biến mất ở lần Lưu sau).
+   *
+   * Gửi khi và chỉ khi:
+   * - bộ mốc khác ảnh chụp lúc nạp (HR thêm/xoá/sửa chữ, hoặc vừa nhận gợi ý AI), HOẶC
+   * - **tên tiêu chí đổi** — BE ghép mốc cũ sang bộ tiêu chí mới theo TÊN, nên đổi tên mà không
+   *   gửi kèm mốc là carry-over trượt và mốc bay mất mà không ai biết.
+   *
+   * Không gửi (bỏ hẳn field) khi HR chỉ sửa những thứ khác: BE hiểu "vắng field = không đổi".
+   */
   private buildCriteria(): CriterionItem[] {
-    return this.criteria.controls.map((g) => ({
-      name: g.get('name')!.value,
-      weight: Number(g.get('weight')!.value),
-      maxScore: Number(g.get('maxScore')!.value),
-      description: g.get('description')!.value || null,
-    }));
+    return this.criteria.controls.map((g) => {
+      const name = g.get('name')!.value as string;
+      const originalName = g.get('originalName')!.value as string | null;
+      const levels = readLevels(g);
+      const changed = canonicalLevels(levels) !== (g.get('levelsOriginal')!.value as string);
+      const renamed = originalName != null && originalName !== name;
+      return {
+        name,
+        weight: Number(g.get('weight')!.value),
+        maxScore: Number(g.get('maxScore')!.value),
+        description: g.get('description')!.value || null,
+        ...(changed || renamed ? { levels } : {}),
+      };
+    });
+  }
+
+  /** Tên các tiêu chí đang có mốc không hợp lệ, kèm lý do — để nói thẳng sai ở đâu. */
+  criteriaLevelIssues(): { name: string; messages: string[] }[] {
+    return this.criteria.controls
+      .map((g) => ({
+        name: (g.get('name')?.value as string) || '(chưa đặt tên)',
+        messages: levelErrorMessages(
+          criterionLevelsValidator(g),
+          Number(g.get('maxScore')?.value ?? 10),
+        ),
+      }))
+      .filter((x) => x.messages.length > 0);
+  }
+
+  /** Có tiêu chí nào mốc hỏng không — khoá nút Lưu, vì thang méo không sinh lỗi lúc chạy. */
+  hasLevelIssues(): boolean {
+    return this.criteriaLevelIssues().length > 0;
   }
   private buildQuestions(): QuestionItem[] {
     return this.questions.controls.map((g) => {
@@ -1091,6 +1350,18 @@ export class CampaignForm implements OnInit {
     }
     if (this.criteria.length > 0 && !this.weightOk()) {
       this.notify.warn(`Tổng trọng số tiêu chí phải ≈ 1 (hiện tại ${this.totalWeight().toFixed(2)}).`);
+      return;
+    }
+    // Nêu đích danh tiêu chí nào hỏng: mốc điểm nằm trong panel có thể đang đóng, câu "điền đủ
+    // trường bắt buộc" chung chung sẽ khiến HR đi tìm ở ô khác.
+    const levelIssues = this.criteriaLevelIssues();
+    if (levelIssues.length > 0) {
+      this.form.markAllAsTouched();
+      this.notify.warn(
+        `Mốc điểm chưa hợp lệ: ${levelIssues
+          .map((x) => `${x.name} (${x.messages[0]})`)
+          .join(' · ')}`,
+      );
       return;
     }
 
