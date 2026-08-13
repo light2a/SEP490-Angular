@@ -8,6 +8,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { AdminRubricApi } from '../../../core/api/admin-rubric.api';
 import { extractErrorMessage } from '../../../core/api/http-utils';
@@ -16,7 +17,8 @@ import {
   AdminRubricPreviewRun,
   JobCategory,
   RubricLanguage,
-  SAMPLE_QUESTIONS,
+  RunAdminRubricPreviewRequest,
+  SampleQuestion,
 } from '../../../core/models';
 import { RubricScaleStrip, ScalePoint } from '../../../shared/rubric/rubric-scale-strip';
 
@@ -56,6 +58,7 @@ const BAND_LABEL: Record<string, string> = {
     MatIconModule,
     MatInputModule,
     MatProgressBarModule,
+    MatSelectModule,
     MatTooltipModule,
     RubricScaleStrip,
   ],
@@ -80,29 +83,41 @@ const BAND_LABEL: Record<string, string> = {
         </span>
       </div>
 
-      <div class="samples">
-        <span class="lbl">Câu gợi ý:</span>
-        @for (q of sampleQuestions(); track q; let i = $index) {
-          <button
-            mat-stroked-button
-            type="button"
+      @if (sampleQuestions().length > 0) {
+        <mat-form-field appearance="outline" class="full">
+          <mat-label>Câu hỏi gợi ý</mat-label>
+          <mat-select
+            [value]="selectedSampleId()"
+            (valueChange)="pickSample($event)"
             [disabled]="running()"
-            (click)="useSample(q)"
-            [matTooltip]="q"
-            [attr.data-testid]="'sample-' + i"
+            data-testid="sample-select"
           >
-            Câu {{ i + 1 }}
-          </button>
-        }
-      </div>
+            @for (q of sampleQuestions(); track q.id) {
+              <mat-option [value]="q.id">{{ q.text }}</mat-option>
+            }
+          </mat-select>
+          <mat-hint>
+            Câu gợi ý cố ý không lấy từ buổi luyện thật — câu thật sinh từ CV/JD của người dùng nên
+            chứa tên công ty, dự án của họ.
+          </mat-hint>
+        </mat-form-field>
+      }
 
+      <!--
+        Chọn câu gợi ý và tự gõ LOẠI TRỪ nhau **về cấu trúc**: chọn thì xoá ô gõ, gõ thì bỏ chọn.
+        Để cả hai cùng có giá trị là đẩy việc chọn hộ sang backend, mà lựa chọn đó quyết định bài
+        mẫu được viết cho câu nào.
+      -->
       <mat-form-field appearance="outline" class="full">
-        <mat-label>Câu hỏi để chấm thử</mat-label>
-        <textarea matInput rows="2" [(ngModel)]="question" [disabled]="running()"></textarea>
-        <mat-hint>
-          Câu gợi ý là câu chung chung, cố ý không lấy từ buổi luyện thật — câu thật sinh từ CV/JD
-          của người dùng nên chứa tên công ty, dự án của họ.
-        </mat-hint>
+        <mat-label>Hoặc tự gõ câu hỏi</mat-label>
+        <textarea
+          matInput
+          rows="2"
+          [ngModel]="question()"
+          (ngModelChange)="typeQuestion($event)"
+          [disabled]="running()"
+          data-testid="own-question"
+        ></textarea>
       </mat-form-field>
 
       <div class="run-row">
@@ -433,8 +448,17 @@ export class AdminRubricPreview {
    * thước đo khác với thứ admin đang nhìn trên màn.
    */
   readonly dirty = input(false);
+  /**
+   * Câu hỏi gợi ý do BACKEND cấp (`SystemRubricResponse.sampleQuestions`), đúng nghề + ngôn ngữ
+   * đang xem. KHÔNG có bản dự phòng phía client: một bản sao thứ hai nghĩa là sửa câu ở backend mà
+   * màn vẫn hiện câu cũ, và không gì báo. Rỗng ⇒ chỉ còn đường tự gõ, vẫn dùng được.
+   */
+  readonly sampleQuestions = input<SampleQuestion[]>([]);
 
-  question = '';
+
+  /** Câu mẫu đang chọn; `null` = admin đang dùng ô tự gõ. Hai thứ loại trừ nhau. */
+  readonly selectedSampleId = signal<string | null>(null);
+  readonly question = signal('');
 
   readonly history = signal<AdminRubricPreviewRun[]>([]);
   readonly current = signal<AdminRubricPreviewRun | null>(null);
@@ -451,7 +475,8 @@ export class AdminRubricPreview {
       this.current.set(null);
       this.error.set(null);
       this.quotaExhausted.set(false);
-      this.question = '';
+      this.selectedSampleId.set(null);
+      this.question.set('');
       this.loadHistory(job, lang);
     });
   }
@@ -467,12 +492,27 @@ export class AdminRubricPreview {
     });
   }
 
-  sampleQuestions(): readonly string[] {
-    return SAMPLE_QUESTIONS[this.jobCategory()]?.[this.language()] ?? [];
+  /** Chọn câu mẫu ⇒ bỏ ô tự gõ, để payload chỉ có thể mang MỘT trong hai. */
+  pickSample(id: string | null): void {
+    this.selectedSampleId.set(id || null);
+    if (id) this.question.set('');
   }
 
-  useSample(q: string): void {
-    this.question = q;
+  /** Gõ câu riêng ⇒ bỏ câu mẫu đang chọn (chiều ngược lại của cùng một luật). */
+  typeQuestion(text: string): void {
+    this.question.set(text);
+    if (text.trim()) this.selectedSampleId.set(null);
+  }
+
+  /**
+   * Thân request — **đúng một** trong hai trường. Ưu tiên câu mẫu vì nó chỉ được đặt bởi thao tác
+   * chọn tường minh, còn ô gõ có thể còn sót chữ từ lần trước.
+   */
+  buildBody(): RunAdminRubricPreviewRequest | null {
+    const id = this.selectedSampleId();
+    if (id) return { sampleQuestionId: id };
+    const q = this.question().trim();
+    return q ? { question: q } : null;
   }
 
   /**
@@ -493,12 +533,12 @@ export class AdminRubricPreview {
   }
 
   canRun(): boolean {
-    return !this.running() && !!this.question.trim() && !this.dirty() && !this.outOfQuota();
+    return !this.running() && !!this.buildBody() && !this.dirty() && !this.outOfQuota();
   }
 
   blockedReason(): string {
     if (this.dirty()) return 'Lưu bộ chuẩn trước khi chấm thử — máy chủ chấm trên bản đã lưu.';
-    if (!this.question.trim()) return 'Nhập hoặc chọn một câu hỏi để chấm thử.';
+    if (!this.buildBody()) return 'Chọn câu gợi ý hoặc tự gõ một câu hỏi để chấm thử.';
     if (this.outOfQuota())
       return 'Hết lượt cho phiên bản này — sửa mốc rồi lưu thì có lượt mới.';
     return '';
@@ -513,8 +553,9 @@ export class AdminRubricPreview {
     this.running.set(true);
     this.error.set(null);
 
+    const body = this.buildBody()!;
     this.api
-      .runPreview(this.jobCategory(), this.language(), { question: this.question.trim() })
+      .runPreview(this.jobCategory(), this.language(), body)
       .subscribe({
         next: (run) => {
           this.running.set(false);

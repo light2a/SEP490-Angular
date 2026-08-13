@@ -2,9 +2,16 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
+import { MatSelect } from '@angular/material/select';
 import { environment } from '../../../../environments/environment';
 import { NotifyService } from '../../../core/notify.service';
-import { AdminRubricPreviewRun, JobCategory, RubricLanguage } from '../../../core/models';
+import {
+  AdminRubricPreviewRun,
+  JobCategory,
+  RubricLanguage,
+  SampleQuestion,
+} from '../../../core/models';
 import { AdminRubricPreview, DEFAULT_FREE_RUNS } from './admin-rubric-preview';
 
 const BASE = `${environment.apiBase}/interview/admin/rubrics`;
@@ -65,6 +72,7 @@ function run(p: Partial<AdminRubricPreviewRun> = {}): AdminRubricPreviewRun {
     [jobCategory]="job()"
     [language]="lang()"
     [rubricVersion]="version()"
+    [sampleQuestions]="samples()"
     [dirty]="dirty()"
   />`,
 })
@@ -73,7 +81,19 @@ class Host {
   readonly lang = signal<RubricLanguage>('vi');
   readonly version = signal<number | null>(2);
   readonly dirty = signal(false);
+  readonly samples = signal<SampleQuestion[]>(VI_SAMPLES);
 }
+
+const VI_SAMPLES: SampleQuestion[] = [
+  { id: 'sq-vi-1', text: 'Bạn thiết kế API cho chức năng đặt hàng như thế nào?' },
+  { id: 'sq-vi-2', text: 'Truy vấn chậm dần theo thời gian, bạn tìm nguyên nhân ra sao?' },
+  { id: 'sq-vi-3', text: 'Hai request cùng sửa một bản ghi thì xử lý thế nào?' },
+];
+
+const EN_SAMPLES: SampleQuestion[] = [
+  { id: 'sq-en-1', text: 'How would you design an API for placing an order?' },
+  { id: 'sq-en-2', text: 'A query gets slower over time. What do you check first?' },
+];
 
 /**
  * CHẤM THỬ BỘ CHUẨN của admin.
@@ -88,7 +108,7 @@ describe('AdminRubricPreview — chấm thử bộ chuẩn', () => {
   let httpMock: HttpTestingController;
   let notify: Record<string, ReturnType<typeof vi.fn>>;
 
-  function setup(history: AdminRubricPreviewRun[] = []) {
+  function setup(history: AdminRubricPreviewRun[] = [], samples: SampleQuestion[] = VI_SAMPLES) {
     notify = { success: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn() };
     TestBed.configureTestingModule({
       providers: [
@@ -99,6 +119,7 @@ describe('AdminRubricPreview — chấm thử bộ chuẩn', () => {
     });
     httpMock = TestBed.inject(HttpTestingController);
     const fixture = TestBed.createComponent(Host);
+    fixture.componentInstance.samples.set(samples);
     fixture.detectChanges();
     httpMock
       .expectOne((r) => r.url === `${BASE}/BE/preview` && r.method === 'GET')
@@ -120,7 +141,7 @@ describe('AdminRubricPreview — chấm thử bộ chuẩn', () => {
   it('429 → nói rõ hết lượt của phiên bản này, KHÔNG phải lỗi chung', () => {
     const fixture = setup();
     const p = panel(fixture);
-    p.question = 'Câu hỏi thử';
+    p.typeQuestion('Câu hỏi thử');
 
     p.run();
     httpMock
@@ -152,7 +173,7 @@ describe('AdminRubricPreview — chấm thử bộ chuẩn', () => {
   it('đang sửa dở → chặn chạy và nói lý do', () => {
     const fixture = setup();
     const p = panel(fixture);
-    p.question = 'Câu hỏi thử';
+    p.typeQuestion('Câu hỏi thử');
     fixture.componentInstance.dirty.set(true);
     fixture.detectChanges();
 
@@ -185,13 +206,14 @@ describe('AdminRubricPreview — chấm thử bộ chuẩn', () => {
     expect(pts.filter((x) => x.kind === 'actual').map((x) => x.value)).toEqual([3]);
   });
 
-  /** Câu gợi ý phải theo đúng (nghề, ngôn ngữ) đang xem, không phải một danh sách cố định. */
-  it('đổi ô → nạp lại lịch sử của ô mới và đổi bộ câu gợi ý', () => {
+  /** Câu gợi ý theo đúng (nghề, ngôn ngữ) đang xem — do cha nạp lại từ backend, không phải bảng cố định. */
+  it('đổi ô → nạp lại lịch sử của ô mới, đổi bộ câu gợi ý và bỏ lựa chọn cũ', () => {
     const fixture = setup([run()]);
     const p = panel(fixture);
-    const viFirst = p.sampleQuestions()[0];
+    p.pickSample('sq-vi-2');
 
     fixture.componentInstance.lang.set('en');
+    fixture.componentInstance.samples.set(EN_SAMPLES);
     fixture.detectChanges();
     httpMock
       .expectOne(
@@ -202,24 +224,96 @@ describe('AdminRubricPreview — chấm thử bộ chuẩn', () => {
       )
       .flush([]);
 
-    expect(p.sampleQuestions()[0]).not.toBe(viFirst);
-    // Kết quả của ô cũ không được nằm lại trên màn ô mới.
+    expect(p.sampleQuestions().map((q) => q.id)).toEqual(['sq-en-1', 'sq-en-2']);
+    // Câu mẫu của ngôn ngữ cũ KHÔNG được gửi kèm sang ô mới (id đó thuộc danh sách khác ⇒ 400).
+    expect(p.selectedSampleId()).toBeNull();
+    // Kết quả của ô cũ cũng không nằm lại trên màn ô mới.
     expect(p.current()).toBeNull();
   });
 
-  /** Hợp đồng không có đường liệt kê câu mẫu ⇒ nút gợi ý chỉ điền chữ, gửi qua `question`. */
-  it('chọn câu gợi ý → điền vào ô và gửi kèm `question`', () => {
+  /**
+   * Câu mẫu đến TỪ BACKEND — dropdown phải hiện đúng những gì API trả, không hơn không kém.
+   *
+   * ⚠ `mat-option` render trong overlay ở `document.body`, KHÔNG nằm trong `fixture.nativeElement`
+   * — đọc `textContent` của fixture sẽ luôn trượt và cho một phép đo vô nghĩa.
+   */
+  it('GET trả 3 câu → dropdown hiện đúng 3 câu đó', () => {
     const fixture = setup();
     const p = panel(fixture);
-    const q = p.sampleQuestions()[1];
+    expect(p.sampleQuestions()).toEqual(VI_SAMPLES);
 
-    p.useSample(q);
-    expect(p.question).toBe(q);
+    fixture.debugElement.query(By.directive(MatSelect)).componentInstance.open();
+    fixture.detectChanges();
+
+    const options = Array.from(document.querySelectorAll('mat-option'));
+    expect(options.length).toBe(3);
+    expect(options.map((o) => o.textContent?.trim())).toEqual(VI_SAMPLES.map((q) => q.text));
+  });
+
+  /**
+   * 🔴 Gửi kèm cả hai trường là đẩy việc chọn hộ sang backend, mà lựa chọn đó quyết định bài mẫu
+   * được viết cho câu nào — hai lượt chấm thử "cùng cấu hình" có thể chấm hai câu khác nhau.
+   */
+  it('chọn câu gợi ý → payload có sampleQuestionId và KHÔNG có question', () => {
+    const fixture = setup();
+    const p = panel(fixture);
+
+    p.pickSample('sq-vi-2');
+    expect(p.buildBody()).toEqual({ sampleQuestionId: 'sq-vi-2' });
 
     p.run();
     const req = httpMock.expectOne((r) => r.url === `${BASE}/BE/preview` && r.method === 'POST');
-    expect(req.request.body).toEqual({ question: q });
+    expect(req.request.body).toEqual({ sampleQuestionId: 'sq-vi-2' });
+    expect(req.request.body.question).toBeUndefined();
     req.flush(run());
     httpMock.expectOne((r) => r.url === `${BASE}/BE/preview` && r.method === 'GET').flush([run()]);
+  });
+
+  it('tự gõ → payload có question và KHÔNG có sampleQuestionId', () => {
+    const fixture = setup();
+    const p = panel(fixture);
+
+    p.typeQuestion('  Câu tôi tự nghĩ  ');
+    expect(p.buildBody()).toEqual({ question: 'Câu tôi tự nghĩ' });
+
+    p.run();
+    const req = httpMock.expectOne((r) => r.url === `${BASE}/BE/preview` && r.method === 'POST');
+    expect(req.request.body).toEqual({ question: 'Câu tôi tự nghĩ' });
+    expect(req.request.body.sampleQuestionId).toBeUndefined();
+    req.flush(run());
+    httpMock.expectOne((r) => r.url === `${BASE}/BE/preview` && r.method === 'GET').flush([run()]);
+  });
+
+  /** Loại trừ nhau về CẤU TRÚC: chọn thì xoá ô gõ, gõ thì bỏ chọn — cả hai chiều. */
+  it('chọn rồi gõ, và gõ rồi chọn → luôn chỉ còn MỘT trường', () => {
+    const fixture = setup();
+    const p = panel(fixture);
+
+    p.pickSample('sq-vi-1');
+    p.typeQuestion('Tôi đổi ý');
+    expect(p.selectedSampleId()).toBeNull();
+    expect(p.buildBody()).toEqual({ question: 'Tôi đổi ý' });
+
+    p.pickSample('sq-vi-3');
+    expect(p.question()).toBe('');
+    expect(p.buildBody()).toEqual({ sampleQuestionId: 'sq-vi-3' });
+  });
+
+  /**
+   * Backend cũ (hoặc nghề chưa có câu mẫu) trả rỗng ⇒ **KHÔNG** có bản dự phòng phía client: bản
+   * sao thứ hai chính là thứ vừa gỡ đi. Admin vẫn tự gõ được nên không ai bị chặn.
+   */
+  it('API không trả câu mẫu → không có dropdown, KHÔNG có câu dự phòng nào, vẫn tự gõ được', () => {
+    const fixture = setup([], []);
+    const p = panel(fixture);
+
+    expect(p.sampleQuestions()).toEqual([]);
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('[data-testid="sample-select"]'),
+    ).toBeNull();
+
+    p.typeQuestion('Tự gõ vẫn chạy');
+    expect(p.canRun()).toBe(true);
+    expect(p.buildBody()).toEqual({ question: 'Tự gõ vẫn chạy' });
   });
 });

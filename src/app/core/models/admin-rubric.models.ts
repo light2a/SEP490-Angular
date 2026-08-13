@@ -58,6 +58,24 @@ export interface SystemRubricResponse {
    */
   version: number;
   criteria: SystemRubricCriterion[];
+  /**
+   * 3 câu hỏi gợi ý để chấm thử, đúng nghề + ngôn ngữ đang xem. **Backend là nguồn DUY NHẤT** —
+   * giữ một bản sao trong client thì sửa câu ở backend mà màn vẫn hiện câu cũ, và không gì báo.
+   *
+   * Rỗng / vắng (deploy backend cũ hơn) là trạng thái hợp lệ: admin vẫn tự gõ câu được.
+   */
+  sampleQuestions?: SampleQuestion[];
+}
+
+/**
+ * 1 câu hỏi mẫu. `id` là thứ gửi lên (`sampleQuestionId`), `text` chỉ để hiển thị.
+ *
+ * CỐ Ý không rút từ `practice_questions` thật: câu B2C sinh từ CV/JD của người dùng nên chứa tên
+ * công ty / dự án của họ — hiện cho admin là rò rỉ dữ liệu.
+ */
+export interface SampleQuestion {
+  id: string;
+  text: string;
 }
 
 /**
@@ -158,59 +176,14 @@ export interface AdminRubricPreviewSample {
 }
 
 /**
- * POST preview — chọn 1 trong 3 câu mẫu cố định (`sampleQuestionId`) HOẶC tự gõ (`question`).
+ * POST preview — chọn 1 câu mẫu (`sampleQuestionId`, lấy từ `SystemRubricResponse.sampleQuestions`)
+ * **HOẶC** tự gõ (`question`).
  *
- * ⚠ Hợp đồng KHÔNG có endpoint nào liệt kê câu mẫu, nên giao diện không biết `sampleQuestionId`
- * nào là hợp lệ — bịa id ra là chắc chắn 400. Vì thế các nút chọn nhanh ở màn admin chỉ **điền
- * sẵn chữ** rồi gửi qua `question` (xem `SAMPLE_QUESTIONS`). Trường `sampleQuestionId` giữ trong
- * kiểu để khi backend bổ sung đường liệt kê thì client dùng được ngay, không phải đổi hợp đồng.
+ * ⚠ **Đúng một trong hai**, không bao giờ cả hai: gửi kèm nhau là để backend tự chọn hộ, mà lựa
+ * chọn đó quyết định bài mẫu được viết cho câu nào. Id lạ → **400 kèm danh sách id hợp lệ**, không
+ * im lặng rơi về câu mặc định.
  */
 export interface RunAdminRubricPreviewRequest {
   question?: string;
   sampleQuestionId?: string;
 }
-
-/**
- * Câu hỏi gợi ý cho chấm thử, theo (nghề, ngôn ngữ).
- *
- * CỐ Ý không rút từ `practice_questions` thật: câu B2C sinh từ CV/JD của người dùng nên chứa tên
- * công ty / dự án của họ — hiện cho admin là rò rỉ dữ liệu.
- */
-export const SAMPLE_QUESTIONS: Record<JobCategory, Record<RubricLanguage, readonly string[]>> = {
-  BA: {
-    vi: [
-      'Bạn làm thế nào để lấy yêu cầu từ một bên liên quan không rõ mình muốn gì?',
-      'Kể một lần bạn phát hiện hai yêu cầu mâu thuẫn nhau. Bạn xử lý ra sao?',
-      'Bạn mô tả một quy trình nghiệp vụ cho đội phát triển bằng cách nào?',
-    ],
-    en: [
-      'How do you elicit requirements from a stakeholder who is unsure what they want?',
-      'Tell me about a time you found two conflicting requirements. How did you resolve it?',
-      'How do you communicate a business process to a development team?',
-    ],
-  },
-  BE: {
-    vi: [
-      'Bạn thiết kế API cho chức năng đặt hàng như thế nào? Nêu các đánh đổi.',
-      'Khi một truy vấn chậm dần theo thời gian, bạn tìm nguyên nhân theo thứ tự nào?',
-      'Giải thích cách bạn xử lý khi hai request cùng sửa một bản ghi.',
-    ],
-    en: [
-      'How would you design an API for placing an order? Describe the trade-offs.',
-      'A query gets slower over time. In what order do you investigate?',
-      'Explain how you handle two requests updating the same record.',
-    ],
-  },
-  FE: {
-    vi: [
-      'Bạn xử lý trạng thái tải và lỗi của một màn danh sách như thế nào?',
-      'Trang của bạn bị chậm khi render danh sách dài. Bạn làm gì trước tiên?',
-      'Bạn bảo đảm một thành phần dùng được với bàn phím và trình đọc màn hình ra sao?',
-    ],
-    en: [
-      'How do you handle loading and error states on a list screen?',
-      'Your page slows down when rendering a long list. What do you do first?',
-      'How do you make a component usable with a keyboard and a screen reader?',
-    ],
-  },
-};

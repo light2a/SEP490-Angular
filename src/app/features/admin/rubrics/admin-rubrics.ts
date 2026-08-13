@@ -280,6 +280,7 @@ export function looksUntranslated(descriptor: string, language: RubricLanguage):
         [jobCategory]="category()"
         [language]="language()"
         [rubricVersion]="r.version"
+        [sampleQuestions]="r.sampleQuestions ?? []"
         [dirty]="form.dirty"
       />
     }
