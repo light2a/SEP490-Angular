@@ -198,6 +198,19 @@
       <h2>Kết quả</h2>
       <div class="overall">{{ r.overallScore | number: '1.0-1' }}<span>/100</span></div>
       <p>{{ r.answeredCount }}/{{ r.totalQuestions }} câu đã trả lời</p>
+
+      <!--
+        Điểm chỉ có nghĩa khi biết nó được đo bằng thước nào. Người dùng sửa rubric riêng cho lệch,
+        điểm tụt, mà không một chữ nào nói rằng họ đang bị chấm bằng thước do chính mình đặt ⇒ họ
+        kết luận hệ thống chấm sai. `rubricSource` null = buổi cũ chưa có con dấu → không hiện gì
+        còn hơn hiện một câu đoán.
+      -->
+      @if (rulerLabel(r); as ruler) {
+        <p class="ruler-note" data-testid="ruler-note">
+          <mat-icon>straighten</mat-icon>
+          {{ ruler }}
+        </p>
+      }
       @if (r.overallComment) {
         <p class="comment">{{ r.overallComment }}</p>
       }

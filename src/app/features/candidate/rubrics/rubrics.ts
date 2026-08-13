@@ -10,7 +10,20 @@ import { MatSelectModule } from '@angular/material/select';
 import { RubricApi } from '../../../core/api/rubric.api';
 import { extractErrorMessage } from '../../../core/api/http-utils';
 import { NotifyService } from '../../../core/notify.service';
-import { JOB_CATEGORIES, JobCategory, RubricResponse } from '../../../core/models';
+import {
+  CriterionLevelItem,
+  JOB_CATEGORIES,
+  JobCategory,
+  RubricCriterionItem,
+  RubricResponse,
+} from '../../../core/models';
+import {
+  CriterionLevelsEditor,
+  canonicalLevels,
+  criterionLevelsValidator,
+  levelErrorMessages,
+  readLevels,
+} from '../../../shared/rubric/criterion-levels-editor';
 import { JobCategoryPipe } from '../../../shared/pipes';
 import { Spinner } from '../../../shared/ui/spinner';
 
@@ -24,6 +37,7 @@ import { Spinner } from '../../../shared/ui/spinner';
     MatSelectModule,
     MatButtonModule,
     MatIconModule,
+    CriterionLevelsEditor,
     JobCategoryPipe,
     Spinner,
   ],
@@ -57,7 +71,7 @@ export class Rubrics {
       next: (r) => {
         this.rubric.set(r);
         this.criteria.clear();
-        r.criteria.forEach((c) => this.criteria.push(this.row(c.name, c.description, c.weight, c.maxScore)));
+        r.criteria.forEach((c) => this.criteria.push(this.rowFrom(c)));
         this.loading.set(false);
       },
       error: () => this.loading.set(false),
@@ -69,13 +83,41 @@ export class Rubrics {
     this.load();
   }
 
-  private row(name = '', description: string | null = '', weight = 0.1, maxScore = 10): FormGroup {
-    return this.fb.group({
-      name: [name, [Validators.required]],
-      description: [description ?? ''],
-      weight: [weight, [Validators.required, Validators.min(0.0001)]],
-      maxScore: [maxScore, [Validators.required, Validators.min(1)]],
-    });
+  /**
+   * Nạp một tiêu chí **kèm mốc**.
+   *
+   * Khi đang xem bộ mặc định (`isCustom=false`), mốc do quản trị viên soạn đi theo ⇒ bấm sửa là đã
+   * có sẵn mốc để chỉnh. Thiếu vế này thì *dùng mặc định được thang có mô tả, tự tuỳ chỉnh lại bị
+   * thang rỗng nghĩa* — tự tuỳ chỉnh làm chất lượng chấm TỆ ĐI mà không ai biết.
+   */
+  private rowFrom(c: RubricCriterionItem): FormGroup {
+    return this.row(c.name, c.description, c.weight, c.maxScore, c.levels ?? []);
+  }
+
+  private row(
+    name = '',
+    description: string | null = '',
+    weight = 0.1,
+    maxScore = 10,
+    levels: CriterionLevelItem[] = [],
+  ): FormGroup {
+    return this.fb.group(
+      {
+        name: [name, [Validators.required]],
+        description: [description ?? ''],
+        weight: [weight, [Validators.required, Validators.min(0.0001)]],
+        maxScore: [maxScore, [Validators.required, Validators.min(1)]],
+        // Giảm dần để khớp cách đọc của editor (nghĩ từ "thế nào là điểm tối đa" rồi bóc xuống).
+        levels: this.fb.array<FormGroup>(
+          [...levels]
+            .sort((a, b) => b.score - a.score)
+            .map((l) => this.fb.group({ score: [l.score], descriptor: [l.descriptor] })),
+        ),
+        levelsOriginal: [canonicalLevels(levels)],
+        levelsSource: [levels.length ? 'hr' : 'none'],
+      },
+      { validators: criterionLevelsValidator },
+    );
   }
 
   addRow(): void {
@@ -85,12 +127,53 @@ export class Rubrics {
     this.criteria.removeAt(i);
   }
 
+  levelsOf(i: number): CriterionLevelItem[] {
+    const g = this.criteria.at(i);
+    return g ? readLevels(g) : [];
+  }
+
+  /**
+   * Tiêu chí tự thêm chưa có mốc ⇒ rơi về dải mặc định. Đó là trạng thái **hợp lệ**, nhưng phải
+   * hiện ra để người dùng biết mình đang đánh đổi cái gì.
+   */
+  hasNoLevels(i: number): boolean {
+    return this.levelsOf(i).length === 0;
+  }
+
+  noLevelsCount(): number {
+    return this.criteria.controls.filter((_, i) => this.hasNoLevels(i)).length;
+  }
+
   totalWeight(): number {
     return this.criteria.controls.reduce((sum, g) => sum + Number(g.get('weight')?.value || 0), 0);
   }
 
+  /** Lỗi mốc theo từng hàng — nói rõ hàng nào sai thay vì chỉ chặn nút Lưu. */
+  levelIssues(): string[] {
+    return this.criteria.controls
+      .map((g) => {
+        const msgs = levelErrorMessages(
+          criterionLevelsValidator(g),
+          Number(g.get('maxScore')?.value ?? 10),
+        );
+        return msgs.length ? `${g.get('name')?.value || '(chưa đặt tên)'}: ${msgs.join(' ')}` : '';
+      })
+      .filter(Boolean);
+  }
+
   save(): void {
-    if (this.form.invalid || this.criteria.length === 0) {
+    if (this.criteria.length === 0) {
+      this.form.markAllAsTouched();
+      this.notify.warn('Cần ít nhất 1 tiêu chí hợp lệ.');
+      return;
+    }
+    // Kiểm mốc TRƯỚC: `form.invalid` gộp cả lỗi mốc lẫn lỗi tên/trọng số vào một câu chung chung.
+    const issues = this.levelIssues();
+    if (issues.length > 0) {
+      this.notify.warn(issues[0]);
+      return;
+    }
+    if (this.form.invalid) {
       this.form.markAllAsTouched();
       this.notify.warn('Cần ít nhất 1 tiêu chí hợp lệ.');
       return;
@@ -101,11 +184,12 @@ export class Rubrics {
       return;
     }
     this.saving.set(true);
-    const criteria = this.criteria.controls.map((g) => ({
+    const criteria = this.criteria.controls.map((g, i) => ({
       name: g.get('name')!.value,
       description: g.get('description')!.value || null,
       weight: Number(g.get('weight')!.value),
       maxScore: Number(g.get('maxScore')!.value),
+      levels: this.levelsOf(i),
     }));
     this.api.upsert(this.category(), { criteria }).subscribe({
       next: (r) => {

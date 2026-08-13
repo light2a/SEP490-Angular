@@ -24,29 +24,52 @@
       }
     </div>
 
+    <!--
+      Mốc điểm là thứ nói cho AI biết "6 điểm nghĩa là gì". Tiêu chí không có mốc vẫn chấm được
+      nhưng bộ chấm rơi về dải 0–maxScore không mô tả — nên phải hiện ra, không giấu.
+    -->
+    @if (noLevelsCount() > 0) {
+      <p class="no-levels-note" data-testid="no-levels-note">
+        <mat-icon>info</mat-icon>
+        <span>
+          <strong>{{ noLevelsCount() }}</strong> tiêu chí chưa có mốc điểm. Những tiêu chí đó sẽ
+          được chấm theo dải mặc định — AI không có mô tả nào để phân biệt 3 với 6.
+        </span>
+      </p>
+    }
+
     <form [formGroup]="form">
       <div formArrayName="criteria">
         @for (row of criteria.controls; track $index; let i = $index) {
-          <div class="row" [formGroupName]="i">
-            <mat-form-field appearance="outline" class="f-name">
-              <mat-label>Tên tiêu chí</mat-label>
-              <input matInput formControlName="name" />
-            </mat-form-field>
-            <mat-form-field appearance="outline" class="f-desc">
-              <mat-label>Mô tả</mat-label>
-              <input matInput formControlName="description" />
-            </mat-form-field>
-            <mat-form-field appearance="outline" class="f-num">
-              <mat-label>Trọng số</mat-label>
-              <input matInput type="number" step="0.05" formControlName="weight" />
-            </mat-form-field>
-            <mat-form-field appearance="outline" class="f-num">
-              <mat-label>Điểm tối đa</mat-label>
-              <input matInput type="number" formControlName="maxScore" />
-            </mat-form-field>
-            <button mat-icon-button color="warn" type="button" (click)="removeRow(i)">
-              <mat-icon>delete</mat-icon>
-            </button>
+          <div class="crit-block">
+            <div class="row" [formGroupName]="i">
+              <mat-form-field appearance="outline" class="f-name">
+                <mat-label>Tên tiêu chí</mat-label>
+                <input matInput formControlName="name" />
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="f-desc">
+                <mat-label>Mô tả</mat-label>
+                <input matInput formControlName="description" />
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="f-num">
+                <mat-label>Trọng số</mat-label>
+                <input matInput type="number" step="0.05" formControlName="weight" />
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="f-num">
+                <mat-label>Điểm tối đa</mat-label>
+                <input matInput type="number" formControlName="maxScore" />
+              </mat-form-field>
+              <button mat-icon-button color="warn" type="button" (click)="removeRow(i)">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </div>
+
+            <!--
+              Mốc điểm nằm NGOÀI [formGroupName] ở trên: component con tự bind [formGroup] cho đúng
+              hàng nên lồng thêm một tầng tên nữa sẽ làm Angular tìm control sai đường.
+              Ẩn nút AI: rubric riêng không có đường gọi AI gợi ý mốc.
+            -->
+            <app-criterion-levels-editor [group]="row" [showAi]="false" />
           </div>
         }
       </div>
@@ -61,7 +84,9 @@
       @if (rubric()?.isCustom) {
         <button mat-button color="warn" (click)="resetToSeed()">Về mặc định</button>
       }
-      <button mat-flat-button color="primary" (click)="save()" [disabled]="saving()">Lưu rubric</button>
+      <button mat-flat-button color="primary" (click)="save()" [disabled]="saving()">
+        Lưu rubric
+      </button>
     </div>
   </mat-card>
 }
