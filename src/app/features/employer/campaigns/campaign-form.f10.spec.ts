@@ -21,6 +21,7 @@ describe('CampaignForm — F10 trộn câu hỏi AI + HR', () => {
     updateCampaign: ReturnType<typeof vi.fn>;
     updateQuestions: ReturnType<typeof vi.fn>;
     createCampaign: ReturnType<typeof vi.fn>;
+    getRubricPreviewRuns: ReturnType<typeof vi.fn>;
   };
 
   const campaign = {
@@ -56,6 +57,8 @@ describe('CampaignForm — F10 trộn câu hỏi AI + HR', () => {
       updateCampaign: vi.fn().mockReturnValue(of(campaign)),
       updateQuestions: vi.fn().mockReturnValue(of(campaign)),
       createCampaign: vi.fn().mockReturnValue(of(campaign)),
+      // Biểu mẫu nay nhúng panel chấm thử — nó đọc lịch sử ngay lúc mở, nên mock phải có.
+      getRubricPreviewRuns: vi.fn().mockReturnValue(of([])),
     };
 
     TestBed.configureTestingModule({

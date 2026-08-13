@@ -66,12 +66,6 @@ export interface SessionTranscriptDialogData {
             </div>
           }
 
-          <p class="note">
-            <mat-icon>info</mat-icon>
-            Backend chưa trả tên tiêu chí ở màn này — mỗi tiêu chí hiện bằng mã rút gọn (di chuột để
-            xem mã đầy đủ). Tên + trọng số xem ở phần tiêu chí của chiến dịch.
-          </p>
-
           @for (q of t.questions; track q.questionId) {
             <div class="q" [class.needs-review]="q.needsReview">
               <div class="q-head">
@@ -100,10 +94,23 @@ export interface SessionTranscriptDialogData {
                     @for (s of q.scores; track s.criterionId) {
                       <div class="crit">
                         <div class="crit-head">
-                          <strong class="mono" [matTooltip]="s.criterionId"
-                            >Tiêu chí {{ short(s.criterionId) }}</strong
-                          >
-                          <span class="score">{{ s.score }}</span>
+                          <!--
+                            Buổi chấm trước 2026-07-18 không có criterionName/maxScore ⇒ PHẢI giữ
+                            nhánh dự phòng về mã rút gọn, bỏ đi là màn transcript của buổi cũ hiện
+                            trống hoác.
+                          -->
+                          @if (s.criterionName) {
+                            <strong [matTooltip]="s.criterionId">{{ s.criterionName }}</strong>
+                          } @else {
+                            <strong class="mono" [matTooltip]="s.criterionId"
+                              >Tiêu chí {{ short(s.criterionId) }}</strong
+                            >
+                          }
+                          <span class="score">
+                            {{ s.score }}@if (s.maxScore != null) {<span class="max"
+                              >/{{ s.maxScore }}</span
+                            >}
+                          </span>
                         </div>
                         @if (s.reasoning) {
                           <p class="reasoning">{{ s.reasoning }}</p>
@@ -231,6 +238,11 @@ export interface SessionTranscriptDialogData {
       .score {
         font-weight: 600;
         color: var(--mat-sys-primary);
+        white-space: nowrap;
+      }
+      .score .max {
+        font-weight: 400;
+        color: var(--mat-sys-on-surface-variant);
       }
       .reasoning {
         margin: 6px 0 0;

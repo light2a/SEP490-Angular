@@ -23,6 +23,7 @@ describe('CampaignForm — đáp án mẫu, nhập CSV, ngân hàng đề', () =
     createCampaign: ReturnType<typeof vi.fn>;
     importQuestions: ReturnType<typeof vi.fn>;
     downloadQuestionsTemplate: ReturnType<typeof vi.fn>;
+    getRubricPreviewRuns: ReturnType<typeof vi.fn>;
   };
   let notify: { success: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>; info: ReturnType<typeof vi.fn> };
 
@@ -75,6 +76,8 @@ describe('CampaignForm — đáp án mẫu, nhập CSV, ngân hàng đề', () =
       updateQuestions: vi.fn().mockReturnValue(of(campaign)),
       createCampaign: vi.fn().mockReturnValue(of(campaign)),
       importQuestions: vi.fn(),
+      // Biểu mẫu nay nhúng panel chấm thử — nó đọc lịch sử ngay lúc mở, nên mock phải có.
+      getRubricPreviewRuns: vi.fn().mockReturnValue(of([])),
       downloadQuestionsTemplate: vi.fn().mockReturnValue(of(new Blob(['x']))),
     };
     notify = { success: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn() };

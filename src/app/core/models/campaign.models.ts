@@ -165,6 +165,19 @@ export interface CampaignQuestionResponse {
   questionGroup?: string | null;
 }
 
+/**
+ * 1 MỐC ĐIỂM của thước đo (E9 hard-anchor). `score` là điểm thật trên thang `maxScore` của tiêu
+ * chí, `descriptor` mô tả **quan sát được** ứng viên làm/nói gì ở mức đó — không phải tính từ đánh
+ * giá ("khá", "tốt") vì đó chỉ là đổi tên con số.
+ *
+ * Quy ước soạn: hai vế `CÓ: … | CÒN THIẾU: …` — vế sau ép mô tả dựng **biên** giữa mức n và n+1,
+ * nếu không thì gradient mờ và AI không phân biệt được 3 với 6.
+ */
+export interface CriterionLevelItem {
+  score: number;
+  descriptor: string;
+}
+
 /** 1 tiêu chí campaign có cấu trúc (đọc) — C12. */
 export interface CampaignCriterionResponse {
   id: string;
@@ -174,6 +187,12 @@ export interface CampaignCriterionResponse {
   weight: number;
   maxScore: number;
   source: CriterionSource;
+  /**
+   * Mốc điểm của tiêu chí, sắp tăng dần theo `score`. Backend LUÔN gửi field này; mảng **rỗng**
+   * nghĩa là tiêu chí chưa có mốc (hợp lệ — lúc đó bộ chấm rơi về dải mặc định 0..maxScore).
+   * Vẫn đọc phòng thủ (`?? []`) ở nơi hiển thị vì deploy backend cũ hơn không có field.
+   */
+  levels: CriterionLevelItem[];
 }
 
 /** GET /campaign & GET /campaign/{id} — campaign đầy đủ hướng Employer. */
@@ -211,6 +230,18 @@ export interface CampaignResponse {
   criteria: CampaignCriterionResponse[];
   jdText?: string | null;
   criteriaText?: string | null;
+  /**
+   * Phiên bản THƯỚC ĐO (bộ tiêu chí + mốc điểm). Bắt đầu từ 1; mỗi lần HR sửa mốc trên chiến dịch
+   * đang chạy thì tăng 1 và **chỉ áp cho ứng viên thi sau đó** — người đã chấm giữ nguyên điểm.
+   *
+   * Đây là ĐỊNH DANH chứ không phải bộ đếm: được phép có lỗ số (v1, v3, không có v2) khi HR sửa
+   * hai lần mà chưa ai vào thi ở giữa. Deploy backend cũ hơn không gửi field → `undefined` lúc
+   * chạy, nơi hiển thị phải kiểm trước khi vẽ chip.
+   */
+  rubricVersion: number;
+  rubricVersionUpdatedAt?: string | null;
+  /** Tên người sửa thước đo lần gần nhất (BE resolve sẵn, FE không tra Auth). */
+  rubricVersionUpdatedBy?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -221,6 +252,21 @@ export interface CriterionItem {
   weight: number;
   maxScore: number;
   description?: string | null;
+
+  /**
+   * Mốc điểm — hợp đồng BA TRẠNG THÁI, giống `QuestionItem.sampleAnswer`:
+   * - `undefined` / không gửi field = **KHÔNG ĐỔI** (giữ nguyên mốc đang có)
+   * - `[]` = **XOÁ hết mốc**
+   * - `[...]` = thay thế toàn bộ
+   *
+   * ⚠ Hai bẫy mất-mốc-câm, cả hai đều không sinh lỗi nào:
+   * 1. PUT là **replace-all mint id mới**, nên BE ghép mốc cũ sang tiêu chí mới theo **`name`**.
+   *    HR đổi TÊN tiêu chí mà client không gửi `levels` ⇒ carry-over trượt ⇒ mốc bay mất. Vì thế
+   *    form BUỘC phải gửi `levels` khi tên đổi, kể cả khi HR không mở panel mốc.
+   * 2. Khởi tạo mảng rỗng cho mọi hàng rồi gửi vô điều kiện ⇒ **mỗi lần Lưu là xoá sạch mốc**.
+   *    Phải theo dõi "HR đã chạm panel chưa" và chỉ gửi khi đã chạm (xem `levelsTouched`).
+   */
+  levels?: CriterionLevelItem[] | null;
 }
 
 /** Câu hỏi campaign (ghi) — F10. */
@@ -438,6 +484,11 @@ export interface CampaignResultRow {
   overrideResult?: string | null;
   overrideNote?: string | null;
   overriddenAt?: string | null;
+  /**
+   * Thước đo đã dùng để chấm buổi này. **null = KHÔNG BIẾT** (buổi chấm trước khi có versioning),
+   * KHÔNG được vẽ thành `v1`: suy "biết" từ "không biết" chính là lỗi BK23. Chip `?` + tooltip.
+   */
+  rubricVersion?: number | null;
 }
 
 /** PUT /campaign/{id}/results/{sessionId}/override — HR chốt điểm cuối. Score+Result null = clear (về AI). */
@@ -475,18 +526,132 @@ export interface CampaignResultsResponse {
    * thẳng, nới lỏng chúng sẽ làm `strictTemplates` fail ở chỗ khác.
    */
   unscoredFlagged?: UnscoredFlaggedRow[];
+  /**
+   * Thước đo HIỆN TẠI của chiến dịch — để đối chiếu với `rubricVersion` từng dòng. Additive nên
+   * optional; deploy cũ không gửi ⇒ nơi đọc coi như "không biết", không so sánh gì cả.
+   */
+  currentRubricVersion?: number | null;
+}
+
+// ── Mốc điểm: AI gợi ý + chấm thử (kiểm chứng thước đo trước khi phát link) ──
+/** 1 tiêu chí kèm mốc do AI gợi ý — POST /campaign/{id}/criteria/levels/suggest. */
+export interface SuggestedCriterionLevels {
+  criterionId: string;
+  name: string;
+  maxScore: number;
+  levels: CriterionLevelItem[];
+}
+
+/**
+ * Kết quả gợi ý mốc. **Backend KHÔNG ghi DB** — chỉ trả về để HR xem/sửa rồi lưu qua `PUT /campaign/{id}`
+ * như bình thường (giữ nhật ký thao tác + luật tăng phiên bản ở đúng một chỗ).
+ * AI lỗi → 502, KHÔNG có dải mặc định thay thế (fallback sẽ khiến HR tin `"Mức 3/10"` là do AI viết).
+ */
+export interface SuggestCriterionLevelsResponse {
+  criteria: SuggestedCriterionLevels[];
+}
+
+/** Trạng thái 1 lượt chấm thử. `Running` là hàng rào chống bấm hai lần, tồn tại kể cả khi tab chết. */
+export type RubricPreviewStatus = 'Running' | 'Succeeded' | 'Failed';
+
+/** Bài mẫu thuộc nhóm nào. `Custom` = bài HR tự dán — bài DUY NHẤT không do bộ chấm viết ra. */
+export type RubricPreviewBand = 'Weak' | 'Good' | 'Excellent' | 'Custom';
+
+/** Điểm 1 tiêu chí trên 1 bài mẫu: mức KỲ VỌNG (code chọn trước) vs điểm THẬT (AI chấm). */
+export interface RubricPreviewCriterionScore {
+  criterionId: string;
+  criterionName: string;
+  maxScore: number;
+  /** Mức do CODE chọn trước khi sinh bài — biết trước nên so được, không phải AI tự khai. */
+  expectedLevel: number;
+  actualScore: number;
+  /** Mức mà AI tự nhận đã chọn (E9); null nếu bộ chấm không neo được về mốc nào. */
+  levelMatched?: number | null;
+  reasoning?: string | null;
+}
+
+/** 1 bài mẫu + điểm chấm được. */
+export interface RubricPreviewSample {
+  band: RubricPreviewBand;
+  answerText: string;
+  /** Đếm bởi backend — cùng nguồn với phép kiểm chênh lệch độ dài (`lengthParityWarning`). */
+  wordCount: number;
+  expectedWeightedPct: number;
+  actualWeightedPct: number;
+  scores: RubricPreviewCriterionScore[];
+}
+
+/** Ảnh chụp 1 tiêu chí tại thời điểm chấm thử — để đọc lại lịch sử mà không phụ thuộc bộ hiện tại. */
+export interface RubricPreviewCriterionSnapshot {
+  criterionId: string;
+  name: string;
+  weight: number;
+  maxScore: number;
+  levels: CriterionLevelItem[];
+}
+
+/**
+ * 1 lượt chấm thử — POST/GET /campaign/{id}/rubric-preview.
+ *
+ * `rubricFingerprint` + `rubricVersion` + `promptVersion` là thứ làm "so trước/sau" TRUNG THỰC:
+ * cùng dấu vân tay mà điểm khác = **nhiễu của mô hình**; khác dấu vân tay = **đã đổi thước đo**.
+ * Thiếu chúng thì mọi so sánh giữa hai lượt đều là bịa, và HR sẽ quy mọi thay đổi cho việc mình
+ * vừa sửa mốc (kể cả khi thực ra admin đổi prompt hệ thống ở giữa).
+ */
+export interface RubricPreviewRun {
+  id: string;
+  status: RubricPreviewStatus;
+  /** Câu hỏi đã dùng; null khi câu đó đã bị xoá khỏi chiến dịch (không có FK, cố ý). */
+  questionId?: string | null;
+  /** Ảnh chụp nội dung câu hỏi lúc chạy — vẫn đọc được sau khi câu gốc bị thay. */
+  questionText: string;
+  rubricFingerprint: string;
+  rubricVersion: number;
+  promptVersion?: number | null;
+  /**
+   * **v1 luôn `false`**: bài mẫu là VĂN BẢN nên không có số đo cách nói (tốc độ, khoảng lặng, từ
+   * đệm) như buổi thi có ghi âm. Là cờ CẤU TRÚC chứ không phải suy từ tên tiêu chí — nhận diện
+   * tiêu chí "trôi chảy" bằng khớp tên sẽ bắn nhầm (tên do HR gõ, lại song ngữ).
+   */
+  deliveryMetricsAvailable: boolean;
+  /**
+   * 3 bài lệch nhau quá nhiều về SỐ TỪ. Khi đó dải điểm đẹp có thể chỉ phản ánh độ dài chứ không
+   * phải thước đo phân biệt được — nên cảnh báo chứ không giấu.
+   */
+  lengthParityWarning: boolean;
+  /** Lượt này có trừ credit ví Org hay không (3 lượt **thành công** đầu mỗi phiên bản là miễn phí). */
+  billed: boolean;
+  freeRunsRemaining: number;
+  rubric: RubricPreviewCriterionSnapshot[];
+  samples: RubricPreviewSample[];
+  errorReason?: string | null;
+  createdAt: string;
+  completedAt?: string | null;
+}
+
+/** POST /campaign/{id}/rubric-preview — `customAnswer` là bài thứ 4 tuỳ chọn do HR tự dán. */
+export interface RunRubricPreviewRequest {
+  questionId: string;
+  customAnswer?: string;
 }
 
 // ── Transcript + dẫn chứng chấm điểm cho HR (AI4) ───────────────────────────
 /**
  * Điểm + nhận xét AI của 1 tiêu chí trong 1 câu trả lời.
- * ⚠ Backend chỉ trả `criterionId` (GUID rubric_criteria phía Interview, KHÁC id campaign_criteria
- * vì được materialize mới lúc tạo session) — KHÔNG có tên tiêu chí lẫn maxScore, nên FE không thể
- * tra ngược tên. Hiển thị id rút gọn thay vì đoán mò (đoán sai = gán nhầm dẫn chứng cho tiêu chí).
+ *
+ * `criterionId` là GUID `rubric_criteria` phía Interview (KHÁC id `campaign_criteria` vì được
+ * materialize mới lúc tạo session) ⇒ FE không tra ngược tên được, phải nhận từ backend.
+ *
+ * ⚠ `criterionName`/`maxScore` **nullable có chủ đích**: buổi chấm trước 2026-07-18 không có hai
+ * field này. Bỏ nhánh dự phòng về mã rút gọn = màn transcript của buổi cũ hiện trống.
  */
 export interface TranscriptCriterionScore {
   criterionId: string;
+  /** Tên tiêu chí do backend trả; null với buổi chấm cũ → hiển thị mã rút gọn của `criterionId`. */
+  criterionName?: string | null;
   score: number;
+  /** Thang điểm của tiêu chí (để hiện `3/5` thay vì `3`); null với buổi chấm cũ. */
+  maxScore?: number | null;
   /** E11 — AI phải trích dẫn chứng từ transcript; rỗng/ngắn → BE bật needsReview. */
   reasoning?: string | null;
 }

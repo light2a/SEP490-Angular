@@ -1,9 +1,12 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, timeout } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   ApiKeyListItem,
+  RubricPreviewRun,
+  RunRubricPreviewRequest,
+  SuggestCriterionLevelsResponse,
   CampaignResponse,
   CampaignResultsResponse,
   CampaignSlotResponse,
@@ -35,6 +38,12 @@ import {
   TransitionStatusRequest,
   UpdateCampaignRequest,
 } from '../models';
+
+/**
+ * Thời hạn cho lượt chấm thử thước đo. Rộng hơn nhiều lần thời gian đo được (~25–40s) vì đây là
+ * chuỗi nhiều lượt gọi mô hình nối tiếp; cắt sớm thì HR mất kết quả của một lượt **đã tính phí**.
+ */
+const RUBRIC_PREVIEW_TIMEOUT_MS = 180_000;
 
 /**
  * /api/v1/campaign/* — luồng B2B phía ứng viên (invitation → join → my-campaigns → start).
@@ -183,6 +192,50 @@ export class CampaignApi {
     return this.http.post<CampaignResponse>(`${this.base}/${id}/questions/generate`, null, {
       params,
     });
+  }
+
+  // ── Mốc điểm + chấm thử thước đo ───────────────────────────────────────────
+  /**
+   * POST /campaign/{id}/criteria/levels/suggest — AI viết mốc điểm cho từng tiêu chí ĐÃ LƯU.
+   *
+   * **KHÔNG ghi DB**: trả về để HR xem/sửa rồi lưu qua {@link updateCampaign} như bình thường —
+   * cùng nguyên tắc với {@link importQuestions}, để nhật ký thao tác và luật tăng phiên bản thước
+   * đo nằm đúng một cửa. AI lỗi → **502** và không có dải mặc định thay thế: mốc rỗng là trạng
+   * thái hợp lệ, còn mốc bịa (`"Mức 3/10"`) thì HR sẽ tưởng là do AI viết ra.
+   */
+  suggestCriterionLevels(id: string): Observable<SuggestCriterionLevelsResponse> {
+    return this.http.post<SuggestCriterionLevelsResponse>(
+      `${this.base}/${id}/criteria/levels/suggest`,
+      {},
+    );
+  }
+
+  /**
+   * POST /campaign/{id}/rubric-preview — AI viết 3 bài mẫu (yếu/khá/xuất sắc) cho 1 câu hỏi rồi
+   * **chấm thật** cả 3 bằng đúng bộ chấm của ứng viên.
+   *
+   * ⚠ Chạy trên bộ tiêu chí **ĐÃ LƯU trong DB**, không phải bản đang gõ dở trên form.
+   * ⚠ Chậm (≈25–40s, cá biệt hơn): sinh bài rồi chấm từng bài là nhiều lượt gọi mô hình nối tiếp.
+   * Đặt `timeout` **tường minh 180s** thay vì để mặc định — không có thời hạn thì một request treo
+   * sẽ giữ mãi vòng quay chờ và HR không bao giờ nhận được lỗi để bấm lại.
+   *
+   * 402 = ví Org không đủ credit (lượt tính phí) · 409 = đang có lượt chạy dở · 400 = thước đo
+   * chưa hợp lệ (thiếu tiêu chí/mốc) · 404 = chiến dịch ngoài org.
+   */
+  runRubricPreview(id: string, body: RunRubricPreviewRequest): Observable<RubricPreviewRun> {
+    return this.http
+      .post<RubricPreviewRun>(`${this.base}/${id}/rubric-preview`, body)
+      .pipe(timeout(RUBRIC_PREVIEW_TIMEOUT_MS));
+  }
+
+  /**
+   * GET /campaign/{id}/rubric-preview — lịch sử chấm thử (mới nhất trước, backend cap 20).
+   *
+   * Cũng là đường CỨU khi lượt chạy bị lỗi mạng/timeout: lượt chạy thường đã xong ở server và nằm
+   * sẵn trong lịch sử, nên đọc lại một lần trước khi báo lỗi cho HR.
+   */
+  getRubricPreviewRuns(id: string): Observable<RubricPreviewRun[]> {
+    return this.http.get<RubricPreviewRun[]>(`${this.base}/${id}/rubric-preview`);
   }
 
   /** POST /campaign/{id}/publish → Active (sinh campaign_criteria từ text/structured). */
