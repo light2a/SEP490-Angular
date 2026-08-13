@@ -22,7 +22,7 @@ import {
   RubricPreviewSample,
 } from '../../../core/models';
 import { ConfirmDialog, ConfirmDialogData } from '../../../shared/ui/confirm-dialog';
-import { RubricScaleStrip, ScalePoint } from './rubric-scale-strip';
+import { RubricScaleStrip, ScalePoint } from '../../../shared/rubric/rubric-scale-strip';
 
 /** Số lượt chấm thử **thành công** được miễn phí trên mỗi phiên bản thước đo. */
 export const FREE_PREVIEW_RUNS = 3;

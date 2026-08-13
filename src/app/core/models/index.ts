@@ -7,6 +7,7 @@ export * from './roadmap.models';
 export * from './cv-analysis.models';
 export * from './repo-analysis.models';
 export * from './rubric.models';
+export * from './admin-rubric.models';
 export * from './knowledge.models';
 export * from './payment.models';
 export * from './campaign.models';

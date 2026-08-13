@@ -164,21 +164,23 @@ export function levelErrorMessages(errors: ValidationErrors | null, maxScore: nu
 
         <span class="spacer"></span>
 
-        <button
-          mat-stroked-button
-          type="button"
-          class="ai-btn"
-          [disabled]="disabled() || aiBusy()"
-          (click)="aiRequest.emit()"
-          data-testid="levels-ai-btn"
-        >
-          @if (aiBusy()) {
-            <mat-icon class="spin">progress_activity</mat-icon>
-          } @else {
-            <mat-icon>auto_awesome</mat-icon>
-          }
-          AI gợi ý
-        </button>
+        @if (showAi()) {
+          <button
+            mat-stroked-button
+            type="button"
+            class="ai-btn"
+            [disabled]="disabled() || aiBusy()"
+            (click)="aiRequest.emit()"
+            data-testid="levels-ai-btn"
+          >
+            @if (aiBusy()) {
+              <mat-icon class="spin">progress_activity</mat-icon>
+            } @else {
+              <mat-icon>auto_awesome</mat-icon>
+            }
+            AI gợi ý
+          </button>
+        }
 
         <button
           mat-button
@@ -381,6 +383,12 @@ export class CriterionLevelsEditor {
   readonly disabled = input(false);
   /** Đang gọi AI gợi ý mốc (do cha giữ, vì request là của cả chiến dịch). */
   readonly aiBusy = input(false);
+  /**
+   * Có hiện nút "AI gợi ý" không. Mặc định **bật** để nơi gọi cũ không đổi hành vi.
+   * Tắt ở màn không có đường gọi AI (bộ chuẩn hệ thống, rubric riêng của người luyện) — hiện một
+   * nút bấm vào chỉ để nhận lỗi thì tệ hơn là không có nút.
+   */
+  readonly showAi = input(true);
   /** Cha thực hiện lời gọi AI — component này không tự gọi mạng. */
   readonly aiRequest = output<void>();
 

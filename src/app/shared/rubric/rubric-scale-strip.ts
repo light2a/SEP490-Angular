@@ -1,6 +1,6 @@
 import { Component, input } from '@angular/core';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { CriterionLevelItem } from '../../../core/models';
+import { CriterionLevelItem } from '../../core/models';
 
 /** 1 điểm vẽ trên thang. `actual` = điểm AI chấm thật; `expected` = mức code chọn trước khi sinh bài. */
 export interface ScalePoint {
