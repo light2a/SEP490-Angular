@@ -34,6 +34,7 @@ import {
 import { ConfirmDialog, ConfirmDialogData } from '../../../shared/ui/confirm-dialog';
 import { Spinner } from '../../../shared/ui/spinner';
 import { JobCategoryPipe } from '../../../shared/pipes';
+import { AdminRubricPreview } from './admin-rubric-preview';
 
 /**
  * Ký tự CHỈ có trong tiếng Việt (nguyên âm có dấu phụ riêng của quốc ngữ + `đ`) cùng các dấu
@@ -79,6 +80,7 @@ export function looksUntranslated(descriptor: string, language: RubricLanguage):
     CriterionLevelsEditor,
     JobCategoryPipe,
     Spinner,
+    AdminRubricPreview,
   ],
   template: `
     <h1>Bộ chuẩn chấm điểm</h1>
@@ -269,6 +271,17 @@ export function looksUntranslated(descriptor: string, language: RubricLanguage):
           </div>
         </form>
       </mat-card>
+
+      <!--
+        Chấm thử nằm NGAY DƯỚI phần soạn, không phải một màn riêng: câu hỏi "mốc mình vừa viết có
+        tách được ba mức không" chỉ có nghĩa khi nhìn cùng lúc với chính bộ mốc đó.
+      -->
+      <app-admin-rubric-preview
+        [jobCategory]="category()"
+        [language]="language()"
+        [rubricVersion]="r.version"
+        [dirty]="form.dirty"
+      />
     }
   `,
   styles: [
