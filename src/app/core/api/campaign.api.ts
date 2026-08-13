@@ -27,6 +27,7 @@ import {
   MyCampaignDetail,
   MyCampaignSummary,
   ProctorSignalType,
+  ImportQuestionsResult,
   QuestionItem,
   ScreenCandidatesResponse,
   SessionTranscriptResponse,
@@ -145,6 +146,29 @@ export class CampaignApi {
   /** PUT /campaign/{id}/questions — ghi đè câu hỏi (chỉ Draft). */
   updateQuestions(id: string, questions: QuestionItem[]): Observable<CampaignResponse> {
     return this.http.put<CampaignResponse>(`${this.base}/${id}/questions`, questions);
+  }
+
+  /**
+   * POST /campaign/{id}/questions/import — đọc file CSV câu hỏi + đáp án mẫu.
+   *
+   * **CHỈ ĐỌC — backend KHÔNG ghi gì.** Trả danh sách để HR xem trước; muốn lưu thì gọi
+   * {@link updateQuestions} như bình thường. Nhờ thế guard "chỉ sửa khi Draft", nhật ký thao tác và
+   * luật trộn câu F10 vẫn nằm đúng một chỗ, và file hỏng mã hoá chỉ làm HR thấy chữ lỗi trên màn
+   * hình rồi bấm huỷ — thay vì cơ sở dữ liệu ăn text hỏng.
+   *
+   * 400 file hỏng/sai định dạng/thiếu cột · 404 ngoài tổ chức · 409 campaign không còn Draft.
+   * Lỗi của TỪNG DÒNG nằm trong `errors` của body 200, không phải lỗi HTTP.
+   */
+  importQuestions(id: string, file: File): Observable<ImportQuestionsResult> {
+    const form = new FormData();
+    // KHÔNG tự set Content-Type: để trình duyệt tự sinh boundary (mẫu uploadCandidateCvs).
+    form.append('file', file, file.name);
+    return this.http.post<ImportQuestionsResult>(`${this.base}/${id}/questions/import`, form);
+  }
+
+  /** GET /campaign/questions/template — file CSV mẫu (đã có BOM UTF-8 để Excel đọc đúng tiếng Việt). */
+  downloadQuestionsTemplate(): Observable<Blob> {
+    return this.http.get(`${this.base}/questions/template`, { responseType: 'blob' });
   }
 
   /**

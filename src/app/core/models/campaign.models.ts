@@ -154,7 +154,15 @@ export interface CampaignQuestionResponse {
   id: string;
   questionText: string;
   source: QuestionSource;
+  /** Câu BẮT BUỘC — mọi ứng viên đều gặp. `false` = nằm trong rổ rút thăm (xem `questionsPerSession`). */
   isRequired: boolean;
+  /**
+   * Đáp án mẫu HR soạn. `undefined` ở DANH SÁCH campaign (BE cố ý không trả để payload không cõng
+   * tới 200 × 5.000 ký tự mỗi lần mở trang) — chỉ màn chi tiết/sửa mới có.
+   */
+  sampleAnswer?: string | null;
+  /** Nhóm chủ đề — dùng để rút đề ĐỀU theo nhóm khi bật ngân hàng đề. */
+  questionGroup?: string | null;
 }
 
 /** 1 tiêu chí campaign có cấu trúc (đọc) — C12. */
@@ -195,6 +203,8 @@ export interface CampaignResponse {
   /** INT-17: trần câu thích ứng / tổng câu. null = dùng mặc định phía backend. */
   maxFollowUps?: number | null;
   maxQuestions?: number | null;
+  /** NGÂN HÀNG ĐỀ: số câu mỗi ứng viên thi, rút từ bộ câu hỏi. null = thi HẾT bộ. */
+  questionsPerSession?: number | null;
   startsAt?: string | null;
   expiresAt?: string | null;
   questions: CampaignQuestionResponse[];
@@ -232,6 +242,37 @@ export interface QuestionItem {
   source?: QuestionSource;
 
   isRequired: boolean;
+
+  /**
+   * Đáp án mẫu. BE hiểu BA trạng thái, không phải hai:
+   * - `undefined` / không gửi field = **KHÔNG ĐỔI** (giữ nguyên đáp án đang có)
+   * - `''` (chuỗi rỗng) = **XOÁ** đáp án
+   * - chuỗi có nội dung = ghi đè
+   *
+   * ⚠ Đừng "dọn" bằng cách bỏ field khi ô trống — ô trống là ý định XOÁ của HR, bỏ field đi thì
+   * đáp án cũ sống lại sau mỗi lần Lưu.
+   */
+  sampleAnswer?: string;
+
+  /** Nhóm chủ đề. Cùng hợp đồng ba trạng thái với `sampleAnswer`. */
+  questionGroup?: string;
+}
+
+/** 1 dòng lỗi khi nhập câu hỏi từ file CSV. */
+export interface ImportRowError {
+  /** Số dòng TRONG FILE, tính cả dòng tiêu đề (tiêu đề = 1) — HR mở Excel nhảy đúng tới dòng này. */
+  line: number;
+  column?: string | null;
+  message: string;
+}
+
+/** Kết quả đọc file CSV — POST /campaign/{id}/questions/import. CHỈ ĐỌC, BE không ghi gì. */
+export interface ImportQuestionsResult {
+  totalRows: number;
+  /** Dòng hợp lệ, đúng thứ tự file. Nhồi thẳng vào form rồi Lưu — không cần ánh xạ lại. */
+  questions: QuestionItem[];
+  /** Dòng hỏng — không chặn cả file, HR sửa vài dòng dễ hơn tải lại từ đầu. */
+  errors: ImportRowError[];
 }
 
 /** POST /campaign — tạo campaign Draft. StartsAt/ExpiresAt KHÔNG được quá khứ; StartsAt < ExpiresAt; ≥1 question. */
@@ -253,6 +294,8 @@ export interface CreateCampaignRequest {
   adaptiveEnabled: boolean;
   maxFollowUps?: number | null;
   maxQuestions?: number | null;
+  /** NGÂN HÀNG ĐỀ: số câu mỗi ứng viên thi. Không gửi = thi HẾT bộ. Có gửi thì phải >= 1. */
+  questionsPerSession?: number | null;
   jdText?: string | null;
   criteriaText?: string | null;
   criteria?: CriterionItem[];
@@ -287,6 +330,8 @@ export interface UpdateCampaignRequest {
   adaptiveEnabled?: boolean;
   maxFollowUps?: number | null;
   maxQuestions?: number | null;
+  /** NGÂN HÀNG ĐỀ: undefined/null = KHÔNG đổi (giữ giá trị cũ), cùng nếp các trần trên. */
+  questionsPerSession?: number | null;
   jdText?: string | null;
   criteriaText?: string | null;
   criteria?: CriterionItem[];

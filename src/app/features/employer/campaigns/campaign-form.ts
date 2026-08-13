@@ -29,6 +29,7 @@ import {
   CampaignSeniority,
   CreateCampaignRequest,
   CriterionItem,
+  ImportQuestionsResult,
   JD_TEXT_MAX_CHARS,
   QuestionItem,
   QuestionSource,
@@ -171,6 +172,18 @@ function toIso(local: string | null | undefined): string | null {
                 <mat-error>Phải từ 1 trở lên — đặt 0 sẽ khoá chiến dịch.</mat-error>
               } @else {
                 <mat-hint>Để trống = không giới hạn</mat-hint>
+              }
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Số câu mỗi ứng viên thi</mat-label>
+              <input matInput type="number" min="1" formControlName="questionsPerSession" />
+              @if (form.controls.questionsPerSession.hasError('min')) {
+                <mat-error>Phải từ 1 trở lên.</mat-error>
+              } @else {
+                <mat-hint>
+                  Để trống = ứng viên thi HẾT bộ câu hỏi. Đặt số nhỏ hơn = mỗi người bốc ngẫu nhiên
+                  ngần đó câu (câu đánh dấu "Bắt buộc" thì ai cũng gặp), rút đều theo nhóm chủ đề.
+                </mat-hint>
               }
             </mat-form-field>
           </div>
@@ -329,6 +342,79 @@ function toIso(local: string | null | undefined): string | null {
             </div>
           }
 
+          @if (!readOnly()) {
+            <div class="import-box">
+              <div class="import-row">
+                <button mat-stroked-button type="button" (click)="downloadTemplate()">
+                  <mat-icon>download</mat-icon>
+                  Tải file mẫu
+                </button>
+                <input
+                  #csvInput
+                  type="file"
+                  accept=".csv,text/csv"
+                  hidden
+                  (change)="onCsvPicked($any($event.target).files)"
+                />
+                <button
+                  mat-stroked-button
+                  type="button"
+                  (click)="csvInput.click()"
+                  [disabled]="importing()"
+                >
+                  @if (importing()) {
+                    <mat-icon class="spin">progress_activity</mat-icon>
+                  } @else {
+                    <mat-icon>upload_file</mat-icon>
+                  }
+                  {{ importing() ? 'Đang đọc file...' : 'Nhập từ file CSV' }}
+                </button>
+              </div>
+              <p class="hint">
+                Tải file mẫu, điền bằng Excel rồi lưu lại dạng
+                <strong>CSV UTF-8 (Comma delimited)</strong>. Nội dung trong file
+                <strong>chưa được lưu</strong> — bạn xem trước rồi bấm Lưu như bình thường.
+              </p>
+
+              @if (importPreview(); as preview) {
+                <div class="import-preview">
+                  <p>
+                    Đọc được <strong>{{ preview.questions.length }}</strong> câu hỏi hợp lệ
+                    trên tổng {{ preview.totalRows }} dòng.
+                  </p>
+
+                  @if (preview.errors.length) {
+                    <ul class="import-errors">
+                      @for (e of preview.errors; track $index) {
+                        <li>Dòng {{ e.line }}{{ e.column ? ' (' + e.column + ')' : '' }}: {{ e.message }}</li>
+                      }
+                    </ul>
+                  }
+
+                  <div class="import-actions">
+                    <button
+                      mat-flat-button
+                      type="button"
+                      (click)="applyImport('replace')"
+                      [disabled]="!preview.questions.length"
+                    >
+                      Thay toàn bộ câu hỏi
+                    </button>
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      (click)="applyImport('append')"
+                      [disabled]="!preview.questions.length"
+                    >
+                      Thêm vào cuối
+                    </button>
+                    <button mat-button type="button" (click)="cancelImport()">Huỷ</button>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+
           <div formArrayName="questions">
             @for (g of questions.controls; track $index; let i = $index) {
               <div class="q-row" [formGroupName]="i">
@@ -340,6 +426,18 @@ function toIso(local: string | null | undefined): string | null {
                     }
                   </mat-label>
                   <textarea matInput formControlName="questionText" rows="2"></textarea>
+                </mat-form-field>
+                <mat-form-field appearance="outline" class="q-text">
+                  <mat-label>Đáp án mẫu (không bắt buộc)</mat-label>
+                  <textarea matInput formControlName="sampleAnswer" rows="2"></textarea>
+                  <mat-hint>
+                    AI dùng làm mốc để chấm sát chuẩn của công ty. Đây là MỘT đáp án tốt, ứng viên
+                    diễn đạt khác mà đúng vẫn được điểm.
+                  </mat-hint>
+                </mat-form-field>
+                <mat-form-field appearance="outline" class="q-group">
+                  <mat-label>Nhóm chủ đề</mat-label>
+                  <input matInput formControlName="questionGroup" placeholder="VD: Thuật toán" />
                 </mat-form-field>
                 <mat-checkbox formControlName="isRequired">Bắt buộc</mat-checkbox>
                 <button
@@ -531,6 +629,13 @@ export class CampaignForm implements OnInit {
   readonly generating = signal(false);
   /** Số câu muốn AI sinh (1..20); null = để backend tự quyết. */
   readonly aiCount = signal<number | null>(null);
+  /** Đang đọc file CSV — khoá nút để không bắn 2 lần. */
+  readonly importing = signal(false);
+  /**
+   * Kết quả đọc file, CHƯA lưu. Backend chỉ đọc file và trả về; muốn lưu thì HR bấm Lưu như bình
+   * thường. Nhờ thế file hỏng mã hoá chỉ làm HR thấy chữ lỗi ở đây rồi bấm Huỷ.
+   */
+  readonly importPreview = signal<ImportQuestionsResult | null>(null);
   private original = signal<CampaignResponse | null>(null);
 
   /** Giới hạn ký tự JD nhập tay — khớp hằng số BE (vượt → 400). */
@@ -559,6 +664,9 @@ export class CampaignForm implements OnInit {
     passScorePct: [null as number | null],
     // >= 1 bắt buộc: 0/âm biến `running >= max` thành đúng luôn ⇒ khoá chiến dịch vĩnh viễn.
     maxConcurrentInterviews: [null as number | null, [Validators.min(1)]],
+    // NGÂN HÀNG ĐỀ — số câu mỗi ứng viên thi. Để trống = thi hết bộ (hành vi trước tính năng này).
+    // >= 1 bắt buộc: 0 nghĩa là buổi thi không câu nào, backend sẽ từ chối lúc ứng viên bấm Bắt đầu.
+    questionsPerSession: [null as number | null, [Validators.min(1)]],
     startsAt: [''],
     expiresAt: [''],
     antiCheatEnabled: [false],
@@ -634,6 +742,7 @@ export class CampaignForm implements OnInit {
       timeLimitMinutes: c.timeLimitMinutes ?? 15,
       passScorePct: c.passScorePct ?? null,
       maxConcurrentInterviews: c.maxConcurrentInterviews ?? null,
+      questionsPerSession: c.questionsPerSession ?? null,
       startsAt: toLocalInput(c.startsAt),
       expiresAt: toLocalInput(c.expiresAt),
       antiCheatEnabled: c.antiCheatEnabled,
@@ -649,7 +758,16 @@ export class CampaignForm implements OnInit {
     this.questions.clear();
     c.questions.forEach((q) =>
       // F10 — nạp kèm `id` để lần Lưu kế echo lại được (thiếu id = BE xoá-và-tạo-lại, mất id câu AI).
-      this.questions.push(this.questionRow(q.questionText, q.isRequired, q.source, q.id ?? null)),
+      this.questions.push(
+        this.questionRow(
+          q.questionText,
+          q.isRequired,
+          q.source,
+          q.id ?? null,
+          q.sampleAnswer ?? '',
+          q.questionGroup ?? '',
+        ),
+      ),
     );
     if (this.questions.length === 0) this.addQuestion();
   }
@@ -708,11 +826,17 @@ export class CampaignForm implements OnInit {
     isRequired = true,
     source: QuestionSource = 'CustomHr',
     id: string | null = null,
+    sampleAnswer = '',
+    questionGroup = '',
   ): FormGroup {
     return this.fb.group({
       questionText: [questionText, [Validators.required]],
       isRequired: [isRequired],
       source: [source],
+      // Đáp án mẫu + nhóm chủ đề. Ô trống = ý định XOÁ của HR, và buildQuestions() gửi chuỗi rỗng
+      // đúng như thế — BE hiểu '' là xoá, còn "không gửi field" là giữ nguyên.
+      sampleAnswer: [sampleAnswer],
+      questionGroup: [questionGroup],
       // F10 — `id` KHÔNG hiện trên form nhưng phải sống sót qua vòng đọc→sửa→lưu: BE merge theo id để
       // sửa TẠI CHỖ. Thiếu id thì mỗi lần Lưu là xoá-và-tạo-lại ⇒ id câu AI đổi hết, đúng thứ F10
       // sinh ra để chặn. (Ghép từ nhánh F10 vòng 2 — bản F9 vòng 3 không mang id.)
@@ -754,6 +878,90 @@ export class CampaignForm implements OnInit {
   onAiCountInput(raw: string): void {
     const t = (raw ?? '').trim();
     this.aiCount.set(t === '' ? null : Number(t));
+  }
+
+  // ── Nhập câu hỏi từ file CSV ──────────────────────────────────────────────
+  //
+  // Backend CHỈ ĐỌC file và trả danh sách; không ghi gì. HR xem trước ở đây rồi bấm Lưu như bình
+  // thường, nên guard "chỉ sửa khi Draft", nhật ký thao tác và luật trộn câu F10 vẫn nằm đúng một
+  // chỗ — và file hỏng mã hoá chỉ làm HR thấy chữ lỗi trên màn hình rồi bấm Huỷ.
+
+  downloadTemplate(): void {
+    this.api.downloadQuestionsTemplate().subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'mau-cau-hoi.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+      error: () => this.notify.error('Không tải được file mẫu.'),
+    });
+  }
+
+  onCsvPicked(files: FileList | null): void {
+    const file = files?.[0];
+    if (!file) return;
+
+    const id = this.campaignId();
+    if (!id) {
+      this.notify.warn('Hãy tạo (lưu) chiến dịch trước khi nhập câu hỏi từ file.');
+      return;
+    }
+
+    this.importing.set(true);
+    this.api.importQuestions(id, file).subscribe({
+      next: (result) => {
+        this.importing.set(false);
+        this.importPreview.set(result);
+        if (!result.questions.length) {
+          this.notify.warn('Không đọc được câu hỏi hợp lệ nào trong file.');
+        }
+      },
+      error: (e) => {
+        this.importing.set(false);
+        this.importPreview.set(null);
+        // Thông báo của backend nói rõ sai gì và sửa thế nào (sai định dạng, thiếu cột, sai mã hoá)
+        // — hữu ích hơn hẳn câu chung chung của bộ chặn lỗi toàn cục.
+        this.notify.error(extractErrorMessage(e) ?? 'Không đọc được file.');
+      },
+    });
+  }
+
+  /**
+   * `replace` = thay toàn bộ; `append` = thêm vào cuối.
+   *
+   * ⚠ Câu nhập từ file luôn là câu MỚI (không có `id`). Nên `replace` sẽ xoá câu đang có kể cả câu
+   * AI đã sinh — nói rõ trong nhãn nút, đừng để HR hiểu là "trộn".
+   */
+  applyImport(mode: 'replace' | 'append'): void {
+    const preview = this.importPreview();
+    if (!preview?.questions.length) return;
+
+    if (mode === 'replace') this.questions.clear();
+
+    for (const q of preview.questions) {
+      this.questions.push(
+        this.questionRow(
+          q.questionText,
+          q.isRequired,
+          'CustomHr',
+          null,
+          q.sampleAnswer ?? '',
+          q.questionGroup ?? '',
+        ),
+      );
+    }
+
+    this.importPreview.set(null);
+    this.notify.info(
+      `Đã đưa ${preview.questions.length} câu vào biểu mẫu. Bấm Lưu để ghi lại.`,
+    );
+  }
+
+  cancelImport(): void {
+    this.importPreview.set(null);
   }
 
   generateQuestions(): void {
@@ -849,6 +1057,11 @@ export class CampaignForm implements OnInit {
         // đã đẻ ra dòng hardcode `source:'CustomHr'` xoá sạch provenance câu AI.
         // Cờ vẫn nằm trong form (questionRow) để badge hiển thị đúng trong phiên sửa hiện tại.
         isRequired: !!g.get('isRequired')!.value,
+        // LUÔN gửi hai field này, kể cả khi rỗng. BE phân biệt ba trạng thái: không gửi = giữ nguyên,
+        // '' = xoá, có nội dung = ghi đè. Bỏ field khi ô trống thì HR xoá đáp án xong bấm Lưu, đáp án
+        // cũ sống lại — mà không có lỗi nào để họ hiểu vì sao.
+        sampleAnswer: (g.get('sampleAnswer')?.value ?? '') as string,
+        questionGroup: (g.get('questionGroup')?.value ?? '') as string,
       };
     });
   }
@@ -898,6 +1111,7 @@ export class CampaignForm implements OnInit {
         timeLimitMinutes: v.timeLimitMinutes ?? null,
         passScorePct: v.passScorePct ?? null,
         maxConcurrentInterviews: v.maxConcurrentInterviews ?? null,
+        questionsPerSession: v.questionsPerSession ?? null,
         antiCheatEnabled: !!v.antiCheatEnabled,
         faceVerifyEnabled: !!v.faceVerifyEnabled,
         adaptiveEnabled: !!v.adaptiveEnabled,   // INT-17
@@ -934,6 +1148,7 @@ export class CampaignForm implements OnInit {
       timeLimitMinutes: v.timeLimitMinutes ?? null,
       passScorePct: v.passScorePct ?? null,
       maxConcurrentInterviews: v.maxConcurrentInterviews ?? null,
+      questionsPerSession: v.questionsPerSession ?? null,
       antiCheatEnabled: !!v.antiCheatEnabled,
       faceVerifyEnabled: !!v.faceVerifyEnabled,
       adaptiveEnabled: !!v.adaptiveEnabled,   // INT-17
