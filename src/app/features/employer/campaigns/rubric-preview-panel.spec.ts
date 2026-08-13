@@ -51,9 +51,11 @@ describe('RubricPreviewPanel — chấm thử thước đo', () => {
           ],
         },
       ],
+      // Mọi cặp kỳ-vọng/thật đều KHÁC nhau, và không cặp nào trùng cặp khác: hai số trùng nhau
+      // tình cờ sẽ làm mọi phép hoán đổi "kỳ vọng ↔ thật" chạy qua mà không test nào kêu.
       samples: [
-        sample('Weak', 2, 2),
-        sample('Good', 6, 6),
+        sample('Weak', 2, 3),
+        sample('Good', 6, 5),
         sample('Excellent', 10, 9),
       ],
       errorReason: null,
@@ -295,6 +297,67 @@ describe('RubricPreviewPanel — chấm thử thước đo', () => {
       const pts = cmp.pointsFor(run(), 'c1');
       expect(pts.filter((p) => p.kind === 'actual')).toHaveLength(3);
       expect(pts.filter((p) => p.kind === 'expected')).toHaveLength(3);
+    });
+
+    it('chấm đặc lấy ĐIỂM THẬT, vòng rỗng lấy MỨC KỲ VỌNG — không được lẫn nguồn', () => {
+      // Cả cơ chế expected-vs-actual (thứ duy nhất đo được độ tự-khen của AI) dựa vào việc hai
+      // giá trị này đến từ hai nguồn KHÁC nhau. Lẫn nguồn thì hình vẽ vẫn đẹp, chỉ là vô nghĩa.
+      const cmp = render().componentInstance;
+      const pts = cmp.pointsFor(run(), 'c1');
+
+      expect(pts.filter((p) => p.kind === 'actual').map((p) => p.value)).toEqual([3, 5, 9]);
+      expect(pts.filter((p) => p.kind === 'expected').map((p) => p.value)).toEqual([2, 6, 10]);
+    });
+  });
+
+  // ── Kỳ vọng vs thật: con số DUY NHẤT phơi bày việc AI tự khen văn nó viết ───
+  describe('đối chiếu kỳ vọng ↔ thật (đọc thẳng từ DOM)', () => {
+    /**
+     * Hoán đổi hai nguồn này làm mọi cột hiện "Kỳ vọng 42% → Thật 42%" — LUÔN LUÔN khớp. HR nhìn
+     * vào sẽ kết luận thước đo hiệu chỉnh hoàn hảo rồi phát link cho người thật. Sai lệch nghiêng
+     * về phía TRẤN AN, tức kiểu sai không ai đi báo (cùng hạng với lỗi F14 vẽ mốc khuyết thành 0).
+     */
+    function renderWith(s: RubricPreviewSample) {
+      const only = run({ samples: [s] });
+      api.runRubricPreview.mockReturnValue(of(only));
+      const fixture = render();
+      fixture.componentInstance.run();
+      fixture.detectChanges();
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    it('dòng tổng hiện ĐÚNG hai số khác nhau, kỳ vọng đứng TRƯỚC, thật đứng SAU', () => {
+      const host = renderWith({
+        ...sample('Good', 3, 7),
+        expectedWeightedPct: 30,
+        actualWeightedPct: 42,
+      });
+
+      const sub = host.querySelector('.sub')!.textContent!.replace(/\s+/g, ' ');
+      expect(sub).toMatch(/Kỳ vọng\s*30%\s*→\s*Thật\s*42%/);
+    });
+
+    it('headline "Tổng" là điểm THẬT, không phải kỳ vọng', () => {
+      const host = renderWith({
+        ...sample('Good', 3, 7),
+        expectedWeightedPct: 30,
+        actualWeightedPct: 42,
+      });
+
+      const tot = host.querySelector('.tot')!.textContent!;
+      expect(tot).toContain('42');
+      expect(tot).not.toContain('30');
+    });
+
+    it('bảng tiêu chí: cột kỳ vọng và cột điểm thật đọc từ hai nguồn khác nhau', () => {
+      const host = renderWith(sample('Good', 3, 7));
+
+      const nums = Array.from(host.querySelectorAll('.crit-tbl .c-num')).map((e) =>
+        e.textContent!.replace(/\s+/g, ''),
+      );
+      // Cột 1 = mức kỳ vọng, cột 2 = điểm thật kèm thang điểm.
+      expect(nums[0]).toBe('3');
+      expect(nums[1]).toBe('7/10');
     });
   });
 
