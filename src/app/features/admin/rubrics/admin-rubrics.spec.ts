@@ -287,6 +287,41 @@ describe('AdminRubrics — bộ chuẩn hệ thống', () => {
   });
 
   /**
+   * Chiều NGƯỢC LẠI (EN → VI) là chỗ dấu "cần dịch" thật sự phải làm việc: mô tả tiếng Anh không có
+   * ký tự nào đặc trưng nên `looksUntranslated` KHÔNG soi ra được (cố ý — xem hàm đó). Nếu không
+   * đánh dấu lúc chép thì mô tả tiếng Anh nằm im trong bộ tiếng Việt và **vẫn đi vào prompt chấm
+   * nguyên văn**, không có gì trên màn nói ra.
+   */
+  it('chép mốc EN → VI: vẫn đánh dấu cần dịch dù nội dung không soi ra được', () => {
+    const fixture = setup();
+    const cmp = fixture.componentInstance;
+    flushPreviewHistory();
+
+    const en: CriterionLevelItem[] = [
+      { score: 0, descriptor: 'HAS: names no relevant concept at all for this question' },
+      { score: 10, descriptor: 'HAS: names the concept, an example and the trade-offs' },
+    ];
+    cmp.copyLevelsFromOtherLanguage();
+    httpMock
+      .expectOne((r) => r.url === `${BASE}/BA` && r.params.get('language') === 'en')
+      .flush(
+        rubric({
+          language: 'en',
+          criteria: [
+            crit({ levels: en }),
+            crit({ id: 'cr-2', name: 'Giao tiếp', scoringScope: 'Always', levels: en }),
+          ],
+        }),
+      );
+
+    // Nội dung không soi ra được…
+    expect(looksUntranslated(en[0].descriptor, 'vi')).toBe(false);
+    // …nên dấu vết lúc chép là tín hiệu DUY NHẤT còn lại.
+    expect(cmp.rowUntranslated(0)).toBe(true);
+    expect(cmp.untranslatedCount()).toBe(2);
+  });
+
+  /**
    * Hai bộ ghép theo THỨ TỰ (tên hai ngôn ngữ khác nhau nên không khớp theo tên được). Số tiêu chí
    * lệch ⇒ ghép lệch hàng = dán mô tả của tiêu chí này sang tiêu chí khác, im lặng ⇒ phải từ chối.
    */
