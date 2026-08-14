@@ -33,6 +33,7 @@ function campaign(status = 'Draft', partial: Partial<CampaignResponse> = {}): Ca
     expiresAt: null,
     questions: [],
     criteria: [],
+    jobNeeds: [],
     jdText: null,
     criteriaText: null,
     createdAt: '2026-07-01T00:00:00Z',

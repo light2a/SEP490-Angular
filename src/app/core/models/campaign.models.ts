@@ -260,6 +260,11 @@ export interface CampaignResponse {
   expiresAt?: string | null;
   questions: CampaignQuestionResponse[];
   criteria: CampaignCriterionResponse[];
+  /**
+   * Nhu cầu công việc dùng để SÀNG CV — khác hẳn `criteria` (thước chấm buổi phỏng vấn).
+   * AI đề xuất từ JD lúc publish, HR sửa được khi còn Draft. `[]` = chưa chốt ⇒ chưa sàng CV được.
+   */
+  jobNeeds: JobNeed[];
   jdText?: string | null;
   criteriaText?: string | null;
   /**
@@ -736,19 +741,63 @@ export interface CandidateListItem {
   fullName?: string | null;
   email?: string | null;
   status: string;
+  /** Độ khớp công việc 0–100 — server TÍNH từ mức bằng chứng (xem `screeningVersion`). */
   overallMatchScore?: number | null;
   skills?: string[] | null;
   rejectReason?: string | null;
+  /**
+   * Cờ đứng CẠNH điểm, không nằm trong điểm: `High` = CV liệt kê rất nhiều kỹ năng mà không dự
+   * án nào chống lưng ⇒ điểm cao vẫn cần soi kỹ. Gộp vào điểm là làm mất khả năng giải thích.
+   */
+  verificationRisk?: VerificationRisk | null;
+  /** 1 = điểm cũ do LLM phán trên rubric phỏng vấn · 2 = tính từ bằng chứng. Hai thang KHÔNG so sánh được. */
+  screeningVersion?: number | null;
 }
 
-/** GET /campaign/{id}/candidates/{cid} — chi tiết ứng viên: summary + skills + điểm/reasoning từng tiêu chí. */
-export interface CriterionScoreItem {
-  criterionId: string;
-  criterionName: string;
-  matchScore: number;
-  maxScore: number;
-  reasoning?: string | null;
+/** Mức bằng chứng cho 1 nhu cầu công việc. */
+export type NeedLevel = 'Strong' | 'Partial' | 'Weak';
+
+/** Mức cần kiểm chứng lại khi phỏng vấn. */
+export type VerificationRisk = 'Low' | 'Medium' | 'High';
+
+/** Câu chuẩn khi không tìm thấy bằng chứng — server ghi đúng chuỗi này (không phải câu AI tự viết). */
+export const NO_EVIDENCE = 'Không thấy bằng chứng';
+
+/** 1 nhu cầu công việc suy từ JD — thước đo dùng chung cho MỌI ứng viên của campaign. */
+export interface JobNeed {
+  needId: string;
+  category: JobNeedCategory;
+  text: string;
+  /** `AiSuggested` | `HrEdited` — server sở hữu, client gửi lên cũng bị bỏ qua. */
+  source: string;
 }
+
+export type JobNeedCategory = 'Technical' | 'WorkStyle' | 'Communication' | 'Growth';
+
+export const JOB_NEED_CATEGORY_LABELS: Record<JobNeedCategory, string> = {
+  Technical: 'Kỹ thuật',
+  WorkStyle: 'Cách làm việc',
+  Communication: 'Giao tiếp',
+  Growth: 'Phát triển',
+};
+
+/** PUT /campaign/{id}/job-needs — HR sửa (replace-all). KHÔNG có `source`: server sở hữu nguồn gốc. */
+export interface JobNeedInput {
+  /** Echo lại id đang có để kết quả sàng đã lưu còn trỏ đúng dòng; bỏ trống ⇒ server cấp mới. */
+  needId?: string | null;
+  category: JobNeedCategory;
+  text: string;
+}
+
+/** Đánh giá CV theo 1 nhu cầu công việc — `evidence` là đoạn TRÍCH từ CV. */
+export interface NeedAssessmentItem {
+  needId?: string | null;
+  area?: string | null;
+  level?: NeedLevel | null;
+  evidence?: string | null;
+}
+
+/** GET /campaign/{id}/candidates/{cid} — kết quả HR technical screener. */
 export interface CandidateDetailResponse {
   id: string;
   fullName?: string | null;
@@ -760,7 +809,16 @@ export interface CandidateDetailResponse {
   summary?: string | null;
   rejectReason?: string | null;
   cvFileUrl?: string | null;
-  criterionScores: CriterionScoreItem[];
+  screeningVersion?: number | null;
+  fitSummary?: string | null;
+  /** Nhu cầu ứng viên ĐÁP ỨNG (Strong/Partial), kèm trích dẫn từ CV. */
+  strengths: NeedAssessmentItem[];
+  /** Nhu cầu CHƯA thấy bằng chứng — chính là việc cần hỏi ở vòng phỏng vấn. */
+  gaps: NeedAssessmentItem[];
+  bonusSignals: string[];
+  verificationRisk?: VerificationRisk | null;
+  /** Tối đa 3 câu nên hỏi. Chỉ là gợi ý cho HR — KHÔNG đi vào bộ câu hỏi chung của campaign. */
+  verifyQuestions: string[];
 }
 
 /** PATCH /campaign/{id}/candidates/{cid} — HR bổ sung email/fullName khi CV không tách được. */

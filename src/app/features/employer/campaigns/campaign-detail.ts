@@ -9,6 +9,7 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
+import { MatSelectModule } from '@angular/material/select';
 import { MatInputModule } from '@angular/material/input';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { extractErrorMessage } from '../../../core/api/http-utils';
@@ -23,6 +24,9 @@ import {
   CampaignStatus,
   CreateInvitationsResponse,
   CriterionLevelItem,
+  JOB_NEED_CATEGORY_LABELS,
+  JobNeedCategory,
+  JobNeedInput,
 } from '../../../core/models';
 import { Spinner } from '../../../shared/ui/spinner';
 import { RubricScaleStrip } from '../../../shared/rubric/rubric-scale-strip';
@@ -47,6 +51,7 @@ const STATUS_LABEL: Record<CampaignStatus, string> = {
     MatDividerModule,
     MatFormFieldModule,
     MatInputModule,
+    MatSelectModule,
     MatTooltipModule,
     Spinner,
     RubricScaleStrip,
@@ -258,6 +263,79 @@ const STATUS_LABEL: Record<CampaignStatus, string> = {
               }
             }
           </div>
+        }
+      </mat-card>
+
+      <!--
+        NHU CẦU CÔNG VIỆC — thước đo dùng để SÀNG CV, khác hẳn "Tiêu chí đánh giá" ở trên (thước
+        chấm buổi phỏng vấn). Tách hai thứ vì CV là giấy: không quan sát được "giao tiếp" hay
+        "tư duy phân tích" từ một trang PDF, ép chấm thì mô hình chỉ đoán.
+
+        Chốt MỘT LẦN cho cả chiến dịch (không suy lại theo từng CV) để mọi ứng viên được đo bằng
+        cùng một thước — cùng lý do CAMP-10 bắt mọi người nhận cùng bộ câu hỏi.
+      -->
+      <mat-card class="section" data-testid="job-needs-section">
+        <div class="sec-head">
+          <h3>Nhu cầu công việc — dùng để sàng CV ({{ c.jobNeeds.length }})</h3>
+          @if (c.status === 'Draft' && !editingNeeds()) {
+            <button mat-stroked-button (click)="startEditNeeds(c)" data-testid="edit-job-needs">
+              <mat-icon>edit</mat-icon> Sửa
+            </button>
+          }
+        </div>
+
+        @if (c.status === 'Draft') {
+          <p class="ruler-note">
+            Hệ thống đọc JD và đề xuất sẵn khi xuất bản; bạn sửa lại cho đúng nhu cầu thật. Sau khi
+            xuất bản thì <strong>không sửa được nữa</strong> — đổi thước giữa chừng thì ứng viên
+            sàng trước và sàng sau không so sánh được với nhau.
+          </p>
+        }
+
+        @if (editingNeeds()) {
+          <div class="need-edit">
+            @for (n of needDrafts(); track $index) {
+              <div class="need-row">
+                <mat-form-field appearance="outline" class="n-cat">
+                  <mat-label>Nhóm</mat-label>
+                  <mat-select [(ngModel)]="n.category">
+                    @for (opt of needCategories; track opt.value) {
+                      <mat-option [value]="opt.value">{{ opt.label }}</mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+                <mat-form-field appearance="outline" class="n-text">
+                  <mat-label>Nhu cầu</mat-label>
+                  <input matInput [(ngModel)]="n.text" placeholder="vd: Thạo .NET ở mức làm production" />
+                </mat-form-field>
+                <button mat-icon-button (click)="removeNeed($index)" [attr.aria-label]="'Xoá dòng'">
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </div>
+            }
+            <div class="need-actions">
+              <button mat-button (click)="addNeed()"><mat-icon>add</mat-icon> Thêm nhu cầu</button>
+              <span class="spacer"></span>
+              <button mat-button (click)="cancelEditNeeds()">Huỷ</button>
+              <button mat-flat-button color="primary" [disabled]="busy()" (click)="saveNeeds()">
+                Lưu
+              </button>
+            </div>
+          </div>
+        } @else if (c.jobNeeds.length === 0) {
+          <p class="muted">
+            Chưa chốt nhu cầu công việc — chưa sàng CV được. Xuất bản chiến dịch để hệ thống đề xuất
+            từ JD, hoặc tự khai bằng nút “Sửa”.
+          </p>
+        } @else {
+          <ul class="need-view">
+            @for (n of c.jobNeeds; track n.needId) {
+              <li>
+                <span class="n-tag">{{ needCategoryLabel(n.category) }}</span>
+                {{ n.text }}
+              </li>
+            }
+          </ul>
         }
       </mat-card>
 
@@ -563,6 +641,43 @@ const STATUS_LABEL: Record<CampaignStatus, string> = {
       .lv-list li {
         margin-bottom: 3px;
       }
+      .need-view {
+        margin: 0;
+        padding-left: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .n-tag {
+        display: inline-block;
+        margin-right: 8px;
+        padding: 1px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        border: 1px solid var(--mat-sys-outline-variant);
+        color: var(--mat-sys-on-surface-variant);
+      }
+      .need-edit {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .need-row {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+      .n-cat {
+        width: 170px;
+      }
+      .n-text {
+        flex: 1;
+      }
+      .need-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
       .crit-list {
         display: flex;
         flex-direction: column;
@@ -701,6 +816,58 @@ export class CampaignDetail implements OnInit {
 
   emailsText = '';
   readonly inviteResult = signal<CreateInvitationsResponse | null>(null);
+
+  // ── Nhu cầu công việc (thước sàng CV) ──────────────────────────────────────
+  readonly editingNeeds = signal(false);
+  readonly needDrafts = signal<JobNeedInput[]>([]);
+  readonly needCategories = (Object.keys(JOB_NEED_CATEGORY_LABELS) as JobNeedCategory[]).map(
+    (value) => ({ value, label: JOB_NEED_CATEGORY_LABELS[value] }),
+  );
+
+  needCategoryLabel(category: string): string {
+    return JOB_NEED_CATEGORY_LABELS[category as JobNeedCategory] ?? category;
+  }
+
+  startEditNeeds(c: CampaignResponse): void {
+    // Chép cả `needId` sang bản nháp: gửi lại id đang có thì kết quả sàng đã lưu còn trỏ đúng dòng
+    // (mẫu F10 giữ id câu hỏi qua vòng đọc→sửa→lưu). Không chép thì mỗi lần Lưu là thay id mới.
+    this.needDrafts.set(
+      c.jobNeeds.map((n) => ({ needId: n.needId, category: n.category, text: n.text })),
+    );
+    this.editingNeeds.set(true);
+  }
+
+  cancelEditNeeds(): void {
+    this.editingNeeds.set(false);
+    this.needDrafts.set([]);
+  }
+
+  addNeed(): void {
+    this.needDrafts.update((list) => [...list, { category: 'Technical', text: '' }]);
+  }
+
+  removeNeed(index: number): void {
+    this.needDrafts.update((list) => list.filter((_, i) => i !== index));
+  }
+
+  saveNeeds(): void {
+    const needs = this.needDrafts()
+      .map((n) => ({ ...n, text: n.text.trim() }))
+      .filter((n) => n.text.length > 0);
+    this.busy.set(true);
+    this.api.updateJobNeeds(this.campaignId(), needs).subscribe({
+      next: (c) => {
+        this.campaign.set(c);
+        this.busy.set(false);
+        this.cancelEditNeeds();
+        this.notify.success('Đã lưu nhu cầu công việc.');
+      },
+      error: (e: HttpErrorResponse) => {
+        this.busy.set(false);
+        this.notify.error(extractErrorMessage(e) ?? 'Lưu nhu cầu công việc thất bại.');
+      },
+    });
+  }
 
   ngOnInit(): void {
     this.load();

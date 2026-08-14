@@ -43,6 +43,7 @@ describe('CampaignForm — F10 trộn câu hỏi AI + HR', () => {
     jdText: 'JD',
     criteriaText: null,
     criteria: [],
+    jobNeeds: [],
     questions: [
       { id: 'q-ai', questionText: 'Câu AI sinh', source: 'AiGenerated', isRequired: true },
       { id: 'q-hr', questionText: 'Câu HR gõ', source: 'CustomHr', isRequired: true },

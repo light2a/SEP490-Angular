@@ -16,6 +16,7 @@ import {
   CreateApiKeyResponse,
   CandidateDetailResponse,
   CandidateListItem,
+  JobNeedInput,
   CreateCampaignRequest,
   CreateCampaignSlotRequest,
   PatchCandidateRequest,
@@ -278,9 +279,18 @@ export class CampaignApi {
     return this.http.get<RubricPreviewRun[]>(`${this.base}/${id}/rubric-preview`);
   }
 
-  /** POST /campaign/{id}/publish → Active (sinh campaign_criteria từ text/structured). */
+  /** POST /campaign/{id}/publish → Active (sinh campaign_criteria + nhu cầu công việc từ JD). */
   publishCampaign(id: string): Observable<CampaignResponse> {
     return this.http.post<CampaignResponse>(`${this.base}/${id}/publish`, {});
+  }
+
+  /**
+   * PUT /campaign/{id}/job-needs — HR chốt nhu cầu công việc dùng để sàng CV (replace-all).
+   * Chỉ khi campaign còn `Draft` (đổi thước đo giữa chừng thì ứng viên sàng trước và sàng sau
+   * không so sánh được nữa) → ngoài Draft server trả 409.
+   */
+  updateJobNeeds(id: string, needs: JobNeedInput[]): Observable<CampaignResponse> {
+    return this.http.put<CampaignResponse>(`${this.base}/${id}/job-needs`, needs);
   }
 
   /** PUT /campaign/{id}/status — Active→Closed→Archived. */

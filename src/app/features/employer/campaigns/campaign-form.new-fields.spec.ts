@@ -29,6 +29,7 @@ function campaign(partial: Partial<CampaignResponse> = {}): CampaignResponse {
     jdText: 'JD',
     criteriaText: 'Ưu tiên kinh nghiệm hệ phân tán',
     criteria: [],
+    jobNeeds: [],
     questions: [{ id: 'q-1', questionText: 'Câu 1', source: 'CustomHr', isRequired: true }],
     createdAt: '2026-07-01T00:00:00Z',
     updatedAt: '2026-07-01T00:00:00Z',

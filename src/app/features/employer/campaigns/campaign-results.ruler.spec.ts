@@ -189,6 +189,7 @@ describe('CampaignDetail — lối vào sửa thước đo khi Active', () => {
         adaptiveEnabled: false,
         rubricVersion: 2,
         criteria: [],
+        jobNeeds: [],
         questions: [],
         createdAt: '2026-08-01T00:00:00Z',
         updatedAt: '2026-08-01T00:00:00Z',

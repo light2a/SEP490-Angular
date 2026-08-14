@@ -47,6 +47,7 @@ describe('CampaignForm — đáp án mẫu, nhập CSV, ngân hàng đề', () =
     jdText: 'JD',
     criteriaText: null,
     criteria: [],
+    jobNeeds: [],
     questions: [
       {
         id: 'q-1',

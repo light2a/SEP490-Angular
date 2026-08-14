@@ -56,6 +56,7 @@ describe('CampaignApi', () => {
       membershipStatus: 'Joined',
       interviewStatus: 'NotStarted',
       criteria: [],
+      jobNeeds: [],
       started: false,
     });
   });

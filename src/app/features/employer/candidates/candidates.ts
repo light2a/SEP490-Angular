@@ -164,7 +164,27 @@ const INVITABLE = new Set(['Analyzed', 'Filtered']);
               <ng-container matColumnDef="score">
                 <th mat-header-cell *matHeaderCellDef>Điểm khớp</th>
                 <td mat-cell *matCellDef="let c">
-                  {{ c.overallMatchScore != null ? c.overallMatchScore : '—' }}
+                  <span class="score-cell">
+                    {{ c.overallMatchScore != null ? c.overallMatchScore : '—' }}
+                    <!--
+                      Cờ đứng CẠNH điểm chứ không gộp vào điểm: "CV kê nhiều kỹ năng mà không dự án
+                      nào chống lưng" là chuyện khác hẳn "khớp ít", nhồi cả hai vào một con số thì
+                      HR không đọc ra được cái nào nữa.
+                    -->
+                    @if (c.verificationRisk === 'High') {
+                      <mat-icon
+                        class="risk-flag"
+                        title="CV liệt kê nhiều kỹ năng nhưng thiếu dự án chống lưng — nên soi kỹ"
+                        >report</mat-icon
+                      >
+                    }
+                    <!-- Điểm chấm bằng thang cũ: không so sánh trực tiếp được với các dòng khác. -->
+                    @if (c.overallMatchScore != null && c.screeningVersion !== 2) {
+                      <mat-icon class="stale-flag" title="Chấm bằng cách cũ — không so sánh trực tiếp được"
+                        >history</mat-icon
+                      >
+                    }
+                  </span>
                 </td>
               </ng-container>
               <ng-container matColumnDef="reason">
@@ -269,6 +289,22 @@ const INVITABLE = new Set(['Analyzed', 'Filtered']);
       }
       .tbl {
         width: 100%;
+      }
+      .score-cell {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .score-cell mat-icon {
+        font-size: 18px;
+        width: 18px;
+        height: 18px;
+      }
+      .risk-flag {
+        color: var(--mat-sys-error);
+      }
+      .stale-flag {
+        color: var(--mat-sys-on-surface-variant);
       }
       .status-chip {
         padding: 2px 8px;
