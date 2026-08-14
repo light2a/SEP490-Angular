@@ -12,7 +12,7 @@ import { MatInputModule } from '@angular/material/input';
 import { CampaignApi } from '../../../core/api/campaign.api';
 import { extractErrorMessage } from '../../../core/api/http-utils';
 import { NotifyService } from '../../../core/notify.service';
-import { CandidateDetailResponse } from '../../../core/models';
+import { CandidateDetailResponse, NeedLevel, VerificationRisk } from '../../../core/models';
 import { EmptyState } from '../../../shared/ui/empty-state';
 import { Spinner } from '../../../shared/ui/spinner';
 
@@ -71,7 +71,38 @@ const STATUS_LABEL: Record<string, string> = {
                 <span class="k">Số năm KN</span>
                 <span class="v">{{ c.yearsExperience != null ? c.yearsExperience : '—' }}</span>
               </div>
+              @if (c.verificationRisk) {
+                <div class="item">
+                  <span class="k">Cần kiểm chứng</span>
+                  <span class="v risk" [class]="'risk-' + c.verificationRisk">
+                    {{ riskLabel(c.verificationRisk) }}
+                  </span>
+                </div>
+              }
             </div>
+
+            <!--
+              Điểm cũ (screeningVersion 1) do mô hình tự phán trên thước chấm buổi phỏng vấn; điểm
+              mới tính từ mức bằng chứng. Hai thang KHÔNG so sánh được với nhau, nên phải nói ra
+              thay vì để HR xếp chung một bảng mà không biết.
+            -->
+            @if (c.overallMatchScore != null && c.screeningVersion !== 2) {
+              <p class="muted stale-note">
+                <mat-icon>history</mat-icon>
+                Điểm này chấm bằng cách cũ, không so sánh trực tiếp được với ứng viên sàng lại sau
+                này. Bấm “Đẩy lại sàng CV” để chấm theo bằng chứng.
+              </p>
+            }
+
+            @if (c.verificationRisk === 'High') {
+              <div class="callout warn">
+                <mat-icon>report</mat-icon>
+                <div>
+                  <strong>CV liệt kê nhiều kỹ năng nhưng thiếu dự án chống lưng</strong>
+                  <p>Điểm khớp cao vẫn nên soi kỹ ở vòng phỏng vấn.</p>
+                </div>
+              </div>
+            }
 
             @if (c.skills?.length) {
               <mat-divider />
@@ -83,10 +114,10 @@ const STATUS_LABEL: Record<string, string> = {
               </mat-chip-set>
             }
 
-            @if (c.summary) {
+            @if (c.fitSummary || c.summary) {
               <mat-divider />
-              <h3>Tóm tắt CV</h3>
-              <p class="summary">{{ c.summary }}</p>
+              <h3>Hợp / không hợp ở đâu</h3>
+              <p class="summary">{{ c.fitSummary || c.summary }}</p>
             }
 
             @if (c.rejectReason) {
@@ -130,27 +161,28 @@ const STATUS_LABEL: Record<string, string> = {
           </mat-card-content>
         </mat-card>
 
-        <!-- Điểm theo tiêu chí -->
+        <!--
+          Đối chiếu CV với NHU CẦU CÔNG VIỆC của chiến dịch. Mỗi dòng phải kèm trích dẫn từ CV —
+          đó là thứ HR dùng để trả lời "vì sao loại người này", nên nó phải kiểm chứng được chứ
+          không phải một câu mô hình tự viết.
+        -->
         <mat-card class="card">
           <mat-card-header>
-            <mat-card-title>Điểm theo tiêu chí ({{ c.criterionScores.length }})</mat-card-title>
+            <mat-card-title>Đáp ứng nhu cầu công việc ({{ c.strengths.length }})</mat-card-title>
           </mat-card-header>
           <mat-card-content>
-            @if (!c.criterionScores.length) {
-              <p class="muted">Chưa có điểm chấm theo tiêu chí.</p>
+            @if (!c.strengths.length) {
+              <p class="muted">Chưa thấy nhu cầu nào có bằng chứng rõ trong CV.</p>
             } @else {
-              <div class="crit-list">
-                @for (cs of c.criterionScores; track cs.criterionId) {
-                  <div class="crit">
-                    <div class="crit-head">
-                      <strong>{{ cs.criterionName }}</strong>
-                      <span class="score">{{ cs.matchScore }}/{{ cs.maxScore }}</span>
+              <div class="need-list">
+                @for (a of c.strengths; track a.needId) {
+                  <div class="need">
+                    <div class="need-head">
+                      <strong>{{ a.area }}</strong>
+                      <span class="level" [class]="'lv-' + a.level">{{ levelLabel(a.level) }}</span>
                     </div>
-                    <div class="bar">
-                      <div class="bar-fill" [style.width.%]="pct(cs.matchScore, cs.maxScore)"></div>
-                    </div>
-                    @if (cs.reasoning) {
-                      <p class="reasoning">{{ cs.reasoning }}</p>
+                    @if (a.evidence) {
+                      <p class="evidence">“{{ a.evidence }}”</p>
                     }
                   </div>
                 }
@@ -158,6 +190,75 @@ const STATUS_LABEL: Record<string, string> = {
             }
           </mat-card-content>
         </mat-card>
+
+        <!--
+          Nhóm chưa thấy bằng chứng CHÍNH LÀ danh sách việc cần kiểm ở vòng phỏng vấn — chứ không
+          phải "ứng viên không có". CV không nhắc ≠ không biết.
+        -->
+        <mat-card class="card">
+          <mat-card-header>
+            <mat-card-title>Chưa thấy bằng chứng ({{ c.gaps.length }})</mat-card-title>
+            <mat-card-subtitle>
+              CV không nhắc tới không có nghĩa ứng viên không có — đây là chỗ nên hỏi khi phỏng vấn.
+            </mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-content>
+            @if (!c.gaps.length) {
+              <p class="muted">Mọi nhu cầu đều có bằng chứng trong CV.</p>
+            } @else {
+              <div class="need-list">
+                @for (a of c.gaps; track a.needId) {
+                  <div class="need">
+                    <div class="need-head">
+                      <strong>{{ a.area }}</strong>
+                      <span class="level lv-Weak">{{ levelLabel(a.level) }}</span>
+                    </div>
+                    @if (a.evidence) {
+                      <p class="evidence muted">{{ a.evidence }}</p>
+                    }
+                  </div>
+                }
+              </div>
+            }
+          </mat-card-content>
+        </mat-card>
+
+        @if (c.bonusSignals.length) {
+          <mat-card class="card">
+            <mat-card-header>
+              <mat-card-title>Điểm cộng ngoài yêu cầu</mat-card-title>
+            </mat-card-header>
+            <mat-card-content>
+              <mat-chip-set>
+                @for (b of c.bonusSignals; track b) {
+                  <mat-chip>{{ b }}</mat-chip>
+                }
+              </mat-chip-set>
+            </mat-card-content>
+          </mat-card>
+        }
+
+        @if (c.verifyQuestions.length) {
+          <mat-card class="card">
+            <mat-card-header>
+              <mat-card-title>Nên hỏi để xác minh</mat-card-title>
+              <!--
+                Gợi ý riêng cho hồ sơ này, KHÔNG đưa vào bộ câu hỏi của chiến dịch: bộ đó là bộ
+                CHUNG cho mọi ứng viên — chính điều đó khiến bảng xếp hạng so sánh được với nhau.
+              -->
+              <mat-card-subtitle>
+                Gợi ý riêng cho ứng viên này; không nằm trong bộ câu hỏi chung của chiến dịch.
+              </mat-card-subtitle>
+            </mat-card-header>
+            <mat-card-content>
+              <ol class="verify-list">
+                @for (q of c.verifyQuestions; track q) {
+                  <li>{{ q }}</li>
+                }
+              </ol>
+            </mat-card-content>
+          </mat-card>
+        }
 
         <!-- Sửa email / họ tên -->
         <mat-card class="card">
@@ -278,43 +379,69 @@ const STATUS_LABEL: Record<string, string> = {
         color: var(--mat-sys-on-surface-variant);
         word-break: break-all;
       }
-      .crit-list {
+      .need-list {
         display: flex;
         flex-direction: column;
         gap: 14px;
       }
-      .crit {
+      .need {
         padding: 12px 14px;
         border-radius: 8px;
         background: var(--mat-sys-surface-variant);
       }
-      .crit-head {
+      .need-head {
         display: flex;
         justify-content: space-between;
         align-items: center;
         gap: 12px;
         margin-bottom: 8px;
       }
-      .score {
+      .level {
         font-weight: 600;
-        color: var(--mat-sys-primary);
         white-space: nowrap;
+        font-size: 13px;
+        padding: 2px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--mat-sys-outline-variant);
       }
-      .bar {
-        height: 8px;
-        border-radius: 4px;
-        background: var(--mat-sys-outline-variant);
-        overflow: hidden;
+      .lv-Strong {
+        color: var(--mat-sys-primary);
       }
-      .bar-fill {
-        height: 100%;
-        background: var(--mat-sys-primary);
+      .lv-Partial {
+        color: var(--mat-sys-tertiary);
       }
-      .reasoning {
+      .lv-Weak {
+        color: var(--mat-sys-on-surface-variant);
+      }
+      /* Trích dẫn từ CV — in nghiêng để phân biệt rõ với chữ do hệ thống viết ra. */
+      .evidence {
         margin: 10px 0 0;
         font-size: 14px;
+        font-style: italic;
         color: var(--mat-sys-on-surface-variant);
         white-space: pre-wrap;
+      }
+      .risk-High {
+        color: var(--mat-sys-error);
+      }
+      .stale-note {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        margin-top: 12px;
+        font-size: 13px;
+      }
+      .stale-note mat-icon {
+        font-size: 18px;
+        width: 18px;
+        height: 18px;
+      }
+      .verify-list {
+        margin: 0;
+        padding-left: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
       }
       .form-row {
         display: flex;
@@ -453,9 +580,26 @@ export class CandidateDetail implements OnInit {
     });
   }
 
-  pct(score: number, max: number): number {
-    if (!max || max <= 0) return 0;
-    return Math.min(100, Math.max(0, (score / max) * 100));
+  levelLabel(level?: NeedLevel | null): string {
+    switch (level) {
+      case 'Strong':
+        return 'Bằng chứng rõ';
+      case 'Partial':
+        return 'Có dấu hiệu';
+      default:
+        return 'Chưa thấy';
+    }
+  }
+
+  riskLabel(risk?: VerificationRisk | null): string {
+    switch (risk) {
+      case 'Low':
+        return 'Thấp';
+      case 'High':
+        return 'Cao';
+      default:
+        return 'Trung bình';
+    }
   }
 
   save(): void {

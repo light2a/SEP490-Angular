@@ -240,6 +240,22 @@ export interface SessionResult {
   cvVsAnswer?: CvVsAnswerReport | null;
   /** F14 — mốc đối chiếu (lớp 2 của radar); null khi BE tắt hoặc không dựng được. */
   benchmark?: SessionBenchmark | null;
+  /**
+   * Buổi này được chấm bằng THƯỚC ĐO nào — `SystemDefault` (bộ chuẩn hệ thống) hay `Custom`
+   * (rubric riêng do chính người dùng khai).
+   *
+   * Có mặt vì người dùng sửa rubric cho lệch, điểm tụt, và **không một chữ nào** nói rằng họ đang
+   * bị chấm bằng thước do chính mình đặt ⇒ họ kết luận hệ thống chấm sai.
+   *
+   * ⚠ Đọc từ con dấu ghi lúc TẠO buổi, không phải tra trạng thái lúc hiển thị — tra lại sẽ nói dối
+   * về những buổi chấm trước khi người dùng đổi rubric.
+   */
+  rubricSource?: 'SystemDefault' | 'Custom' | null;
+  /**
+   * Phiên bản của thước đo đó. **`null` = buổi cũ, chưa có con dấu** — KHÔNG được vẽ thành "bản 1":
+   * suy "bản 1" từ "không biết" là bịa ra một con số để đem so với các bản thật.
+   */
+  rubricVersion?: number | null;
 }
 
 /** F14 — mốc của 1 tiêu chí, thang % để vẽ chung trục với `CriterionScore.percentage`. */

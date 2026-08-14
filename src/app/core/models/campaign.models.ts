@@ -1,4 +1,4 @@
-import { CampaignStatus, CandidateInterviewStatus, QuestionKind } from './enums';
+import { CampaignStatus, CandidateInterviewStatus, JobCategory, QuestionKind } from './enums';
 
 /**
  * Tín hiệu proctoring (anti-cheat B2B) gửi lên backend — flag cho HR, KHÔNG auto-hủy.
@@ -154,7 +154,60 @@ export interface CampaignQuestionResponse {
   id: string;
   questionText: string;
   source: QuestionSource;
+  /** Câu BẮT BUỘC — mọi ứng viên đều gặp. `false` = nằm trong rổ rút thăm (xem `questionsPerSession`). */
   isRequired: boolean;
+  /**
+   * Đáp án mẫu HR soạn. `undefined` ở DANH SÁCH campaign (BE cố ý không trả để payload không cõng
+   * tới 200 × 5.000 ký tự mỗi lần mở trang) — chỉ màn chi tiết/sửa mới có.
+   */
+  sampleAnswer?: string | null;
+  /** Nhóm chủ đề — dùng để rút đề ĐỀU theo nhóm khi bật ngân hàng đề. */
+  questionGroup?: string | null;
+}
+
+/**
+ * 1 MỐC ĐIỂM của thước đo (E9 hard-anchor). `score` là điểm thật trên thang `maxScore` của tiêu
+ * chí, `descriptor` mô tả **quan sát được** ứng viên làm/nói gì ở mức đó — không phải tính từ đánh
+ * giá ("khá", "tốt") vì đó chỉ là đổi tên con số.
+ *
+ * Quy ước soạn: hai vế `CÓ: … | CÒN THIẾU: …` — vế sau ép mô tả dựng **biên** giữa mức n và n+1,
+ * nếu không thì gradient mờ và AI không phân biệt được 3 với 6.
+ */
+export interface CriterionLevelItem {
+  score: number;
+  descriptor: string;
+}
+
+/**
+ * 1 tiêu chí của BỘ CHUẨN HỆ THỐNG, ở dạng xem trước cho nhà tuyển dụng.
+ *
+ * Chỉ có `levelCount` chứ không có cả mảng mốc: xem trước là để trả lời *"chép về thì được những
+ * gì"*, không phải để đọc từng mô tả mốc — mốc chỉ nhà tuyển dụng thấy sau khi đã chép.
+ *
+ * ⚠ `levelCount = 0` là **HỢP LỆ** (quản trị viên chưa khai mốc cho tiêu chí đó) chứ không phải
+ * lỗi: không mốc thì bộ chấm rơi về dải mặc định, vẫn chấm được. Chặn thao tác chép vì lý do này
+ * là hiểu sai một trạng thái bình thường thành hỏng.
+ */
+export interface SystemDefaultPreviewCriterion {
+  name: string;
+  description?: string | null;
+  weight: number;
+  maxScore: number;
+  levelCount: number;
+}
+
+/**
+ * GET /campaign/criteria/system-default/preview — xem bộ chuẩn TRƯỚC khi chép về chiến dịch.
+ *
+ * **404 khác hẳn lỗi**: nghĩa là quản trị viên chưa soạn bộ chuẩn cho tổ hợp (nghề, ngôn ngữ) đó.
+ * Bộ chuẩn có 6 tổ hợp và nhiều khả năng được soạn dần từng cái, nên đây là ca thật chứ không phải
+ * biên hiếm — phải nói ra được thay vì hiện một lỗi đỏ chung chung.
+ */
+export interface SystemDefaultPreviewResponse {
+  jobCategory: JobCategory;
+  language: CampaignLanguage;
+  version: number;
+  criteria: SystemDefaultPreviewCriterion[];
 }
 
 /** 1 tiêu chí campaign có cấu trúc (đọc) — C12. */
@@ -166,6 +219,12 @@ export interface CampaignCriterionResponse {
   weight: number;
   maxScore: number;
   source: CriterionSource;
+  /**
+   * Mốc điểm của tiêu chí, sắp tăng dần theo `score`. Backend LUÔN gửi field này; mảng **rỗng**
+   * nghĩa là tiêu chí chưa có mốc (hợp lệ — lúc đó bộ chấm rơi về dải mặc định 0..maxScore).
+   * Vẫn đọc phòng thủ (`?? []`) ở nơi hiển thị vì deploy backend cũ hơn không có field.
+   */
+  levels: CriterionLevelItem[];
 }
 
 /** GET /campaign & GET /campaign/{id} — campaign đầy đủ hướng Employer. */
@@ -195,12 +254,31 @@ export interface CampaignResponse {
   /** INT-17: trần câu thích ứng / tổng câu. null = dùng mặc định phía backend. */
   maxFollowUps?: number | null;
   maxQuestions?: number | null;
+  /** NGÂN HÀNG ĐỀ: số câu mỗi ứng viên thi, rút từ bộ câu hỏi. null = thi HẾT bộ. */
+  questionsPerSession?: number | null;
   startsAt?: string | null;
   expiresAt?: string | null;
   questions: CampaignQuestionResponse[];
   criteria: CampaignCriterionResponse[];
+  /**
+   * Nhu cầu công việc dùng để SÀNG CV — khác hẳn `criteria` (thước chấm buổi phỏng vấn).
+   * AI đề xuất từ JD lúc publish, HR sửa được khi còn Draft. `[]` = chưa chốt ⇒ chưa sàng CV được.
+   */
+  jobNeeds: JobNeed[];
   jdText?: string | null;
   criteriaText?: string | null;
+  /**
+   * Phiên bản THƯỚC ĐO (bộ tiêu chí + mốc điểm). Bắt đầu từ 1; mỗi lần HR sửa mốc trên chiến dịch
+   * đang chạy thì tăng 1 và **chỉ áp cho ứng viên thi sau đó** — người đã chấm giữ nguyên điểm.
+   *
+   * Đây là ĐỊNH DANH chứ không phải bộ đếm: được phép có lỗ số (v1, v3, không có v2) khi HR sửa
+   * hai lần mà chưa ai vào thi ở giữa. Deploy backend cũ hơn không gửi field → `undefined` lúc
+   * chạy, nơi hiển thị phải kiểm trước khi vẽ chip.
+   */
+  rubricVersion: number;
+  rubricVersionUpdatedAt?: string | null;
+  /** Tên người sửa thước đo lần gần nhất (BE resolve sẵn, FE không tra Auth). */
+  rubricVersionUpdatedBy?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -211,6 +289,21 @@ export interface CriterionItem {
   weight: number;
   maxScore: number;
   description?: string | null;
+
+  /**
+   * Mốc điểm — hợp đồng BA TRẠNG THÁI, giống `QuestionItem.sampleAnswer`:
+   * - `undefined` / không gửi field = **KHÔNG ĐỔI** (giữ nguyên mốc đang có)
+   * - `[]` = **XOÁ hết mốc**
+   * - `[...]` = thay thế toàn bộ
+   *
+   * ⚠ Hai bẫy mất-mốc-câm, cả hai đều không sinh lỗi nào:
+   * 1. PUT là **replace-all mint id mới**, nên BE ghép mốc cũ sang tiêu chí mới theo **`name`**.
+   *    HR đổi TÊN tiêu chí mà client không gửi `levels` ⇒ carry-over trượt ⇒ mốc bay mất. Vì thế
+   *    form BUỘC phải gửi `levels` khi tên đổi, kể cả khi HR không mở panel mốc.
+   * 2. Khởi tạo mảng rỗng cho mọi hàng rồi gửi vô điều kiện ⇒ **mỗi lần Lưu là xoá sạch mốc**.
+   *    Phải theo dõi "HR đã chạm panel chưa" và chỉ gửi khi đã chạm (xem `levelsTouched`).
+   */
+  levels?: CriterionLevelItem[] | null;
 }
 
 /** Câu hỏi campaign (ghi) — F10. */
@@ -232,6 +325,37 @@ export interface QuestionItem {
   source?: QuestionSource;
 
   isRequired: boolean;
+
+  /**
+   * Đáp án mẫu. BE hiểu BA trạng thái, không phải hai:
+   * - `undefined` / không gửi field = **KHÔNG ĐỔI** (giữ nguyên đáp án đang có)
+   * - `''` (chuỗi rỗng) = **XOÁ** đáp án
+   * - chuỗi có nội dung = ghi đè
+   *
+   * ⚠ Đừng "dọn" bằng cách bỏ field khi ô trống — ô trống là ý định XOÁ của HR, bỏ field đi thì
+   * đáp án cũ sống lại sau mỗi lần Lưu.
+   */
+  sampleAnswer?: string;
+
+  /** Nhóm chủ đề. Cùng hợp đồng ba trạng thái với `sampleAnswer`. */
+  questionGroup?: string;
+}
+
+/** 1 dòng lỗi khi nhập câu hỏi từ file CSV. */
+export interface ImportRowError {
+  /** Số dòng TRONG FILE, tính cả dòng tiêu đề (tiêu đề = 1) — HR mở Excel nhảy đúng tới dòng này. */
+  line: number;
+  column?: string | null;
+  message: string;
+}
+
+/** Kết quả đọc file CSV — POST /campaign/{id}/questions/import. CHỈ ĐỌC, BE không ghi gì. */
+export interface ImportQuestionsResult {
+  totalRows: number;
+  /** Dòng hợp lệ, đúng thứ tự file. Nhồi thẳng vào form rồi Lưu — không cần ánh xạ lại. */
+  questions: QuestionItem[];
+  /** Dòng hỏng — không chặn cả file, HR sửa vài dòng dễ hơn tải lại từ đầu. */
+  errors: ImportRowError[];
 }
 
 /** POST /campaign — tạo campaign Draft. StartsAt/ExpiresAt KHÔNG được quá khứ; StartsAt < ExpiresAt; ≥1 question. */
@@ -253,6 +377,8 @@ export interface CreateCampaignRequest {
   adaptiveEnabled: boolean;
   maxFollowUps?: number | null;
   maxQuestions?: number | null;
+  /** NGÂN HÀNG ĐỀ: số câu mỗi ứng viên thi. Không gửi = thi HẾT bộ. Có gửi thì phải >= 1. */
+  questionsPerSession?: number | null;
   jdText?: string | null;
   criteriaText?: string | null;
   criteria?: CriterionItem[];
@@ -287,6 +413,8 @@ export interface UpdateCampaignRequest {
   adaptiveEnabled?: boolean;
   maxFollowUps?: number | null;
   maxQuestions?: number | null;
+  /** NGÂN HÀNG ĐỀ: undefined/null = KHÔNG đổi (giữ giá trị cũ), cùng nếp các trần trên. */
+  questionsPerSession?: number | null;
   jdText?: string | null;
   criteriaText?: string | null;
   criteria?: CriterionItem[];
@@ -393,6 +521,11 @@ export interface CampaignResultRow {
   overrideResult?: string | null;
   overrideNote?: string | null;
   overriddenAt?: string | null;
+  /**
+   * Thước đo đã dùng để chấm buổi này. **null = KHÔNG BIẾT** (buổi chấm trước khi có versioning),
+   * KHÔNG được vẽ thành `v1`: suy "biết" từ "không biết" chính là lỗi BK23. Chip `?` + tooltip.
+   */
+  rubricVersion?: number | null;
 }
 
 /** PUT /campaign/{id}/results/{sessionId}/override — HR chốt điểm cuối. Score+Result null = clear (về AI). */
@@ -430,18 +563,132 @@ export interface CampaignResultsResponse {
    * thẳng, nới lỏng chúng sẽ làm `strictTemplates` fail ở chỗ khác.
    */
   unscoredFlagged?: UnscoredFlaggedRow[];
+  /**
+   * Thước đo HIỆN TẠI của chiến dịch — để đối chiếu với `rubricVersion` từng dòng. Additive nên
+   * optional; deploy cũ không gửi ⇒ nơi đọc coi như "không biết", không so sánh gì cả.
+   */
+  currentRubricVersion?: number | null;
+}
+
+// ── Mốc điểm: AI gợi ý + chấm thử (kiểm chứng thước đo trước khi phát link) ──
+/** 1 tiêu chí kèm mốc do AI gợi ý — POST /campaign/{id}/criteria/levels/suggest. */
+export interface SuggestedCriterionLevels {
+  criterionId: string;
+  name: string;
+  maxScore: number;
+  levels: CriterionLevelItem[];
+}
+
+/**
+ * Kết quả gợi ý mốc. **Backend KHÔNG ghi DB** — chỉ trả về để HR xem/sửa rồi lưu qua `PUT /campaign/{id}`
+ * như bình thường (giữ nhật ký thao tác + luật tăng phiên bản ở đúng một chỗ).
+ * AI lỗi → 502, KHÔNG có dải mặc định thay thế (fallback sẽ khiến HR tin `"Mức 3/10"` là do AI viết).
+ */
+export interface SuggestCriterionLevelsResponse {
+  criteria: SuggestedCriterionLevels[];
+}
+
+/** Trạng thái 1 lượt chấm thử. `Running` là hàng rào chống bấm hai lần, tồn tại kể cả khi tab chết. */
+export type RubricPreviewStatus = 'Running' | 'Succeeded' | 'Failed';
+
+/** Bài mẫu thuộc nhóm nào. `Custom` = bài HR tự dán — bài DUY NHẤT không do bộ chấm viết ra. */
+export type RubricPreviewBand = 'Weak' | 'Good' | 'Excellent' | 'Custom';
+
+/** Điểm 1 tiêu chí trên 1 bài mẫu: mức KỲ VỌNG (code chọn trước) vs điểm THẬT (AI chấm). */
+export interface RubricPreviewCriterionScore {
+  criterionId: string;
+  criterionName: string;
+  maxScore: number;
+  /** Mức do CODE chọn trước khi sinh bài — biết trước nên so được, không phải AI tự khai. */
+  expectedLevel: number;
+  actualScore: number;
+  /** Mức mà AI tự nhận đã chọn (E9); null nếu bộ chấm không neo được về mốc nào. */
+  levelMatched?: number | null;
+  reasoning?: string | null;
+}
+
+/** 1 bài mẫu + điểm chấm được. */
+export interface RubricPreviewSample {
+  band: RubricPreviewBand;
+  answerText: string;
+  /** Đếm bởi backend — cùng nguồn với phép kiểm chênh lệch độ dài (`lengthParityWarning`). */
+  wordCount: number;
+  expectedWeightedPct: number;
+  actualWeightedPct: number;
+  scores: RubricPreviewCriterionScore[];
+}
+
+/** Ảnh chụp 1 tiêu chí tại thời điểm chấm thử — để đọc lại lịch sử mà không phụ thuộc bộ hiện tại. */
+export interface RubricPreviewCriterionSnapshot {
+  criterionId: string;
+  name: string;
+  weight: number;
+  maxScore: number;
+  levels: CriterionLevelItem[];
+}
+
+/**
+ * 1 lượt chấm thử — POST/GET /campaign/{id}/rubric-preview.
+ *
+ * `rubricFingerprint` + `rubricVersion` + `promptVersion` là thứ làm "so trước/sau" TRUNG THỰC:
+ * cùng dấu vân tay mà điểm khác = **nhiễu của mô hình**; khác dấu vân tay = **đã đổi thước đo**.
+ * Thiếu chúng thì mọi so sánh giữa hai lượt đều là bịa, và HR sẽ quy mọi thay đổi cho việc mình
+ * vừa sửa mốc (kể cả khi thực ra admin đổi prompt hệ thống ở giữa).
+ */
+export interface RubricPreviewRun {
+  id: string;
+  status: RubricPreviewStatus;
+  /** Câu hỏi đã dùng; null khi câu đó đã bị xoá khỏi chiến dịch (không có FK, cố ý). */
+  questionId?: string | null;
+  /** Ảnh chụp nội dung câu hỏi lúc chạy — vẫn đọc được sau khi câu gốc bị thay. */
+  questionText: string;
+  rubricFingerprint: string;
+  rubricVersion: number;
+  promptVersion?: number | null;
+  /**
+   * **v1 luôn `false`**: bài mẫu là VĂN BẢN nên không có số đo cách nói (tốc độ, khoảng lặng, từ
+   * đệm) như buổi thi có ghi âm. Là cờ CẤU TRÚC chứ không phải suy từ tên tiêu chí — nhận diện
+   * tiêu chí "trôi chảy" bằng khớp tên sẽ bắn nhầm (tên do HR gõ, lại song ngữ).
+   */
+  deliveryMetricsAvailable: boolean;
+  /**
+   * 3 bài lệch nhau quá nhiều về SỐ TỪ. Khi đó dải điểm đẹp có thể chỉ phản ánh độ dài chứ không
+   * phải thước đo phân biệt được — nên cảnh báo chứ không giấu.
+   */
+  lengthParityWarning: boolean;
+  /** Lượt này có trừ credit ví Org hay không (3 lượt **thành công** đầu mỗi phiên bản là miễn phí). */
+  billed: boolean;
+  freeRunsRemaining: number;
+  rubric: RubricPreviewCriterionSnapshot[];
+  samples: RubricPreviewSample[];
+  errorReason?: string | null;
+  createdAt: string;
+  completedAt?: string | null;
+}
+
+/** POST /campaign/{id}/rubric-preview — `customAnswer` là bài thứ 4 tuỳ chọn do HR tự dán. */
+export interface RunRubricPreviewRequest {
+  questionId: string;
+  customAnswer?: string;
 }
 
 // ── Transcript + dẫn chứng chấm điểm cho HR (AI4) ───────────────────────────
 /**
  * Điểm + nhận xét AI của 1 tiêu chí trong 1 câu trả lời.
- * ⚠ Backend chỉ trả `criterionId` (GUID rubric_criteria phía Interview, KHÁC id campaign_criteria
- * vì được materialize mới lúc tạo session) — KHÔNG có tên tiêu chí lẫn maxScore, nên FE không thể
- * tra ngược tên. Hiển thị id rút gọn thay vì đoán mò (đoán sai = gán nhầm dẫn chứng cho tiêu chí).
+ *
+ * `criterionId` là GUID `rubric_criteria` phía Interview (KHÁC id `campaign_criteria` vì được
+ * materialize mới lúc tạo session) ⇒ FE không tra ngược tên được, phải nhận từ backend.
+ *
+ * ⚠ `criterionName`/`maxScore` **nullable có chủ đích**: buổi chấm trước 2026-07-18 không có hai
+ * field này. Bỏ nhánh dự phòng về mã rút gọn = màn transcript của buổi cũ hiện trống.
  */
 export interface TranscriptCriterionScore {
   criterionId: string;
+  /** Tên tiêu chí do backend trả; null với buổi chấm cũ → hiển thị mã rút gọn của `criterionId`. */
+  criterionName?: string | null;
   score: number;
+  /** Thang điểm của tiêu chí (để hiện `3/5` thay vì `3`); null với buổi chấm cũ. */
+  maxScore?: number | null;
   /** E11 — AI phải trích dẫn chứng từ transcript; rỗng/ngắn → BE bật needsReview. */
   reasoning?: string | null;
 }
@@ -494,19 +741,63 @@ export interface CandidateListItem {
   fullName?: string | null;
   email?: string | null;
   status: string;
+  /** Độ khớp công việc 0–100 — server TÍNH từ mức bằng chứng (xem `screeningVersion`). */
   overallMatchScore?: number | null;
   skills?: string[] | null;
   rejectReason?: string | null;
+  /**
+   * Cờ đứng CẠNH điểm, không nằm trong điểm: `High` = CV liệt kê rất nhiều kỹ năng mà không dự
+   * án nào chống lưng ⇒ điểm cao vẫn cần soi kỹ. Gộp vào điểm là làm mất khả năng giải thích.
+   */
+  verificationRisk?: VerificationRisk | null;
+  /** 1 = điểm cũ do LLM phán trên rubric phỏng vấn · 2 = tính từ bằng chứng. Hai thang KHÔNG so sánh được. */
+  screeningVersion?: number | null;
 }
 
-/** GET /campaign/{id}/candidates/{cid} — chi tiết ứng viên: summary + skills + điểm/reasoning từng tiêu chí. */
-export interface CriterionScoreItem {
-  criterionId: string;
-  criterionName: string;
-  matchScore: number;
-  maxScore: number;
-  reasoning?: string | null;
+/** Mức bằng chứng cho 1 nhu cầu công việc. */
+export type NeedLevel = 'Strong' | 'Partial' | 'Weak';
+
+/** Mức cần kiểm chứng lại khi phỏng vấn. */
+export type VerificationRisk = 'Low' | 'Medium' | 'High';
+
+/** Câu chuẩn khi không tìm thấy bằng chứng — server ghi đúng chuỗi này (không phải câu AI tự viết). */
+export const NO_EVIDENCE = 'Không thấy bằng chứng';
+
+/** 1 nhu cầu công việc suy từ JD — thước đo dùng chung cho MỌI ứng viên của campaign. */
+export interface JobNeed {
+  needId: string;
+  category: JobNeedCategory;
+  text: string;
+  /** `AiSuggested` | `HrEdited` — server sở hữu, client gửi lên cũng bị bỏ qua. */
+  source: string;
 }
+
+export type JobNeedCategory = 'Technical' | 'WorkStyle' | 'Communication' | 'Growth';
+
+export const JOB_NEED_CATEGORY_LABELS: Record<JobNeedCategory, string> = {
+  Technical: 'Kỹ thuật',
+  WorkStyle: 'Cách làm việc',
+  Communication: 'Giao tiếp',
+  Growth: 'Phát triển',
+};
+
+/** PUT /campaign/{id}/job-needs — HR sửa (replace-all). KHÔNG có `source`: server sở hữu nguồn gốc. */
+export interface JobNeedInput {
+  /** Echo lại id đang có để kết quả sàng đã lưu còn trỏ đúng dòng; bỏ trống ⇒ server cấp mới. */
+  needId?: string | null;
+  category: JobNeedCategory;
+  text: string;
+}
+
+/** Đánh giá CV theo 1 nhu cầu công việc — `evidence` là đoạn TRÍCH từ CV. */
+export interface NeedAssessmentItem {
+  needId?: string | null;
+  area?: string | null;
+  level?: NeedLevel | null;
+  evidence?: string | null;
+}
+
+/** GET /campaign/{id}/candidates/{cid} — kết quả HR technical screener. */
 export interface CandidateDetailResponse {
   id: string;
   fullName?: string | null;
@@ -518,7 +809,16 @@ export interface CandidateDetailResponse {
   summary?: string | null;
   rejectReason?: string | null;
   cvFileUrl?: string | null;
-  criterionScores: CriterionScoreItem[];
+  screeningVersion?: number | null;
+  fitSummary?: string | null;
+  /** Nhu cầu ứng viên ĐÁP ỨNG (Strong/Partial), kèm trích dẫn từ CV. */
+  strengths: NeedAssessmentItem[];
+  /** Nhu cầu CHƯA thấy bằng chứng — chính là việc cần hỏi ở vòng phỏng vấn. */
+  gaps: NeedAssessmentItem[];
+  bonusSignals: string[];
+  verificationRisk?: VerificationRisk | null;
+  /** Tối đa 3 câu nên hỏi. Chỉ là gợi ý cho HR — KHÔNG đi vào bộ câu hỏi chung của campaign. */
+  verifyQuestions: string[];
 }
 
 /** PATCH /campaign/{id}/candidates/{cid} — HR bổ sung email/fullName khi CV không tách được. */

@@ -59,6 +59,7 @@ export class AdminShell {
     { path: 'wallet', icon: 'account_balance_wallet', label: 'Ví & chế độ TT' },
     { path: 'analytics', icon: 'insights', label: 'Thống kê vận hành' },
     { path: 'prompts', icon: 'edit_note', label: 'Prompt AI' },
+    { path: 'rubrics', icon: 'straighten', label: 'Bộ chuẩn chấm điểm' },
   ];
 
   toggle(): void {

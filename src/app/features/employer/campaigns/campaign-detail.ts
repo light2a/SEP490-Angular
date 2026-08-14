@@ -9,7 +9,9 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
+import { MatSelectModule } from '@angular/material/select';
 import { MatInputModule } from '@angular/material/input';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { extractErrorMessage } from '../../../core/api/http-utils';
 import { CampaignApi } from '../../../core/api/campaign.api';
 import { NotifyService } from '../../../core/notify.service';
@@ -21,8 +23,13 @@ import {
   CampaignSeniority,
   CampaignStatus,
   CreateInvitationsResponse,
+  CriterionLevelItem,
+  JOB_NEED_CATEGORY_LABELS,
+  JobNeedCategory,
+  JobNeedInput,
 } from '../../../core/models';
 import { Spinner } from '../../../shared/ui/spinner';
+import { RubricScaleStrip } from '../../../shared/rubric/rubric-scale-strip';
 
 const STATUS_LABEL: Record<CampaignStatus, string> = {
   Draft: 'Nháp',
@@ -44,7 +51,10 @@ const STATUS_LABEL: Record<CampaignStatus, string> = {
     MatDividerModule,
     MatFormFieldModule,
     MatInputModule,
+    MatSelectModule,
+    MatTooltipModule,
     Spinner,
+    RubricScaleStrip,
   ],
   template: `
     <div class="head">
@@ -200,7 +210,24 @@ const STATUS_LABEL: Record<CampaignStatus, string> = {
       </mat-card>
 
       <mat-card class="section">
-        <h3>Tiêu chí đánh giá ({{ c.criteria.length }})</h3>
+        <div class="sec-head">
+          <h3>Tiêu chí đánh giá ({{ c.criteria.length }})</h3>
+          @if (c.rubricVersion; as v) {
+            <span class="ruler-chip" [matTooltip]="rulerTooltip(c)" data-testid="ruler-chip"
+              >Thước đo v{{ v }}</span
+            >
+          }
+        </div>
+
+        @if (c.status === 'Active') {
+          <p class="ruler-note" data-testid="active-ruler-banner">
+            Chiến dịch đang chạy. Sửa mốc điểm sẽ tạo
+            <strong>thước đo v{{ nextRubricVersion(c) }}</strong> và chỉ áp cho ứng viên thi
+            <strong>SAU khi lưu</strong> — người đã chấm bằng thước đo v{{ currentRubricVersion(c) }}
+            giữ nguyên điểm.
+          </p>
+        }
+
         @if (c.criteria.length === 0) {
           <p class="muted">Chưa có tiêu chí.</p>
         } @else {
@@ -218,8 +245,97 @@ const STATUS_LABEL: Record<CampaignStatus, string> = {
                   <span class="muted">tối đa {{ cr.maxScore }}</span>
                 </div>
               </div>
+              <!--
+                Mốc điểm chỉ ĐỌC ở đây. Không có mốc là trạng thái hợp lệ nhưng đáng nêu: lúc đó
+                bộ chấm không có mô tả nào để bám, nên không phân biệt được 3 với 6 điểm.
+              -->
+              <app-rubric-scale-strip
+                [maxScore]="cr.maxScore"
+                [levels]="levelsOf(cr)"
+                [criterionName]="''"
+              />
+              @if (levelsOf(cr).length > 0) {
+                <ul class="lv-list">
+                  @for (l of sortedLevels(levelsOf(cr)); track l.score) {
+                    <li><strong>{{ l.score }}</strong> — {{ l.descriptor }}</li>
+                  }
+                </ul>
+              }
             }
           </div>
+        }
+      </mat-card>
+
+      <!--
+        NHU CẦU CÔNG VIỆC — thước đo dùng để SÀNG CV, khác hẳn "Tiêu chí đánh giá" ở trên (thước
+        chấm buổi phỏng vấn). Tách hai thứ vì CV là giấy: không quan sát được "giao tiếp" hay
+        "tư duy phân tích" từ một trang PDF, ép chấm thì mô hình chỉ đoán.
+
+        Chốt MỘT LẦN cho cả chiến dịch (không suy lại theo từng CV) để mọi ứng viên được đo bằng
+        cùng một thước — cùng lý do CAMP-10 bắt mọi người nhận cùng bộ câu hỏi.
+      -->
+      <mat-card class="section" data-testid="job-needs-section">
+        <div class="sec-head">
+          <h3>Nhu cầu công việc — dùng để sàng CV ({{ c.jobNeeds.length }})</h3>
+          @if (c.status === 'Draft' && !editingNeeds()) {
+            <button mat-stroked-button (click)="startEditNeeds(c)" data-testid="edit-job-needs">
+              <mat-icon>edit</mat-icon> Sửa
+            </button>
+          }
+        </div>
+
+        @if (c.status === 'Draft') {
+          <p class="ruler-note">
+            Hệ thống đọc JD và đề xuất sẵn khi xuất bản; bạn sửa lại cho đúng nhu cầu thật. Sau khi
+            xuất bản thì <strong>không sửa được nữa</strong> — đổi thước giữa chừng thì ứng viên
+            sàng trước và sàng sau không so sánh được với nhau.
+          </p>
+        }
+
+        @if (editingNeeds()) {
+          <div class="need-edit">
+            @for (n of needDrafts(); track $index) {
+              <div class="need-row">
+                <mat-form-field appearance="outline" class="n-cat">
+                  <mat-label>Nhóm</mat-label>
+                  <mat-select [(ngModel)]="n.category">
+                    @for (opt of needCategories; track opt.value) {
+                      <mat-option [value]="opt.value">{{ opt.label }}</mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+                <mat-form-field appearance="outline" class="n-text">
+                  <mat-label>Nhu cầu</mat-label>
+                  <input matInput [(ngModel)]="n.text" placeholder="vd: Thạo .NET ở mức làm production" />
+                </mat-form-field>
+                <button mat-icon-button (click)="removeNeed($index)" [attr.aria-label]="'Xoá dòng'">
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </div>
+            }
+            <div class="need-actions">
+              <button mat-button (click)="addNeed()"><mat-icon>add</mat-icon> Thêm nhu cầu</button>
+              <span class="spacer"></span>
+              <button mat-button (click)="cancelEditNeeds()">Huỷ</button>
+              <button mat-flat-button color="primary" [disabled]="busy()" (click)="saveNeeds()">
+                Lưu
+              </button>
+            </div>
+          </div>
+        } @else if (c.jobNeeds.length === 0) {
+          <p class="muted">
+            Chưa chốt nhu cầu công việc — chưa sàng CV được. Xuất bản chiến dịch để hệ thống đề xuất
+            từ JD, hoặc tự khai bằng nút “Sửa”.
+          </p>
+        } @else {
+          <ul class="need-view">
+            @for (n of c.jobNeeds; track n.needId) {
+              <li>
+                <span class="n-tag">{{ needCategoryLabel(n.category) }}</span>
+                {{ n.text }}
+              </li>
+            }
+          </ul>
         }
       </mat-card>
 
@@ -252,6 +368,26 @@ const STATUS_LABEL: Record<CampaignStatus, string> = {
         </a>
       </mat-card>
 
+      <!--
+        Chiến dịch đang chạy vẫn phải có đường vào biểu mẫu: backend nay cho sửa tiêu chí + mốc
+        điểm ở trạng thái này (câu hỏi thì không). Thiếu lối vào ở đây thì cả quyền vừa mở ra
+        không ai dùng được — đúng kiểu tính năng "có mà không tới được".
+      -->
+      @if (c.status === 'Active') {
+        <mat-card class="section actions-card">
+          <a
+            mat-stroked-button
+            color="primary"
+            [routerLink]="['/employer/campaigns', c.id, 'edit']"
+            data-testid="edit-ruler-link"
+          >
+            <mat-icon>tune</mat-icon>
+            Sửa tiêu chí & mốc điểm
+          </a>
+          <span class="muted">Câu hỏi đã chốt, không sửa được nữa.</span>
+        </mat-card>
+      }
+
       <!-- Actions theo trạng thái -->
       @if (c.status === 'Draft') {
         <mat-card class="section actions-card">
@@ -261,7 +397,7 @@ const STATUS_LABEL: Record<CampaignStatus, string> = {
           </a>
           @if (confirmPublish()) {
             <span class="confirm">
-              Xuất bản chiến dịch? Sau khi xuất bản không sửa được tiêu chí/câu hỏi.
+              Xuất bản chiến dịch? Sau khi xuất bản, CÂU HỎI không sửa được nữa (mọi ứng viên phải nhận cùng bộ đề). Tiêu chí và mốc điểm vẫn sửa được, nhưng mỗi lần sửa sẽ tạo một phiên bản thước đo mới.
               <button mat-flat-button color="primary" [disabled]="busy()" (click)="publish()">
                 Xác nhận
               </button>
@@ -474,6 +610,74 @@ const STATUS_LABEL: Record<CampaignStatus, string> = {
         color: var(--mat-sys-on-surface-variant);
         font-size: 14px;
       }
+      .sec-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .ruler-chip {
+        padding: 3px 10px;
+        border-radius: 12px;
+        font-size: 12px;
+        background: var(--mat-sys-secondary-container);
+        color: var(--mat-sys-on-secondary-container);
+      }
+      .ruler-note {
+        margin: 4px 0 12px;
+        padding: 8px 12px;
+        border-radius: 8px;
+        font-size: 12px;
+        background: var(--mat-sys-secondary-container);
+        color: var(--mat-sys-on-secondary-container);
+      }
+      .lv-list {
+        margin: 0 0 14px;
+        padding-left: 18px;
+        font-size: 12px;
+        color: var(--mat-sys-on-surface-variant);
+      }
+      .lv-list li {
+        margin-bottom: 3px;
+      }
+      .need-view {
+        margin: 0;
+        padding-left: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .n-tag {
+        display: inline-block;
+        margin-right: 8px;
+        padding: 1px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        border: 1px solid var(--mat-sys-outline-variant);
+        color: var(--mat-sys-on-surface-variant);
+      }
+      .need-edit {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .need-row {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+      .n-cat {
+        width: 170px;
+      }
+      .n-text {
+        flex: 1;
+      }
+      .need-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
       .crit-list {
         display: flex;
         flex-direction: column;
@@ -613,6 +817,58 @@ export class CampaignDetail implements OnInit {
   emailsText = '';
   readonly inviteResult = signal<CreateInvitationsResponse | null>(null);
 
+  // ── Nhu cầu công việc (thước sàng CV) ──────────────────────────────────────
+  readonly editingNeeds = signal(false);
+  readonly needDrafts = signal<JobNeedInput[]>([]);
+  readonly needCategories = (Object.keys(JOB_NEED_CATEGORY_LABELS) as JobNeedCategory[]).map(
+    (value) => ({ value, label: JOB_NEED_CATEGORY_LABELS[value] }),
+  );
+
+  needCategoryLabel(category: string): string {
+    return JOB_NEED_CATEGORY_LABELS[category as JobNeedCategory] ?? category;
+  }
+
+  startEditNeeds(c: CampaignResponse): void {
+    // Chép cả `needId` sang bản nháp: gửi lại id đang có thì kết quả sàng đã lưu còn trỏ đúng dòng
+    // (mẫu F10 giữ id câu hỏi qua vòng đọc→sửa→lưu). Không chép thì mỗi lần Lưu là thay id mới.
+    this.needDrafts.set(
+      c.jobNeeds.map((n) => ({ needId: n.needId, category: n.category, text: n.text })),
+    );
+    this.editingNeeds.set(true);
+  }
+
+  cancelEditNeeds(): void {
+    this.editingNeeds.set(false);
+    this.needDrafts.set([]);
+  }
+
+  addNeed(): void {
+    this.needDrafts.update((list) => [...list, { category: 'Technical', text: '' }]);
+  }
+
+  removeNeed(index: number): void {
+    this.needDrafts.update((list) => list.filter((_, i) => i !== index));
+  }
+
+  saveNeeds(): void {
+    const needs = this.needDrafts()
+      .map((n) => ({ ...n, text: n.text.trim() }))
+      .filter((n) => n.text.length > 0);
+    this.busy.set(true);
+    this.api.updateJobNeeds(this.campaignId(), needs).subscribe({
+      next: (c) => {
+        this.campaign.set(c);
+        this.busy.set(false);
+        this.cancelEditNeeds();
+        this.notify.success('Đã lưu nhu cầu công việc.');
+      },
+      error: (e: HttpErrorResponse) => {
+        this.busy.set(false);
+        this.notify.error(extractErrorMessage(e) ?? 'Lưu nhu cầu công việc thất bại.');
+      },
+    });
+  }
+
   ngOnInit(): void {
     this.load();
   }
@@ -634,6 +890,44 @@ export class CampaignDetail implements OnInit {
 
   statusLabel(s: CampaignStatus): string {
     return STATUS_LABEL[s];
+  }
+
+  /**
+   * Mốc điểm của một tiêu chí, đọc PHÒNG THỦ.
+   *
+   * Kiểu khai `levels` là bắt buộc theo hợp đồng backend, nhưng chiến dịch tạo trước tính năng
+   * này (hoặc deploy backend cũ hơn) trả về `undefined` lúc chạy — và `undefined.length` ở template
+   * làm trắng cả trang chi tiết. Bọc trong hàm thay vì `?? []` ngay trong template để trình biên
+   * dịch không báo "toán tử ?? thừa" (nó tin kiểu, còn ta phải sống với dữ liệu thật).
+   */
+  levelsOf(cr: { levels: CriterionLevelItem[] }): CriterionLevelItem[] {
+    return cr.levels ?? [];
+  }
+
+  /** Mốc điểm đọc theo thứ tự TĂNG DẦN — ở màn chỉ-đọc thì đọc như một cái thang là tự nhiên nhất. */
+  sortedLevels(levels: CriterionLevelItem[]): CriterionLevelItem[] {
+    return [...levels].sort((a, b) => a.score - b.score);
+  }
+
+  /**
+   * Phiên bản thước đo đang dùng. Kiểu khai là bắt buộc nhưng chiến dịch cũ trả `undefined` lúc
+   * chạy — bọc trong hàm để trình biên dịch không coi `?? 1` là thừa (nó tin kiểu, ta tin dữ liệu).
+   */
+  currentRubricVersion(c: CampaignResponse): number {
+    return c.rubricVersion ?? 1;
+  }
+
+  /** Số phiên bản sẽ nhận nếu sửa mốc bây giờ. */
+  nextRubricVersion(c: CampaignResponse): number {
+    return this.currentRubricVersion(c) + 1;
+  }
+
+  rulerTooltip(c: CampaignResponse): string {
+    if (!c.rubricVersionUpdatedAt) return 'Thước đo gốc — chưa ai sửa mốc điểm.';
+    const when = new Date(c.rubricVersionUpdatedAt).toLocaleString('vi-VN');
+    return c.rubricVersionUpdatedBy
+      ? `Sửa lần cuối ${when} bởi ${c.rubricVersionUpdatedBy}`
+      : `Sửa lần cuối ${when}`;
   }
 
   /** Chiến dịch cũ (trước khi có cột) không trả seniority → nói rõ mặc định, không hiện ô trống. */

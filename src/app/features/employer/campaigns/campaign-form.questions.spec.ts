@@ -23,6 +23,7 @@ function campaign(partial: Partial<CampaignResponse> = {}): CampaignResponse {
     jdText: 'JD nội dung',
     questions: [],
     criteria: [],
+    jobNeeds: [],
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
     ...partial,
@@ -189,14 +190,22 @@ describe('CampaignForm — câu hỏi AI (F9/F10)', () => {
     httpMock.expectNone((r) => r.url === `${BASE}/c1/questions/generate`);
   });
 
-  it('campaign đã Active (readOnly) → không cho sinh (CAMP-2, backend sẽ 409)', () => {
+  /**
+   * ⚠ Tiền đề đổi CÓ CHỦ ĐÍCH: trước đây Active khoá TOÀN BỘ biểu mẫu (`readOnly === true`), nay
+   * backend cho sửa tiêu chí + mốc điểm trên chiến dịch đang chạy nên chỉ phần CÂU HỎI còn khoá
+   * (`PUT /questions` vẫn 409 — CAMP-2 nguyên vẹn cho câu hỏi).
+   * Ý định của test không đổi: Active thì KHÔNG được sinh câu hỏi.
+   */
+  it('campaign đã Active → không cho sinh câu hỏi (CAMP-2, backend sẽ 409)', () => {
     const fixture = setup(true);
     const cmp = fixture.componentInstance;
     fixture.componentRef.setInput('campaignId', 'c1');
     fixture.detectChanges();
     httpMock.expectOne(`${BASE}/c1`).flush(campaign({ status: 'Active' }));
 
-    expect(cmp.readOnly()).toBe(true);
+    expect(cmp.questionsReadOnly()).toBe(true);
+    // Không còn khoá cả biểu mẫu — đó chính là chỗ mở ra cho việc sửa mốc điểm.
+    expect(cmp.readOnly()).toBe(false);
     expect(cmp.canGenerate()).toBe(false);
     cmp.generateQuestions();
     httpMock.expectNone((r) => r.url === `${BASE}/c1/questions/generate`);

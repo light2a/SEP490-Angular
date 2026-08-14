@@ -17,6 +17,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSelectModule } from '@angular/material/select';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialog } from '@angular/material/dialog';
 import { extractErrorMessage } from '../../../core/api/http-utils';
 import { CampaignApi } from '../../../core/api/campaign.api';
@@ -29,6 +30,8 @@ import {
   CampaignSeniority,
   CreateCampaignRequest,
   CriterionItem,
+  CriterionLevelItem,
+  ImportQuestionsResult,
   JD_TEXT_MAX_CHARS,
   QuestionItem,
   QuestionSource,
@@ -36,6 +39,20 @@ import {
 } from '../../../core/models';
 import { ConfirmDialog, ConfirmDialogData } from '../../../shared/ui/confirm-dialog';
 import { Spinner } from '../../../shared/ui/spinner';
+import {
+  CriterionLevelsEditor,
+  CriterionLevelsSource,
+  canonicalLevels,
+  criterionLevelsValidator,
+  levelErrorMessages,
+  readLevels,
+} from '../../../shared/rubric/criterion-levels-editor';
+import { PreviewQuestionOption, RubricPreviewPanel } from './rubric-preview-panel';
+import {
+  SystemDefaultCriteriaChoice,
+  SystemDefaultCriteriaDialog,
+  SystemDefaultCriteriaDialogData,
+} from './system-default-criteria-dialog';
 
 /** ISO → giá trị datetime-local (theo giờ máy). */
 function toLocalInput(iso: string | null | undefined): string {
@@ -66,7 +83,10 @@ function toIso(local: string | null | undefined): string | null {
     MatSlideToggleModule,
     MatSelectModule,
     MatCheckboxModule,
+    MatTooltipModule,
     Spinner,
+    CriterionLevelsEditor,
+    RubricPreviewPanel,
   ],
   template: `
     <div class="head">
@@ -74,17 +94,36 @@ function toIso(local: string | null | undefined): string | null {
         <mat-icon>arrow_back</mat-icon>
       </button>
       <h1>{{ campaignId() ? 'Sửa chiến dịch' : 'Tạo chiến dịch' }}</h1>
+      @if (rubricVersion(); as v) {
+        <span class="ruler-chip" [matTooltip]="rulerTooltip()" data-testid="ruler-chip"
+          >Thước đo v{{ v }}</span
+        >
+      }
     </div>
 
     @if (loading()) {
       <app-spinner message="Đang tải..." />
     } @else {
+      <!--
+        Sửa mốc trên chiến dịch ĐANG CHẠY không hồi tố: người đã chấm giữ nguyên điểm, người thi
+        sau dùng thước mới. Nói trước, vì "sửa tiêu chí" nghe như sửa cho cả bảng xếp hạng.
+      -->
+      @if (isActive()) {
+        <mat-card class="notice ruler-notice" data-testid="active-ruler-banner">
+          <mat-icon>published_with_changes</mat-icon>
+          <span>
+            Chiến dịch đang chạy. Sửa mốc điểm sẽ tạo <strong>thước đo v{{ nextRubricVersion() }}</strong>
+            và chỉ áp cho ứng viên thi <strong>SAU khi lưu</strong> — người đã chấm bằng thước đo
+            v{{ rubricVersion() }} giữ nguyên điểm.
+          </span>
+        </mat-card>
+      }
+
       @if (readOnly()) {
         <mat-card class="notice">
           <mat-icon>lock</mat-icon>
           <span
-            >Chiến dịch không ở trạng thái Nháp nên không thể chỉnh sửa tiêu chí/câu hỏi. Chỉ có thể
-            xem.</span
+            >Chiến dịch đã đóng hoặc lưu trữ — chỉ có thể xem, không chỉnh sửa được gì.</span
           >
         </mat-card>
       }
@@ -173,6 +212,18 @@ function toIso(local: string | null | undefined): string | null {
                 <mat-hint>Để trống = không giới hạn</mat-hint>
               }
             </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Số câu mỗi ứng viên thi</mat-label>
+              <input matInput type="number" min="1" formControlName="questionsPerSession" />
+              @if (form.controls.questionsPerSession.hasError('min')) {
+                <mat-error>Phải từ 1 trở lên.</mat-error>
+              } @else {
+                <mat-hint>
+                  Để trống = ứng viên thi HẾT bộ câu hỏi. Đặt số nhỏ hơn = mỗi người bốc ngẫu nhiên
+                  ngần đó câu (câu đánh dấu "Bắt buộc" thì ai cũng gặp), rút đều theo nhóm chủ đề.
+                </mat-hint>
+              }
+            </mat-form-field>
           </div>
 
           <div class="two">
@@ -219,8 +270,48 @@ function toIso(local: string | null | undefined): string | null {
         <mat-card class="section">
           <div class="section-head">
             <h2>Tiêu chí đánh giá</h2>
-            <div class="w-total" [class.bad]="criteria.length > 0 && !weightOk()">
-              Σ trọng số: {{ totalWeight().toFixed(2) }}
+            <div class="head-right">
+              <!--
+                Ngang cấp với "Nhờ AI sinh câu hỏi" ở card dưới: đây là hành động của CẢ bộ tiêu
+                chí (một lời gọi cho mọi tiêu chí), không phải của riêng hàng nào.
+              -->
+              @if (!readOnly()) {
+                <!--
+                  Ngang cấp với "Nhờ AI gợi ý mốc" và đặt TRƯỚC nó: đây là cách nhanh nhất để có
+                  một thước đo tử tế, còn nhờ AI là bước tinh chỉnh sau đó.
+                -->
+                <button
+                  mat-stroked-button
+                  type="button"
+                  (click)="useSystemDefaultCriteria()"
+                  [disabled]="!canUseSystemDefault()"
+                  data-testid="use-system-default"
+                >
+                  @if (copyingSystemDefault()) {
+                    <mat-icon class="spin">progress_activity</mat-icon>
+                  } @else {
+                    <mat-icon>library_add</mat-icon>
+                  }
+                  Dùng bộ chuẩn theo nghề
+                </button>
+                <button
+                  mat-stroked-button
+                  type="button"
+                  (click)="suggestLevels(null)"
+                  [disabled]="!canSuggestLevels()"
+                  data-testid="suggest-levels-all"
+                >
+                  @if (suggestingLevels()) {
+                    <mat-icon class="spin">progress_activity</mat-icon>
+                  } @else {
+                    <mat-icon>auto_awesome</mat-icon>
+                  }
+                  {{ suggestingLevels() ? 'Đang gợi ý...' : 'Nhờ AI gợi ý mốc' }}
+                </button>
+              }
+              <div class="w-total" [class.bad]="criteria.length > 0 && !weightOk()">
+                Σ trọng số: {{ totalWeight().toFixed(2) }}
+              </div>
             </div>
           </div>
           <p class="hint">Tổng trọng số nên xấp xỉ 1.00 (backend chuẩn hoá về 1).</p>
@@ -250,31 +341,43 @@ function toIso(local: string | null | undefined): string | null {
 
           <div formArrayName="criteria">
             @for (g of criteria.controls; track $index; let i = $index) {
-              <div class="crit-row" [formGroupName]="i">
-                <mat-form-field appearance="outline" class="c-name">
-                  <mat-label>Tên tiêu chí *</mat-label>
-                  <input matInput formControlName="name" />
-                </mat-form-field>
-                <mat-form-field appearance="outline" class="c-num">
-                  <mat-label>Trọng số</mat-label>
-                  <input matInput type="number" formControlName="weight" step="0.05" min="0" />
-                </mat-form-field>
-                <mat-form-field appearance="outline" class="c-num">
-                  <mat-label>Điểm tối đa</mat-label>
-                  <input matInput type="number" formControlName="maxScore" min="1" />
-                </mat-form-field>
-                <mat-form-field appearance="outline" class="c-desc">
-                  <mat-label>Mô tả</mat-label>
-                  <input matInput formControlName="description" />
-                </mat-form-field>
-                <button
-                  mat-icon-button
-                  type="button"
-                  (click)="removeCriterion(i)"
-                  aria-label="Xoá tiêu chí"
-                >
-                  <mat-icon>delete</mat-icon>
-                </button>
+              <div class="crit-block">
+                <div class="crit-row" [formGroupName]="i">
+                  <mat-form-field appearance="outline" class="c-name">
+                    <mat-label>Tên tiêu chí *</mat-label>
+                    <input matInput formControlName="name" />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline" class="c-num">
+                    <mat-label>Trọng số</mat-label>
+                    <input matInput type="number" formControlName="weight" step="0.05" min="0" />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline" class="c-num">
+                    <mat-label>Điểm tối đa</mat-label>
+                    <input matInput type="number" formControlName="maxScore" min="1" />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline" class="c-desc">
+                    <mat-label>Mô tả</mat-label>
+                    <input matInput formControlName="description" />
+                  </mat-form-field>
+                  <button
+                    mat-icon-button
+                    type="button"
+                    (click)="removeCriterion(i)"
+                    aria-label="Xoá tiêu chí"
+                  >
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                </div>
+                <!--
+                  Mốc điểm nằm NGOÀI [formGroupName] ở trên: component con tự bind [formGroup] cho
+                  đúng hàng, nên lồng thêm một tầng tên nữa sẽ làm Angular tìm control sai đường.
+                -->
+                <app-criterion-levels-editor
+                  [group]="g"
+                  [disabled]="readOnly()"
+                  [aiBusy]="suggestingLevels()"
+                  (aiRequest)="suggestLevels(i)"
+                />
               </div>
             }
           </div>
@@ -286,9 +389,16 @@ function toIso(local: string | null | undefined): string | null {
 
         <mat-card class="section">
           <h2>Câu hỏi phỏng vấn *</h2>
-          <p class="hint">Cần ít nhất 1 câu hỏi.</p>
+          @if (questionsReadOnly() && !readOnly()) {
+            <p class="hint warn-hint" data-testid="questions-locked-note">
+              Chiến dịch đã xuất bản nên <strong>câu hỏi không sửa được nữa</strong> — mọi ứng viên
+              phải nhận cùng một bộ đề. Tiêu chí và mốc điểm thì vẫn sửa được ở phần trên.
+            </p>
+          } @else {
+            <p class="hint">Cần ít nhất 1 câu hỏi.</p>
+          }
 
-          @if (!readOnly()) {
+          @if (!questionsReadOnly()) {
             <div class="ai-gen">
               <div class="ai-gen-row">
                 <mat-form-field appearance="outline" class="ai-count">
@@ -329,6 +439,79 @@ function toIso(local: string | null | undefined): string | null {
             </div>
           }
 
+          @if (!questionsReadOnly()) {
+            <div class="import-box">
+              <div class="import-row">
+                <button mat-stroked-button type="button" (click)="downloadTemplate()">
+                  <mat-icon>download</mat-icon>
+                  Tải file mẫu
+                </button>
+                <input
+                  #csvInput
+                  type="file"
+                  accept=".csv,text/csv"
+                  hidden
+                  (change)="onCsvPicked($any($event.target).files)"
+                />
+                <button
+                  mat-stroked-button
+                  type="button"
+                  (click)="csvInput.click()"
+                  [disabled]="importing()"
+                >
+                  @if (importing()) {
+                    <mat-icon class="spin">progress_activity</mat-icon>
+                  } @else {
+                    <mat-icon>upload_file</mat-icon>
+                  }
+                  {{ importing() ? 'Đang đọc file...' : 'Nhập từ file CSV' }}
+                </button>
+              </div>
+              <p class="hint">
+                Tải file mẫu, điền bằng Excel rồi lưu lại dạng
+                <strong>CSV UTF-8 (Comma delimited)</strong>. Nội dung trong file
+                <strong>chưa được lưu</strong> — bạn xem trước rồi bấm Lưu như bình thường.
+              </p>
+
+              @if (importPreview(); as preview) {
+                <div class="import-preview">
+                  <p>
+                    Đọc được <strong>{{ preview.questions.length }}</strong> câu hỏi hợp lệ
+                    trên tổng {{ preview.totalRows }} dòng.
+                  </p>
+
+                  @if (preview.errors.length) {
+                    <ul class="import-errors">
+                      @for (e of preview.errors; track $index) {
+                        <li>Dòng {{ e.line }}{{ e.column ? ' (' + e.column + ')' : '' }}: {{ e.message }}</li>
+                      }
+                    </ul>
+                  }
+
+                  <div class="import-actions">
+                    <button
+                      mat-flat-button
+                      type="button"
+                      (click)="applyImport('replace')"
+                      [disabled]="!preview.questions.length"
+                    >
+                      Thay toàn bộ câu hỏi
+                    </button>
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      (click)="applyImport('append')"
+                      [disabled]="!preview.questions.length"
+                    >
+                      Thêm vào cuối
+                    </button>
+                    <button mat-button type="button" (click)="cancelImport()">Huỷ</button>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+
           <div formArrayName="questions">
             @for (g of questions.controls; track $index; let i = $index) {
               <div class="q-row" [formGroupName]="i">
@@ -341,10 +524,23 @@ function toIso(local: string | null | undefined): string | null {
                   </mat-label>
                   <textarea matInput formControlName="questionText" rows="2"></textarea>
                 </mat-form-field>
+                <mat-form-field appearance="outline" class="q-text">
+                  <mat-label>Đáp án mẫu (không bắt buộc)</mat-label>
+                  <textarea matInput formControlName="sampleAnswer" rows="2"></textarea>
+                  <mat-hint>
+                    AI dùng làm mốc để chấm sát chuẩn của công ty. Đây là MỘT đáp án tốt, ứng viên
+                    diễn đạt khác mà đúng vẫn được điểm.
+                  </mat-hint>
+                </mat-form-field>
+                <mat-form-field appearance="outline" class="q-group">
+                  <mat-label>Nhóm chủ đề</mat-label>
+                  <input matInput formControlName="questionGroup" placeholder="VD: Thuật toán" />
+                </mat-form-field>
                 <mat-checkbox formControlName="isRequired">Bắt buộc</mat-checkbox>
                 <button
                   mat-icon-button
                   type="button"
+                  [disabled]="questionsReadOnly()"
                   (click)="removeQuestion(i)"
                   aria-label="Xoá câu hỏi"
                 >
@@ -353,19 +549,40 @@ function toIso(local: string | null | undefined): string | null {
               </div>
             }
           </div>
-          <button mat-stroked-button type="button" (click)="addQuestion()">
-            <mat-icon>add</mat-icon>
-            Thêm câu hỏi
-          </button>
+          @if (!questionsReadOnly()) {
+            <button mat-stroked-button type="button" (click)="addQuestion()">
+              <mat-icon>add</mat-icon>
+              Thêm câu hỏi
+            </button>
+          }
         </mat-card>
+
+        <!--
+          Chấm thử chạy trên bộ tiêu chí + câu hỏi ĐÃ LƯU (không phải bản đang gõ dở), nên chỉ có
+          nghĩa khi chiến dịch đã tồn tại. Danh sách câu hỏi lấy từ bản tải về, không lấy từ form.
+        -->
+        @if (campaignId(); as cid) {
+          @if (previewQuestions().length > 0) {
+            <app-rubric-preview-panel
+              [campaignId]="cid"
+              [questions]="previewQuestions()"
+              [rubricVersion]="original()?.rubricVersion ?? null"
+              [formDirty]="form.dirty"
+            />
+          }
+        }
 
         <div class="actions">
           <button mat-button type="button" (click)="cancel()">Huỷ</button>
+          <!--
+            Khoá luôn khi mốc hỏng: thang méo (thiếu mốc 0, mốc trùng điểm) KHÔNG sinh lỗi nào lúc
+            chấm — nó chỉ lặng lẽ cho điểm sai, nên phải chặn ngay tại chỗ nhập.
+          -->
           <button
             mat-flat-button
             color="primary"
             type="submit"
-            [disabled]="saving() || readOnly()"
+            [disabled]="saving() || readOnly() || hasLevelIssues()"
           >
             @if (saving()) {
               <mat-icon class="spin">progress_activity</mat-icon>
@@ -422,6 +639,30 @@ function toIso(local: string | null | undefined): string | null {
         display: flex;
         justify-content: space-between;
         align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .head-right {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .crit-block {
+        padding: 4px 0 8px;
+        border-bottom: 1px solid var(--mat-sys-outline-variant);
+        margin-bottom: 8px;
+      }
+      .ruler-chip {
+        margin-left: auto;
+        padding: 3px 10px;
+        border-radius: 12px;
+        font-size: 12px;
+        background: var(--mat-sys-secondary-container);
+        color: var(--mat-sys-on-secondary-container);
+      }
+      .ruler-notice {
+        background: var(--mat-sys-secondary-container);
+        color: var(--mat-sys-on-secondary-container);
       }
       .notice {
         display: flex;
@@ -526,12 +767,72 @@ export class CampaignForm implements OnInit {
 
   readonly loading = signal(false);
   readonly saving = signal(false);
+  /**
+   * Khoá TOÀN BỘ biểu mẫu — chỉ `Closed`/`Archived`.
+   *
+   * Trước đây cờ này bật cho mọi trạng thái khác `Draft`, nên chiến dịch `Active` bị khoá cứng và
+   * quyền "sửa mốc điểm khi đang chạy" không có đường nào dùng được từ giao diện.
+   */
   readonly readOnly = signal(false);
+
+  /**
+   * Khoá riêng phần CÂU HỎI. Bật cho mọi trạng thái khác `Draft` vì CAMP-2 giữ nguyên cho câu hỏi:
+   * `PUT /campaign/{id}/questions` trên `Active` vẫn trả **409**. Tiêu chí + mốc điểm thì backend
+   * đã mở, nên hai thứ này KHÔNG còn dùng chung một cờ được nữa.
+   */
+  readonly questionsReadOnly = signal(false);
   /** Đang gọi AI sinh câu hỏi (F9) — khoá nút để không bắn 2 lần. */
   readonly generating = signal(false);
+  /** Đang gọi AI gợi ý mốc điểm — khoá cả nút chung lẫn nút từng hàng. */
+  readonly suggestingLevels = signal(false);
+  readonly copyingSystemDefault = signal(false);
   /** Số câu muốn AI sinh (1..20); null = để backend tự quyết. */
   readonly aiCount = signal<number | null>(null);
-  private original = signal<CampaignResponse | null>(null);
+  /** Đang đọc file CSV — khoá nút để không bắn 2 lần. */
+  readonly importing = signal(false);
+  /**
+   * Kết quả đọc file, CHƯA lưu. Backend chỉ đọc file và trả về; muốn lưu thì HR bấm Lưu như bình
+   * thường. Nhờ thế file hỏng mã hoá chỉ làm HR thấy chữ lỗi ở đây rồi bấm Huỷ.
+   */
+  readonly importPreview = signal<ImportQuestionsResult | null>(null);
+  /** Bản tải về từ máy chủ — nguồn cho những thứ backend chấm/sinh dựa trên dữ liệu ĐÃ LƯU. */
+  readonly original = signal<CampaignResponse | null>(null);
+
+  /**
+   * Câu hỏi cho ô chọn của chấm thử — lấy từ bản ĐÃ LƯU chứ không phải từ form: máy chủ chấm thử
+   * theo `questionId` trong DB, câu vừa gõ chưa Lưu thì chưa có id để gửi đi.
+   */
+  /**
+   * Phiên bản thước đo hiện tại. `null` khi chiến dịch tạo trước tính năng này (hoặc deploy backend
+   * cũ hơn) — lúc đó KHÔNG vẽ chip, vì "không biết" mà hiện "v1" là bịa.
+   */
+  rubricVersion(): number | null {
+    return this.original()?.rubricVersion ?? null;
+  }
+
+  /** Số phiên bản sẽ nhận nếu HR sửa mốc bây giờ — dùng trong lời cảnh báo cho chiến dịch Active. */
+  nextRubricVersion(): number {
+    return (this.rubricVersion() ?? 1) + 1;
+  }
+
+  isActive(): boolean {
+    return this.original()?.status === 'Active';
+  }
+
+  rulerTooltip(): string {
+    const c = this.original();
+    if (!c?.rubricVersionUpdatedAt) return 'Thước đo gốc — chưa ai sửa mốc điểm.';
+    const when = new Date(c.rubricVersionUpdatedAt).toLocaleString('vi-VN');
+    return c.rubricVersionUpdatedBy
+      ? `Sửa lần cuối ${when} bởi ${c.rubricVersionUpdatedBy}`
+      : `Sửa lần cuối ${when}`;
+  }
+
+  previewQuestions(): PreviewQuestionOption[] {
+    return (this.original()?.questions ?? [])
+      .filter((q) => !!q.id)
+      .map((q) => ({ id: q.id, questionText: q.questionText }));
+  }
 
   /** Giới hạn ký tự JD nhập tay — khớp hằng số BE (vượt → 400). */
   readonly jdTextMaxChars = JD_TEXT_MAX_CHARS;
@@ -559,6 +860,9 @@ export class CampaignForm implements OnInit {
     passScorePct: [null as number | null],
     // >= 1 bắt buộc: 0/âm biến `running >= max` thành đúng luôn ⇒ khoá chiến dịch vĩnh viễn.
     maxConcurrentInterviews: [null as number | null, [Validators.min(1)]],
+    // NGÂN HÀNG ĐỀ — số câu mỗi ứng viên thi. Để trống = thi hết bộ (hành vi trước tính năng này).
+    // >= 1 bắt buộc: 0 nghĩa là buổi thi không câu nào, backend sẽ từ chối lúc ứng viên bấm Bắt đầu.
+    questionsPerSession: [null as number | null, [Validators.min(1)]],
     startsAt: [''],
     expiresAt: [''],
     antiCheatEnabled: [false],
@@ -608,8 +912,15 @@ export class CampaignForm implements OnInit {
       next: (c) => {
         this.original.set(c);
         this.hydrate(c);
-        this.readOnly.set(c.status !== 'Draft');
-        if (this.readOnly()) this.form.disable();
+        this.readOnly.set(c.status === 'Closed' || c.status === 'Archived');
+        this.questionsReadOnly.set(c.status !== 'Draft');
+        if (this.readOnly()) {
+          this.form.disable();
+        } else if (this.questionsReadOnly()) {
+          // Chỉ khoá mảng câu hỏi: phần còn lại (metadata + tiêu chí + mốc) vẫn sửa được, và
+          // `getRawValue()` lúc gửi vẫn đọc được giá trị của control đã khoá.
+          this.questions.disable();
+        }
         this.loading.set(false);
       },
       error: (e: HttpErrorResponse) => {
@@ -634,6 +945,7 @@ export class CampaignForm implements OnInit {
       timeLimitMinutes: c.timeLimitMinutes ?? 15,
       passScorePct: c.passScorePct ?? null,
       maxConcurrentInterviews: c.maxConcurrentInterviews ?? null,
+      questionsPerSession: c.questionsPerSession ?? null,
       startsAt: toLocalInput(c.startsAt),
       expiresAt: toLocalInput(c.expiresAt),
       antiCheatEnabled: c.antiCheatEnabled,
@@ -644,24 +956,74 @@ export class CampaignForm implements OnInit {
     });
     this.criteria.clear();
     c.criteria.forEach((cr) =>
-      this.criteria.push(this.critRow(cr.name, cr.weight, cr.maxScore, cr.description ?? '')),
+      this.criteria.push(
+        this.critRow(
+          cr.name,
+          cr.weight,
+          cr.maxScore,
+          cr.description ?? '',
+          // `?? []` chứ không bind thẳng: chiến dịch tạo trước tính năng mốc điểm (hoặc deploy
+          // backend cũ hơn) không có field này, `undefined.sort()` sẽ làm trắng cả trang sửa.
+          cr.levels ?? [],
+          'hr',
+        ),
+      ),
     );
     this.questions.clear();
     c.questions.forEach((q) =>
       // F10 — nạp kèm `id` để lần Lưu kế echo lại được (thiếu id = BE xoá-và-tạo-lại, mất id câu AI).
-      this.questions.push(this.questionRow(q.questionText, q.isRequired, q.source, q.id ?? null)),
+      this.questions.push(
+        this.questionRow(
+          q.questionText,
+          q.isRequired,
+          q.source,
+          q.id ?? null,
+          q.sampleAnswer ?? '',
+          q.questionGroup ?? '',
+        ),
+      ),
     );
     if (this.questions.length === 0) this.addQuestion();
   }
 
   // ── Criteria ───────────────────────────────────────────────────────────────
-  private critRow(name = '', weight = 0.25, maxScore = 10, description = ''): FormGroup {
-    return this.fb.group({
-      name: [name, [Validators.required]],
-      weight: [weight, [Validators.required, Validators.min(0)]],
-      maxScore: [maxScore, [Validators.required, Validators.min(1)]],
-      description: [description],
-    });
+  /**
+   * Một hàng tiêu chí, kèm phần MỐC ĐIỂM.
+   *
+   * Ba control không hiện trên màn nhưng quyết định việc "có gửi `levels` lên server hay không":
+   * - `levels`: mảng mốc, giữ theo thứ tự GIẢM DẦN để khớp cách đọc của editor.
+   * - `levelsOriginal`: ảnh chụp chuẩn hoá lúc nạp. So với nó mới biết HR có đổi gì thật không —
+   *   nếu cứ gửi mảng hiện tại vô điều kiện thì mỗi lần Lưu là **xoá sạch mốc** (mảng khởi tạo
+   *   rỗng ⇒ BE hiểu `[]` = xoá), mà không có lỗi nào để ai nhận ra.
+   * - `originalName`: tên lúc nạp. BE ghép mốc cũ sang tiêu chí mới theo TÊN (vì PUT là
+   *   replace-all sinh id mới), nên đổi tên mà không gửi kèm `levels` là mốc bay mất.
+   */
+  private critRow(
+    name = '',
+    weight = 0.25,
+    maxScore = 10,
+    description = '',
+    levels: CriterionLevelItem[] = [],
+    source: CriterionLevelsSource = 'none',
+  ): FormGroup {
+    return this.fb.group(
+      {
+        name: [name, [Validators.required]],
+        weight: [weight, [Validators.required, Validators.min(0)]],
+        maxScore: [maxScore, [Validators.required, Validators.min(1)]],
+        description: [description],
+        // Hiển thị giảm dần: HR nghĩ theo "thế nào là điểm tối đa" rồi bóc dần xuống.
+        levels: this.fb.array<FormGroup>(
+          [...levels]
+            .sort((a, b) => b.score - a.score)
+            .map((l) => this.fb.group({ score: [l.score], descriptor: [l.descriptor] })),
+        ),
+        levelsOriginal: [canonicalLevels(levels)],
+        levelsSource: [levels.length ? source : 'none'],
+        originalName: [name || null],
+      },
+      { validators: criterionLevelsValidator },
+    );
   }
   addCriterion(): void {
     this.criteria.push(this.critRow());
@@ -669,6 +1031,180 @@ export class CampaignForm implements OnInit {
   removeCriterion(i: number): void {
     this.criteria.removeAt(i);
   }
+  // ── Dùng bộ chuẩn hệ thống theo nghề ────────────────────────────────────────
+  canUseSystemDefault(): boolean {
+    return !!this.campaignId() && !this.readOnly() && !this.copyingSystemDefault();
+  }
+
+  /**
+   * Chép bộ chuẩn của hệ thống vào chiến dịch — lối tắt để có thước đo tử tế mà không phải tự nghĩ
+   * ra 7 tiêu chí rồi tự soạn mốc cho từng cái. Ai vội sẽ bỏ trống, mà bỏ trống nghĩa là quay về
+   * đúng thang rỗng nghĩa.
+   *
+   * 🔴 KHÔNG đoán nghề từ ô "Lĩnh vực": đó là chuỗi tự do (`"Fullstack"`, `"QA"`, để trống…) trong
+   * khi bộ chuẩn chỉ có ba nghề. Đoán sai ở đây là chấm ứng viên bằng thước đo của nghề khác — HR
+   * không có cách nào nhận ra qua màn hình.
+   */
+  useSystemDefaultCriteria(): void {
+    const id = this.campaignId();
+    if (!id) {
+      this.notify.warn('Hãy tạo (lưu) chiến dịch trước khi chép bộ chuẩn.');
+      return;
+    }
+    if (this.readOnly()) {
+      this.notify.warn('Chiến dịch đã đóng — không sửa được tiêu chí.');
+      return;
+    }
+
+    const data: SystemDefaultCriteriaDialogData = {
+      currentCount: this.criteria.length,
+      domain: (this.form.get('domain')?.value as string) ?? null,
+      language: (this.form.get('language')?.value as CampaignLanguage) ?? null,
+    };
+    this.dialog
+      .open(SystemDefaultCriteriaDialog, { data, width: '520px' })
+      .afterClosed()
+      .subscribe((choice: SystemDefaultCriteriaChoice | null | undefined) => {
+        if (choice) this.runCopySystemDefault(id, choice);
+      });
+  }
+
+  private runCopySystemDefault(id: string, choice: SystemDefaultCriteriaChoice): void {
+    this.copyingSystemDefault.set(true);
+    this.api.copyCriteriaFromSystemDefault(id, choice).subscribe({
+      next: () => {
+        this.copyingSystemDefault.set(false);
+        this.notify.success('Đã chép bộ chuẩn. Xem lại và sửa cho khớp vị trí bạn đang tuyển.');
+        // Backend GHI thẳng, nên phải nạp lại: giữ nguyên form cũ sẽ hiện tiêu chí đã bị thay thế,
+        // và lần Lưu kế tiếp sẽ ghi đè ngược lại bộ vừa chép.
+        this.ngOnInit();
+      },
+      error: (e: HttpErrorResponse) => {
+        this.copyingSystemDefault.set(false);
+        this.notify.error(extractErrorMessage(e) ?? 'Không chép được bộ chuẩn.');
+      },
+    });
+  }
+
+  // ── Mốc điểm: nhờ AI gợi ý ──────────────────────────────────────────────────
+  /**
+   * Backend đọc bộ tiêu chí **đã lưu trong DB** (giống F9 đọc JD đã lưu), rồi trả mốc về cho HR
+   * xem/sửa — **không ghi gì**. Vì thế tiêu chí vừa gõ mà chưa Lưu sẽ không có trong kết quả:
+   * nói thẳng ra thay vì để HR tưởng AI "bỏ sót" tiêu chí của mình.
+   */
+  canSuggestLevels(): boolean {
+    return (
+      !!this.campaignId() &&
+      !this.readOnly() &&
+      !this.suggestingLevels() &&
+      this.criteria.length > 0
+    );
+  }
+
+  /** `index = null` → áp cho mọi tiêu chí; có số → chỉ áp cho đúng hàng đó. */
+  suggestLevels(index: number | null): void {
+    const id = this.campaignId();
+    if (!id) {
+      this.notify.warn('Hãy tạo (lưu) chiến dịch trước — AI cần bộ tiêu chí đã lưu.');
+      return;
+    }
+    if (this.readOnly()) {
+      this.notify.warn('Chiến dịch đã xuất bản — không sửa được tiêu chí ở đây.');
+      return;
+    }
+    if (this.criteria.length === 0) {
+      this.notify.warn('Hãy thêm ít nhất 1 tiêu chí trước khi nhờ AI gợi ý mốc.');
+      return;
+    }
+
+    const targets =
+      index == null ? this.criteria.controls : [this.criteria.controls[index]].filter(Boolean);
+    // Chỉ cảnh báo về mốc do NGƯỜI chốt (nạp từ chiến dịch đã lưu hoặc vừa sửa tay). Mốc AI gợi ý
+    // lần trước mà chưa ai đụng vào thì ghi đè không mất gì của HR.
+    const overwritten = targets
+      .filter(
+        (g) =>
+          (g.get('levels') as FormArray).length > 0 && g.get('levelsSource')?.value === 'hr',
+      )
+      .map((g) => (g.get('name')?.value as string) || '(chưa đặt tên)');
+
+    const run = () => this.runSuggestLevels(id, index);
+    if (overwritten.length === 0 && !this.form.dirty) {
+      run();
+      return;
+    }
+
+    const data: ConfirmDialogData = {
+      title: 'Nhờ AI gợi ý mốc điểm?',
+      message:
+        'AI đọc bộ tiêu chí đã lưu của chiến dịch rồi viết mốc điểm cho từng tiêu chí. Kết quả chỉ hiện trên biểu mẫu — bấm Lưu mới ghi lại.',
+      bullets: overwritten.length
+        ? [`Mốc hiện có sẽ bị THAY của: ${overwritten.join(', ')}.`]
+        : ['Chưa có mốc nào bị ghi đè.'],
+      warning: this.form.dirty
+        ? 'Biểu mẫu đang có thay đổi CHƯA LƯU. AI đọc bộ tiêu chí đã lưu trên máy chủ, nên tiêu chí bạn vừa thêm/đổi tên sẽ không có trong kết quả.'
+        : undefined,
+      confirmLabel: 'Gợi ý mốc',
+    };
+    this.dialog
+      .open(ConfirmDialog, { data, width: '520px' })
+      .afterClosed()
+      .subscribe((ok) => {
+        if (ok) run();
+      });
+  }
+
+  private runSuggestLevels(id: string, index: number | null): void {
+    this.suggestingLevels.set(true);
+    this.api.suggestCriterionLevels(id).subscribe({
+      next: (res) => {
+        this.suggestingLevels.set(false);
+        const applied = this.applySuggestedLevels(res.criteria ?? [], index);
+        if (applied === 0) {
+          this.notify.warn(
+            'AI không trả về mốc cho tiêu chí nào khớp. Kiểm tra xem tiêu chí đã được lưu chưa.',
+          );
+        } else {
+          this.notify.success(`Đã điền mốc cho ${applied} tiêu chí. Bấm Lưu để ghi lại.`);
+        }
+      },
+      error: (e: HttpErrorResponse) => {
+        this.suggestingLevels.set(false);
+        // Cố ý KHÔNG điền dải mặc định thay thế: mốc bịa ("Mức 3/10") trông y như mốc thật.
+        this.notify.error(extractErrorMessage(e) ?? 'Gợi ý mốc bằng AI thất bại.');
+      },
+    });
+  }
+
+  /**
+   * Ghép kết quả AI vào form theo **TÊN** (không phân biệt hoa/thường) chứ không theo id: PUT là
+   * replace-all mint id mới nên id trong form có thể đã cũ, còn tên chính là khoá BE dùng để ghép
+   * mốc — dùng chung một khoá thì hai bên không lệch nhau được.
+   */
+  private applySuggestedLevels(
+    suggested: { name: string; levels: CriterionLevelItem[] }[],
+    index: number | null,
+  ): number {
+    const byName = new Map(suggested.map((s) => [(s.name ?? '').trim().toLowerCase(), s]));
+    let applied = 0;
+    this.criteria.controls.forEach((g, i) => {
+      if (index != null && i !== index) return;
+      const hit = byName.get(((g.get('name')?.value as string) ?? '').trim().toLowerCase());
+      if (!hit?.levels?.length) return;
+      const arr = g.get('levels') as FormArray<FormGroup>;
+      arr.clear();
+      [...hit.levels]
+        .sort((a, b) => b.score - a.score)
+        .forEach((l) =>
+          arr.push(this.fb.group({ score: [l.score], descriptor: [l.descriptor] })),
+        );
+      g.get('levelsSource')?.setValue('ai');
+      g.updateValueAndValidity();
+      applied++;
+    });
+    return applied;
+  }
+
   totalWeight(): number {
     return this.criteria.controls.reduce((s, g) => s + Number(g.get('weight')?.value || 0), 0);
   }
@@ -708,11 +1244,17 @@ export class CampaignForm implements OnInit {
     isRequired = true,
     source: QuestionSource = 'CustomHr',
     id: string | null = null,
+    sampleAnswer = '',
+    questionGroup = '',
   ): FormGroup {
     return this.fb.group({
       questionText: [questionText, [Validators.required]],
       isRequired: [isRequired],
       source: [source],
+      // Đáp án mẫu + nhóm chủ đề. Ô trống = ý định XOÁ của HR, và buildQuestions() gửi chuỗi rỗng
+      // đúng như thế — BE hiểu '' là xoá, còn "không gửi field" là giữ nguyên.
+      sampleAnswer: [sampleAnswer],
+      questionGroup: [questionGroup],
       // F10 — `id` KHÔNG hiện trên form nhưng phải sống sót qua vòng đọc→sửa→lưu: BE merge theo id để
       // sửa TẠI CHỖ. Thiếu id thì mỗi lần Lưu là xoá-và-tạo-lại ⇒ id câu AI đổi hết, đúng thứ F10
       // sinh ra để chặn. (Ghép từ nhánh F10 vòng 2 — bản F9 vòng 3 không mang id.)
@@ -747,7 +1289,7 @@ export class CampaignForm implements OnInit {
    * rõ ràng. Chặn trước ở đây và nói thẳng lý do.
    */
   canGenerate(): boolean {
-    return !!this.campaignId() && !this.readOnly() && !this.generating();
+    return !!this.campaignId() && !this.questionsReadOnly() && !this.generating();
   }
 
   /** Ô trống = để backend tự quyết số câu (null), không phải 0. */
@@ -756,13 +1298,97 @@ export class CampaignForm implements OnInit {
     this.aiCount.set(t === '' ? null : Number(t));
   }
 
+  // ── Nhập câu hỏi từ file CSV ──────────────────────────────────────────────
+  //
+  // Backend CHỈ ĐỌC file và trả danh sách; không ghi gì. HR xem trước ở đây rồi bấm Lưu như bình
+  // thường, nên guard "chỉ sửa khi Draft", nhật ký thao tác và luật trộn câu F10 vẫn nằm đúng một
+  // chỗ — và file hỏng mã hoá chỉ làm HR thấy chữ lỗi trên màn hình rồi bấm Huỷ.
+
+  downloadTemplate(): void {
+    this.api.downloadQuestionsTemplate().subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'mau-cau-hoi.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+      error: () => this.notify.error('Không tải được file mẫu.'),
+    });
+  }
+
+  onCsvPicked(files: FileList | null): void {
+    const file = files?.[0];
+    if (!file) return;
+
+    const id = this.campaignId();
+    if (!id) {
+      this.notify.warn('Hãy tạo (lưu) chiến dịch trước khi nhập câu hỏi từ file.');
+      return;
+    }
+
+    this.importing.set(true);
+    this.api.importQuestions(id, file).subscribe({
+      next: (result) => {
+        this.importing.set(false);
+        this.importPreview.set(result);
+        if (!result.questions.length) {
+          this.notify.warn('Không đọc được câu hỏi hợp lệ nào trong file.');
+        }
+      },
+      error: (e) => {
+        this.importing.set(false);
+        this.importPreview.set(null);
+        // Thông báo của backend nói rõ sai gì và sửa thế nào (sai định dạng, thiếu cột, sai mã hoá)
+        // — hữu ích hơn hẳn câu chung chung của bộ chặn lỗi toàn cục.
+        this.notify.error(extractErrorMessage(e) ?? 'Không đọc được file.');
+      },
+    });
+  }
+
+  /**
+   * `replace` = thay toàn bộ; `append` = thêm vào cuối.
+   *
+   * ⚠ Câu nhập từ file luôn là câu MỚI (không có `id`). Nên `replace` sẽ xoá câu đang có kể cả câu
+   * AI đã sinh — nói rõ trong nhãn nút, đừng để HR hiểu là "trộn".
+   */
+  applyImport(mode: 'replace' | 'append'): void {
+    const preview = this.importPreview();
+    if (!preview?.questions.length) return;
+
+    if (mode === 'replace') this.questions.clear();
+
+    for (const q of preview.questions) {
+      this.questions.push(
+        this.questionRow(
+          q.questionText,
+          q.isRequired,
+          'CustomHr',
+          null,
+          q.sampleAnswer ?? '',
+          q.questionGroup ?? '',
+        ),
+      );
+    }
+
+    this.importPreview.set(null);
+    this.notify.info(
+      `Đã đưa ${preview.questions.length} câu vào biểu mẫu. Bấm Lưu để ghi lại.`,
+    );
+  }
+
+  cancelImport(): void {
+    this.importPreview.set(null);
+  }
+
   generateQuestions(): void {
     const id = this.campaignId();
     if (!id) {
       this.notify.warn('Hãy tạo (lưu) chiến dịch trước — AI cần JD đã lưu để sinh câu hỏi.');
       return;
     }
-    if (this.readOnly()) {
+    if (this.questionsReadOnly()) {
       this.notify.warn('Chiến dịch đã xuất bản — không sửa được câu hỏi nữa.');
       return;
     }
@@ -828,13 +1454,50 @@ export class CampaignForm implements OnInit {
   }
 
   // ── Submit ───────────────────────────────────────────────────────────────────
+  /**
+   * `levels` theo hợp đồng BA TRẠNG THÁI — đây là chỗ dễ mất dữ liệu nhất của cả tính năng, và
+   * kiểu mất là **im lặng** (HTTP 200, không lỗi, mốc biến mất ở lần Lưu sau).
+   *
+   * Gửi khi và chỉ khi:
+   * - bộ mốc khác ảnh chụp lúc nạp (HR thêm/xoá/sửa chữ, hoặc vừa nhận gợi ý AI), HOẶC
+   * - **tên tiêu chí đổi** — BE ghép mốc cũ sang bộ tiêu chí mới theo TÊN, nên đổi tên mà không
+   *   gửi kèm mốc là carry-over trượt và mốc bay mất mà không ai biết.
+   *
+   * Không gửi (bỏ hẳn field) khi HR chỉ sửa những thứ khác: BE hiểu "vắng field = không đổi".
+   */
   private buildCriteria(): CriterionItem[] {
-    return this.criteria.controls.map((g) => ({
-      name: g.get('name')!.value,
-      weight: Number(g.get('weight')!.value),
-      maxScore: Number(g.get('maxScore')!.value),
-      description: g.get('description')!.value || null,
-    }));
+    return this.criteria.controls.map((g) => {
+      const name = g.get('name')!.value as string;
+      const originalName = g.get('originalName')!.value as string | null;
+      const levels = readLevels(g);
+      const changed = canonicalLevels(levels) !== (g.get('levelsOriginal')!.value as string);
+      const renamed = originalName != null && originalName !== name;
+      return {
+        name,
+        weight: Number(g.get('weight')!.value),
+        maxScore: Number(g.get('maxScore')!.value),
+        description: g.get('description')!.value || null,
+        ...(changed || renamed ? { levels } : {}),
+      };
+    });
+  }
+
+  /** Tên các tiêu chí đang có mốc không hợp lệ, kèm lý do — để nói thẳng sai ở đâu. */
+  criteriaLevelIssues(): { name: string; messages: string[] }[] {
+    return this.criteria.controls
+      .map((g) => ({
+        name: (g.get('name')?.value as string) || '(chưa đặt tên)',
+        messages: levelErrorMessages(
+          criterionLevelsValidator(g),
+          Number(g.get('maxScore')?.value ?? 10),
+        ),
+      }))
+      .filter((x) => x.messages.length > 0);
+  }
+
+  /** Có tiêu chí nào mốc hỏng không — khoá nút Lưu, vì thang méo không sinh lỗi lúc chạy. */
+  hasLevelIssues(): boolean {
+    return this.criteriaLevelIssues().length > 0;
   }
   private buildQuestions(): QuestionItem[] {
     return this.questions.controls.map((g) => {
@@ -849,6 +1512,11 @@ export class CampaignForm implements OnInit {
         // đã đẻ ra dòng hardcode `source:'CustomHr'` xoá sạch provenance câu AI.
         // Cờ vẫn nằm trong form (questionRow) để badge hiển thị đúng trong phiên sửa hiện tại.
         isRequired: !!g.get('isRequired')!.value,
+        // LUÔN gửi hai field này, kể cả khi rỗng. BE phân biệt ba trạng thái: không gửi = giữ nguyên,
+        // '' = xoá, có nội dung = ghi đè. Bỏ field khi ô trống thì HR xoá đáp án xong bấm Lưu, đáp án
+        // cũ sống lại — mà không có lỗi nào để họ hiểu vì sao.
+        sampleAnswer: (g.get('sampleAnswer')?.value ?? '') as string,
+        questionGroup: (g.get('questionGroup')?.value ?? '') as string,
       };
     });
   }
@@ -880,7 +1548,85 @@ export class CampaignForm implements OnInit {
       this.notify.warn(`Tổng trọng số tiêu chí phải ≈ 1 (hiện tại ${this.totalWeight().toFixed(2)}).`);
       return;
     }
+    // Nêu đích danh tiêu chí nào hỏng: mốc điểm nằm trong panel có thể đang đóng, câu "điền đủ
+    // trường bắt buộc" chung chung sẽ khiến HR đi tìm ở ô khác.
+    const levelIssues = this.criteriaLevelIssues();
+    if (levelIssues.length > 0) {
+      this.form.markAllAsTouched();
+      this.notify.warn(
+        `Mốc điểm chưa hợp lệ: ${levelIssues
+          .map((x) => `${x.name} (${x.messages[0]})`)
+          .join(' · ')}`,
+      );
+      return;
+    }
 
+    // Sửa thước đo của chiến dịch ĐANG CHẠY là hành động khó đảo: nó tăng phiên bản và làm điểm
+    // của người thi sau không so trực tiếp được với người đã chấm. Hỏi trước khi gửi.
+    if (this.isActive() && this.rubricChanged()) {
+      const data: ConfirmDialogData = {
+        title: `Lưu thay đổi sẽ tạo thước đo v${this.nextRubricVersion()}?`,
+        message:
+          'Chiến dịch đang chạy và bạn vừa đổi tiêu chí hoặc mốc điểm. Thay đổi này KHÔNG hồi tố.',
+        bullets: [
+          `Ứng viên đã chấm bằng thước đo v${this.rubricVersion() ?? 1} giữ nguyên điểm.`,
+          'Ứng viên thi SAU khi lưu sẽ được chấm bằng thước đo mới.',
+          'Bảng xếp hạng sẽ hiện cột "Thước đo" vì hai nhóm không so sánh trực tiếp được.',
+        ],
+        confirmLabel: 'Lưu và tạo phiên bản mới',
+      };
+      this.dialog
+        .open(ConfirmDialog, { data, width: '520px' })
+        .afterClosed()
+        .subscribe((ok) => {
+          if (ok) this.performSave();
+        });
+      return;
+    }
+
+    this.performSave();
+  }
+
+  /**
+   * Bộ tiêu chí + mốc có khác bản đã lưu không.
+   *
+   * So bằng cùng cách backend so (chuẩn hoá số về 4 chữ số thập phân) để `0.5` và `0.5000` không
+   * bị coi là đổi — cảnh báo oan mỗi lần bấm Lưu sẽ nhanh chóng bị bấm qua theo phản xạ, và lúc
+   * đó nó hết tác dụng đúng vào lần thay đổi thật.
+   */
+  private rubricChanged(): boolean {
+    const before = (this.original()?.criteria ?? []).map((c) => ({
+      name: c.name,
+      weight: c.weight,
+      maxScore: c.maxScore,
+      levels: c.levels ?? [],
+    }));
+    const after = this.criteria.controls.map((g) => ({
+      name: (g.get('name')?.value as string) ?? '',
+      weight: Number(g.get('weight')?.value),
+      maxScore: Number(g.get('maxScore')?.value),
+      levels: readLevels(g),
+    }));
+    return this.criteriaFingerprint(before) !== this.criteriaFingerprint(after);
+  }
+
+  private criteriaFingerprint(
+    rows: { name: string; weight: number; maxScore: number; levels: CriterionLevelItem[] }[],
+  ): string {
+    return JSON.stringify(
+      [...rows]
+        .map((r) => [
+          r.name.trim().toLowerCase(),
+          Number(r.weight).toFixed(4),
+          Number(r.maxScore).toFixed(4),
+          canonicalLevels(r.levels),
+        ])
+        .sort(),
+    );
+  }
+
+  /** Gửi thật — tách khỏi `submit()` để nhánh hỏi-xác-nhận không phải nhân bản cả thân hàm. */
+  private performSave(): void {
     const v = this.form.getRawValue();
     const criteria = this.buildCriteria();
     this.saving.set(true);
@@ -898,6 +1644,7 @@ export class CampaignForm implements OnInit {
         timeLimitMinutes: v.timeLimitMinutes ?? null,
         passScorePct: v.passScorePct ?? null,
         maxConcurrentInterviews: v.maxConcurrentInterviews ?? null,
+        questionsPerSession: v.questionsPerSession ?? null,
         antiCheatEnabled: !!v.antiCheatEnabled,
         faceVerifyEnabled: !!v.faceVerifyEnabled,
         adaptiveEnabled: !!v.adaptiveEnabled,   // INT-17
@@ -934,6 +1681,7 @@ export class CampaignForm implements OnInit {
       timeLimitMinutes: v.timeLimitMinutes ?? null,
       passScorePct: v.passScorePct ?? null,
       maxConcurrentInterviews: v.maxConcurrentInterviews ?? null,
+      questionsPerSession: v.questionsPerSession ?? null,
       antiCheatEnabled: !!v.antiCheatEnabled,
       faceVerifyEnabled: !!v.faceVerifyEnabled,
       adaptiveEnabled: !!v.adaptiveEnabled,   // INT-17
@@ -945,6 +1693,17 @@ export class CampaignForm implements OnInit {
     };
     this.api.updateCampaign(id, body).subscribe({
       next: () => {
+        // 🔴 Chiến dịch đã xuất bản: CAMP-2 vẫn giữ nguyên cho câu hỏi, `PUT /questions` trả 409.
+        // Gọi nó ở đây là tự tạo ra kiểu hỏng tệ nhất của đường Lưu: request thứ nhất ĐÃ THÀNH
+        // CÔNG (tiêu chí + mốc đã ghi, phiên bản thước đo có thể đã tăng) mà người dùng lại thấy
+        // thông báo lỗi ⇒ họ bấm Lưu lại, hoặc tưởng mất hết và sửa lại từ đầu.
+        // Xử tường minh bằng một nhánh, KHÔNG gộp hai request rồi bắt lỗi chung.
+        if (this.questionsReadOnly()) {
+          this.saving.set(false);
+          this.notify.success('Đã lưu thay đổi.');
+          this.router.navigate(['/employer/campaigns', id]);
+          return;
+        }
         this.api.updateQuestions(id, this.buildQuestions()).subscribe({
           next: () => {
             this.saving.set(false);

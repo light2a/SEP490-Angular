@@ -29,6 +29,7 @@ function campaign(partial: Partial<CampaignResponse> = {}): CampaignResponse {
     jdText: 'JD',
     criteriaText: 'Ưu tiên kinh nghiệm hệ phân tán',
     criteria: [],
+    jobNeeds: [],
     questions: [{ id: 'q-1', questionText: 'Câu 1', source: 'CustomHr', isRequired: true }],
     createdAt: '2026-07-01T00:00:00Z',
     updatedAt: '2026-07-01T00:00:00Z',
@@ -50,6 +51,8 @@ describe('CampaignForm — cấp độ, mô tả tiêu chí, trần thi đồng 
       updateCampaign: vi.fn().mockReturnValue(of(campaign())),
       updateQuestions: vi.fn().mockReturnValue(of(campaign())),
       createCampaign: vi.fn().mockReturnValue(of(campaign())),
+      // Biểu mẫu nay nhúng panel chấm thử — nó đọc lịch sử ngay lúc mở, nên mock phải có.
+      getRubricPreviewRuns: vi.fn().mockReturnValue(of([])),
     };
     notify = { success: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn() };
 

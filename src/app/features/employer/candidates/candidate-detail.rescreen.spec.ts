@@ -24,7 +24,10 @@ function candidate(status: string, partial: Partial<CandidateDetailResponse> = {
     summary: null,
     rejectReason: null,
     cvFileUrl: 'campaigns/c1/candidates/cand-1.pdf',
-    criterionScores: [],
+    strengths: [],
+    gaps: [],
+    bonusSignals: [],
+    verifyQuestions: [],
     ...partial,
   } as CandidateDetailResponse;
 }

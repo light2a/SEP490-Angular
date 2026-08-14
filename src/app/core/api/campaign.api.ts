@@ -1,9 +1,14 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, timeout } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   ApiKeyListItem,
+  CampaignLanguage,
+  JobCategory,
+  RubricPreviewRun,
+  RunRubricPreviewRequest,
+  SuggestCriterionLevelsResponse,
   CampaignResponse,
   CampaignResultsResponse,
   CampaignSlotResponse,
@@ -11,6 +16,7 @@ import {
   CreateApiKeyResponse,
   CandidateDetailResponse,
   CandidateListItem,
+  JobNeedInput,
   CreateCampaignRequest,
   CreateCampaignSlotRequest,
   PatchCandidateRequest,
@@ -27,13 +33,21 @@ import {
   MyCampaignDetail,
   MyCampaignSummary,
   ProctorSignalType,
+  ImportQuestionsResult,
   QuestionItem,
   ScreenCandidatesResponse,
   SessionTranscriptResponse,
+  SystemDefaultPreviewResponse,
   StartInterviewResult,
   TransitionStatusRequest,
   UpdateCampaignRequest,
 } from '../models';
+
+/**
+ * Thời hạn cho lượt chấm thử thước đo. Rộng hơn nhiều lần thời gian đo được (~25–40s) vì đây là
+ * chuỗi nhiều lượt gọi mô hình nối tiếp; cắt sớm thì HR mất kết quả của một lượt **đã tính phí**.
+ */
+const RUBRIC_PREVIEW_TIMEOUT_MS = 180_000;
 
 /**
  * /api/v1/campaign/* — luồng B2B phía ứng viên (invitation → join → my-campaigns → start).
@@ -148,6 +162,29 @@ export class CampaignApi {
   }
 
   /**
+   * POST /campaign/{id}/questions/import — đọc file CSV câu hỏi + đáp án mẫu.
+   *
+   * **CHỈ ĐỌC — backend KHÔNG ghi gì.** Trả danh sách để HR xem trước; muốn lưu thì gọi
+   * {@link updateQuestions} như bình thường. Nhờ thế guard "chỉ sửa khi Draft", nhật ký thao tác và
+   * luật trộn câu F10 vẫn nằm đúng một chỗ, và file hỏng mã hoá chỉ làm HR thấy chữ lỗi trên màn
+   * hình rồi bấm huỷ — thay vì cơ sở dữ liệu ăn text hỏng.
+   *
+   * 400 file hỏng/sai định dạng/thiếu cột · 404 ngoài tổ chức · 409 campaign không còn Draft.
+   * Lỗi của TỪNG DÒNG nằm trong `errors` của body 200, không phải lỗi HTTP.
+   */
+  importQuestions(id: string, file: File): Observable<ImportQuestionsResult> {
+    const form = new FormData();
+    // KHÔNG tự set Content-Type: để trình duyệt tự sinh boundary (mẫu uploadCandidateCvs).
+    form.append('file', file, file.name);
+    return this.http.post<ImportQuestionsResult>(`${this.base}/${id}/questions/import`, form);
+  }
+
+  /** GET /campaign/questions/template — file CSV mẫu (đã có BOM UTF-8 để Excel đọc đúng tiếng Việt). */
+  downloadQuestionsTemplate(): Observable<Blob> {
+    return this.http.get(`${this.base}/questions/template`, { responseType: 'blob' });
+  }
+
+  /**
    * POST /campaign/{id}/questions/generate?count= — AI đọc JD ĐÃ LƯU rồi sinh câu hỏi (F9).
    * Backend chỉ xoá câu `AiGenerated` cũ, GIỮ NGUYÊN câu HR tự gõ (`CustomHr`) ⇒ gọi nhiều lần
    * không cộng dồn. Chỉ chạy khi campaign `Draft` (CAMP-2 → 409) và JD đã lưu (rỗng → 400).
@@ -161,9 +198,99 @@ export class CampaignApi {
     });
   }
 
-  /** POST /campaign/{id}/publish → Active (sinh campaign_criteria từ text/structured). */
+  // ── Mốc điểm + chấm thử thước đo ───────────────────────────────────────────
+  /**
+   * POST /campaign/{id}/criteria/levels/suggest — AI viết mốc điểm cho từng tiêu chí ĐÃ LƯU.
+   *
+   * **KHÔNG ghi DB**: trả về để HR xem/sửa rồi lưu qua {@link updateCampaign} như bình thường —
+   * cùng nguyên tắc với {@link importQuestions}, để nhật ký thao tác và luật tăng phiên bản thước
+   * đo nằm đúng một cửa. AI lỗi → **502** và không có dải mặc định thay thế: mốc rỗng là trạng
+   * thái hợp lệ, còn mốc bịa (`"Mức 3/10"`) thì HR sẽ tưởng là do AI viết ra.
+   */
+  suggestCriterionLevels(id: string): Observable<SuggestCriterionLevelsResponse> {
+    return this.http.post<SuggestCriterionLevelsResponse>(
+      `${this.base}/${id}/criteria/levels/suggest`,
+      {},
+    );
+  }
+
+  /**
+   * GET /campaign/criteria/system-default/preview — xem trước bộ chuẩn của một nghề.
+   *
+   * **CHỈ ĐỌC, không ghi gì** — dùng để nhà tuyển dụng nhìn thấy mình sắp chép về cái gì trước khi
+   * bấm. Không có `{id}` vì nó không thuộc chiến dịch nào.
+   *
+   * ⚠ **404 KHÔNG phải lỗi**: quản trị viên chưa soạn bộ chuẩn cho tổ hợp (nghề, ngôn ngữ) đó.
+   * Đây là câu hỏi *"có sẵn không"*, khác hẳn 502 của đường chép (*"chép hộ tôi"* mà hỏng).
+   */
+  previewSystemDefaultCriteria(
+    jobCategory: JobCategory,
+    language: CampaignLanguage,
+  ): Observable<SystemDefaultPreviewResponse> {
+    return this.http.get<SystemDefaultPreviewResponse>(
+      `${this.base}/criteria/system-default/preview`,
+      { params: new HttpParams().set('jobCategory', jobCategory).set('language', language) },
+    );
+  }
+
+  /**
+   * POST /campaign/{id}/criteria/from-system-default — chép bộ chuẩn của hệ thống theo nghề vào
+   * chiến dịch.
+   *
+   * **CHÉP chứ không tham chiếu**: quản trị viên sửa bộ gốc về sau sẽ KHÔNG đổi thước đo của các
+   * chiến dịch đang tuyển — đúng thứ mà cơ chế phiên bản thước đo sinh ra để chặn.
+   *
+   * ⚠ Ghi thẳng DB (khác {@link suggestCriterionLevels} vốn chỉ trả về để xem): thao tác này
+   * **THAY THẾ** toàn bộ tiêu chí đang có, nên phải hỏi lại trước khi gọi.
+   * ⚠ `jobCategory` do HR **chọn**, không suy từ `domain` — `domain` là chuỗi tự do.
+   */
+  copyCriteriaFromSystemDefault(
+    id: string,
+    body: { jobCategory: JobCategory; language: CampaignLanguage },
+  ): Observable<unknown> {
+    return this.http.post(`${this.base}/${id}/criteria/from-system-default`, body);
+  }
+
+  /**
+   * POST /campaign/{id}/rubric-preview — AI viết 3 bài mẫu (yếu/khá/xuất sắc) cho 1 câu hỏi rồi
+   * **chấm thật** cả 3 bằng đúng bộ chấm của ứng viên.
+   *
+   * ⚠ Chạy trên bộ tiêu chí **ĐÃ LƯU trong DB**, không phải bản đang gõ dở trên form.
+   * ⚠ Chậm (≈25–40s, cá biệt hơn): sinh bài rồi chấm từng bài là nhiều lượt gọi mô hình nối tiếp.
+   * Đặt `timeout` **tường minh 180s** thay vì để mặc định — không có thời hạn thì một request treo
+   * sẽ giữ mãi vòng quay chờ và HR không bao giờ nhận được lỗi để bấm lại.
+   *
+   * 402 = ví Org không đủ credit (lượt tính phí) · 409 = đang có lượt chạy dở · 400 = thước đo
+   * chưa hợp lệ (thiếu tiêu chí/mốc) · 404 = chiến dịch ngoài org.
+   */
+  runRubricPreview(id: string, body: RunRubricPreviewRequest): Observable<RubricPreviewRun> {
+    return this.http
+      .post<RubricPreviewRun>(`${this.base}/${id}/rubric-preview`, body)
+      .pipe(timeout(RUBRIC_PREVIEW_TIMEOUT_MS));
+  }
+
+  /**
+   * GET /campaign/{id}/rubric-preview — lịch sử chấm thử (mới nhất trước, backend cap 20).
+   *
+   * Cũng là đường CỨU khi lượt chạy bị lỗi mạng/timeout: lượt chạy thường đã xong ở server và nằm
+   * sẵn trong lịch sử, nên đọc lại một lần trước khi báo lỗi cho HR.
+   */
+  getRubricPreviewRuns(id: string): Observable<RubricPreviewRun[]> {
+    return this.http.get<RubricPreviewRun[]>(`${this.base}/${id}/rubric-preview`);
+  }
+
+  /** POST /campaign/{id}/publish → Active (sinh campaign_criteria + nhu cầu công việc từ JD). */
   publishCampaign(id: string): Observable<CampaignResponse> {
     return this.http.post<CampaignResponse>(`${this.base}/${id}/publish`, {});
+  }
+
+  /**
+   * PUT /campaign/{id}/job-needs — HR chốt nhu cầu công việc dùng để sàng CV (replace-all).
+   * Chỉ khi campaign còn `Draft` (đổi thước đo giữa chừng thì ứng viên sàng trước và sàng sau
+   * không so sánh được nữa) → ngoài Draft server trả 409.
+   */
+  updateJobNeeds(id: string, needs: JobNeedInput[]): Observable<CampaignResponse> {
+    return this.http.put<CampaignResponse>(`${this.base}/${id}/job-needs`, needs);
   }
 
   /** PUT /campaign/{id}/status — Active→Closed→Archived. */
