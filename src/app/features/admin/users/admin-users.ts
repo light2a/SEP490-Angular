@@ -23,7 +23,11 @@ import {
 import { EmptyState } from '../../../shared/ui/empty-state';
 import { Spinner } from '../../../shared/ui/spinner';
 
-/** Danh sách người dùng toàn nền tảng (PlatformAdmin oversight — AUTH-7). Read-only. */
+/**
+ * Danh sách người dùng toàn nền tảng (PlatformAdmin oversight — AUTH-7), kèm can thiệp trên từng
+ * tài khoản: cấm / gỡ cấm / đặt lại mật khẩu (F20) và đổi platform-role (AUTH-3).
+ * *(Không còn read-only như bản đầu — chú thích cũ đã lỗi thời từ F20.)*
+ */
 @Component({
   selector: 'app-admin-users',
   imports: [
@@ -132,6 +136,15 @@ import { Spinner } from '../../../shared/ui/spinner';
                         <mat-icon>block</mat-icon>
                       </button>
                     }
+                    <button
+                      mat-icon-button
+                      title="Đổi vai trò"
+                      aria-label="Đổi vai trò"
+                      [disabled]="busy() === u.id"
+                      (click)="changeRole(u)"
+                    >
+                      <mat-icon>badge</mat-icon>
+                    </button>
                     <button
                       mat-icon-button
                       title="Đặt lại mật khẩu"
@@ -302,6 +315,43 @@ export class AdminUsers implements OnInit {
           error: (e: HttpErrorResponse) => {
             this.busy.set(null);
             this.notify.error(extractErrorMessage(e) ?? 'Không gỡ cấm được người dùng.');
+          },
+        });
+      });
+  }
+
+  /**
+   * Đổi platform-role (AUTH-3). Server trả về hàng đã cập nhật → thay tại chỗ như ban/unban.
+   *
+   * Hai lỗi 409 đáng nói riêng thay vì để nguyên câu chung của server, vì admin cần biết PHẢI LÀM
+   * GÌ TIẾP: hạ Admin cuối cùng (nâng người khác lên trước) và rời Employer khi còn thuộc tổ chức
+   * (gỡ khỏi tổ chức trước — việc đó thuộc OrgAdmin của chính tổ chức đó, AUTH-8).
+   */
+  changeRole(u: AdminUserResponse): void {
+    this.dialog
+      .open(AdminUserActionDialog, {
+        data: {
+          mode: 'role',
+          email: u.email ?? u.id,
+          currentRole: u.role,
+        } satisfies AdminUserActionData,
+        width: '520px',
+      })
+      .afterClosed()
+      .subscribe((res?: AdminUserActionResult) => {
+        if (!res || !('role' in res)) return;
+        this.busy.set(u.id);
+        this.api.changeUserRole(u.id, res.role).subscribe({
+          next: (updated) => {
+            this.busy.set(null);
+            this.replace(updated);
+            this.notify.success(
+              `Đã đổi vai trò thành ${updated.role}. Người dùng phải đăng nhập lại; quyền cũ còn hiệu lực tối đa ~15 phút.`,
+            );
+          },
+          error: (e: HttpErrorResponse) => {
+            this.busy.set(null);
+            this.notify.error(extractErrorMessage(e) ?? 'Không đổi được vai trò.');
           },
         });
       });
