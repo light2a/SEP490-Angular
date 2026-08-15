@@ -8,6 +8,8 @@ import {
   AdminResetPasswordRequest,
   AdminUserResponse,
   BanUserRequest,
+  ChangePlatformRoleRequest,
+  PlatformRole,
   GrantCreditRequest,
   GrantCreditResponse,
   OrganizationResponse,
@@ -80,6 +82,24 @@ export class AdminApi {
     const body: AdminResetPasswordRequest = { newPassword };
     return this.http.post<void>(
       `${this.base}/auth/admin/users/${userId}/reset-password`,
+      body,
+    );
+  }
+
+  /**
+   * POST /auth/admin/users/{id}/role — đổi platform-role (AUTH-3). Trả về hàng user đã cập nhật.
+   *
+   * ⚠ Cùng ranh giới hiệu lực với ban: server thu hồi refresh token ngay, nhưng access token
+   * người dùng đang giữ vẫn mang vai trò CŨ tới hết TTL (≤15') vì service validate JWT offline
+   * (GEN-3). UI phải nói điều này ra, đừng hứa "đổi xong là có hiệu lực ngay".
+   *
+   * Lỗi từ server: 400 role lạ / tự đổi vai trò mình · 404 · 409 hạ Admin cuối cùng hoặc rời
+   * Employer khi còn thuộc tổ chức.
+   */
+  changeUserRole(userId: string, role: PlatformRole): Observable<AdminUserResponse> {
+    const body: ChangePlatformRoleRequest = { role };
+    return this.http.post<AdminUserResponse>(
+      `${this.base}/auth/admin/users/${userId}/role`,
       body,
     );
   }

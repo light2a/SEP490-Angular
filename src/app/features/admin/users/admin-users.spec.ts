@@ -147,6 +147,59 @@ describe('AdminUsers — cấm / gỡ cấm / đặt lại mật khẩu (F20)', 
     expect(cmp.busy()).toBeNull();
   });
 
+  // ── Đổi platform-role (AUTH-3) ───────────────────────────────────────────────
+  it('POST .../role gửi đúng vai trò và cập nhật dòng tại chỗ', () => {
+    dialogResult = { role: 'Employer' };
+    const fixture = setup();
+    const cmp = fixture.componentInstance;
+
+    cmp.changeRole(cmp.items()[0]);
+
+    const req = httpMock.expectOne(`${USERS}/u1/role`);
+    expect(req.request.method).toBe('POST');
+    // Tên gốc, KHÔNG phải nhãn tiếng Việt: server phân biệt hoa thường và chỉ nhận 3 chuỗi này.
+    expect(req.request.body).toEqual({ role: 'Employer' });
+    req.flush(user({ role: 'Employer' }));
+
+    expect(cmp.items()[0].role).toBe('Employer');
+    expect(cmp.busy()).toBeNull();
+    expect(notify['success']).toHaveBeenCalled();
+  });
+
+  it('huỷ hộp thoại đổi vai trò → KHÔNG gọi API', () => {
+    dialogResult = undefined;
+    const fixture = setup();
+    fixture.componentInstance.changeRole(fixture.componentInstance.items()[0]);
+    httpMock.expectNone(`${USERS}/u1/role`);
+  });
+
+  // Cùng bẫy với reset-password ở trên: ba hành động đều trả object, chỉ khác tên trường.
+  // Chỉ kiểm "có kết quả" thì sẽ gửi { role: undefined } lên server.
+  it('kết quả hộp thoại của hành động khác → không gọi API đổi vai trò', () => {
+    dialogResult = { newPassword: 'nhầm nhánh' };
+    const fixture = setup();
+    fixture.componentInstance.changeRole(fixture.componentInstance.items()[0]);
+    httpMock.expectNone(`${USERS}/u1/role`);
+  });
+
+  it('409 khi còn thuộc tổ chức → hiện đúng lời server, không kẹt busy', () => {
+    dialogResult = { role: 'Candidate' };
+    const fixture = setup([user({ role: 'Employer', orgName: 'Acme' })]);
+    const cmp = fixture.componentInstance;
+
+    cmp.changeRole(cmp.items()[0]);
+    httpMock.expectOne(`${USERS}/u1/role`).flush(
+      { error: 'User is still a member of an organization — remove them from the organization first' },
+      { status: 409, statusText: 'Conflict' },
+    );
+
+    expect(notify['error']).toHaveBeenCalledWith(
+      'User is still a member of an organization — remove them from the organization first',
+    );
+    expect(cmp.items()[0].role).toBe('Employer'); // dòng KHÔNG được đổi lạc quan
+    expect(cmp.busy()).toBeNull();
+  });
+
   /**
    * F24 — bảng 8 cột phải cuộn ngang TRONG khung của nó (không để cả trang cuộn ngang trên
    * mobile). Kiểm bằng CẤU TRÚC DOM chứ không đo pixel: jsdom không layout thật.

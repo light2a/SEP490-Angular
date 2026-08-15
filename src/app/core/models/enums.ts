@@ -7,6 +7,17 @@
 
 // ---------- Auth ----------
 export type PlatformRole = 'Candidate' | 'Employer' | 'Admin';
+/**
+ * Tập ĐÓNG, khớp allowlist `AuthService.PlatformRoles` phía server.
+ * ⚠ Phân biệt hoa thường — server trả 400 với `'admin'`. Nhãn chỉ để hiển thị, giá trị gửi đi
+ * luôn là tên gốc.
+ */
+export const PLATFORM_ROLES: readonly PlatformRole[] = ['Candidate', 'Employer', 'Admin'] as const;
+export const PLATFORM_ROLE_LABEL: Record<PlatformRole, string> = {
+  Candidate: 'Ứng viên',
+  Employer: 'Nhà tuyển dụng',
+  Admin: 'Quản trị viên',
+};
 export type OrgRole = 'OrgAdmin' | 'HrMember';
 
 // ---------- Interview (CHUỖI) ----------

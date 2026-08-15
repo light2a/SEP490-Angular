@@ -1,4 +1,4 @@
-import { OrgRole } from './enums';
+import { OrgRole, PlatformRole } from './enums';
 
 // Quản lý thành viên tổ chức (A6/A6b) — chỉ OrgAdmin. Nguồn: AuthService OrgMemberDtos.
 
@@ -65,4 +65,12 @@ export interface BanUserRequest {
 /** POST /auth/admin/users/{id}/reset-password — trả 204, KHÔNG echo lại mật khẩu. */
 export interface AdminResetPasswordRequest {
   newPassword: string;
+}
+
+/**
+ * POST /auth/admin/users/{id}/role — THAY THẾ vai trò hiện tại (1 role/user).
+ * `PlatformRole` + `PLATFORM_ROLES` nằm ở `enums.ts` cạnh các enum dây khác.
+ */
+export interface ChangePlatformRoleRequest {
+  role: PlatformRole;
 }
