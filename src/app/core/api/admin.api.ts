@@ -19,6 +19,7 @@ import {
   SettleRefundResponse,
   AiUsageReportResponse,
   RevenueReportResponse,
+  FinanceSnapshotResponse,
   CreditAccountResponse,
   CreditTransactionPage,
   CreditTransactionReason,
@@ -143,6 +144,16 @@ export class AdminApi {
     if (opts?.to) params = params.set('to', opts.to);
     if (opts?.groupBy) params = params.set('groupBy', opts.groupBy);
     return this.http.get<RevenueReportResponse>(`${this.base}/payment/admin/revenue`, { params });
+  }
+
+  /**
+   * GET /payment/admin/finance-snapshot — công nợ phải thu (AR) + doanh thu định kỳ (MRR) (F27).
+   *
+   * KHÁC `revenue()` ở trên: đây là chỉ số SỐ DƯ tại thời điểm gọi (`asOf`), không phải dòng
+   * chảy theo kỳ — KHÔNG nhận `from`/`to`.
+   */
+  financeSnapshot(): Observable<FinanceSnapshotResponse> {
+    return this.http.get<FinanceSnapshotResponse>(`${this.base}/payment/admin/finance-snapshot`);
   }
 
   /**

@@ -145,6 +145,26 @@ export interface RevenueBucket {
 }
 
 /**
+ * Phễu chuyển đổi đơn hàng trong kỳ — đếm theo `created_at` (KHÔNG phải `paid_at`, vì đơn
+ * Pending/Failed/Expired/Cancelled không bao giờ có `paid_at`). `paidCount` gộp cả `Paid` lẫn
+ * `Refunded` (hoàn tiền không xoá dấu vết đơn đã từng chuyển đổi thành công).
+ *
+ * ⚠ Trục thời gian KHÁC `grossRevenueVnd` ở dưới (đếm theo `paid_at`) — một đơn được TẠO
+ * kỳ này nhưng THU TIỀN kỳ khác sẽ xuất hiện ở phễu nhưng không góp vào gross của kỳ đó.
+ * Đừng cộng chéo hai bảng số.
+ */
+export interface RevenueFunnel {
+  createdCount: number;
+  paidCount: number;
+  failedCount: number;
+  expiredCount: number;
+  cancelledCount: number;
+  pendingCount: number;
+  /** `paidCount / createdCount * 100`. 0 khi `createdCount = 0`. */
+  conversionRatePct: number;
+}
+
+/**
  * GET /payment/admin/revenue — kỳ nửa mở [from, to).
  *
  * ⚠ `grossRevenueVnd` và `refundedVnd` đếm theo HAI MỐC THỜI GIAN KHÁC NHAU (gộp theo
@@ -154,6 +174,10 @@ export interface RevenueBucket {
  *
  * Credit tặng (FreeGrant/PromoGrant) KHÔNG bao giờ xuất hiện ở đây: báo cáo đọc bảng
  * `orders`, mà tặng credit thì không sinh đơn nào.
+ *
+ * ⚠ **`grossMarginVnd` CÓ THỂ ÂM — ĐỪNG kẹp về 0 khi hiển thị.** Số âm là tín hiệu tài chính
+ * THẬT (kỳ này lỗ vận hành AI); che nó đi là nói dối báo cáo. Tương tự, `refundRatePct` CÓ
+ * THỂ VƯỢT 100% (refund/gross đếm theo hai mốc thời gian khác nhau, xem trên) — không kẹp.
  */
 export interface RevenueReportResponse {
   from: string;
@@ -167,6 +191,46 @@ export interface RevenueReportResponse {
   netRevenueVnd: number;
   byKind: RevenueByKind[];
   buckets: RevenueBucket[];
+
+  /** Chi phí AI (Gemini + whisper-1) trong kỳ, khớp theo `created_at` của lượt gọi AI —
+   *  KHÔNG khớp theo đơn hàng nào. */
+  aiCostUsd: number;
+  aiCostVnd: number;
+  /** `netRevenueVnd − aiCostVnd`. CÓ THỂ ÂM — xem cảnh báo phía trên class-doc. */
+  grossMarginVnd: number;
+  /** `refundedVnd / grossRevenueVnd * 100`. CÓ THỂ VƯỢT 100% — xem cảnh báo trên. */
+  refundRatePct: number;
+  /** Số chủ ví (`ownerId` distinct) có ít nhất 1 đơn Paid/Refunded trong kỳ. */
+  payingOwnerCount: number;
+  /** `grossRevenueVnd / payingOwnerCount`. 0 khi `payingOwnerCount = 0`. */
+  arpuVnd: number;
+  funnel: RevenueFunnel;
+}
+
+/** Công nợ phải thu — hoá đơn postpaid CHƯA thanh toán. `Void` KHÔNG tính (đã huỷ). */
+export interface OutstandingReceivables {
+  issuedVnd: number;
+  issuedCount: number;
+  overdueVnd: number;
+  overdueCount: number;
+  /** `issuedVnd + overdueVnd`. */
+  totalVnd: number;
+}
+
+/**
+ * GET /payment/admin/finance-snapshot — chỉ số tài chính kiểu SỐ DƯ TẠI MỘT THỜI ĐIỂM
+ * (`asOf`), KHÁC BẢN CHẤT với `RevenueReportResponse` (dòng chảy theo kỳ `[from,to)`).
+ * KHÔNG nhận tham số `from`/`to` — "công nợ hiện có bao nhiêu" và "doanh thu định kỳ hiện
+ * hành" không có nghĩa "trong kỳ này", chúng là "tính tới bây giờ".
+ */
+export interface FinanceSnapshotResponse {
+  asOf: string;
+  outstandingReceivables: OutstandingReceivables;
+  /** Doanh thu định kỳ quy về THÁNG — subscription năm đã chia 12. Chỉ tính gói MUA THẬT
+   *  (loại quà admin cấp tay), và chỉ 1 gói hiệu lực nhất / chủ ví (không double-count khi
+   *  nâng cấp giữa kỳ để lại 2 subscription Active chồng lấn). */
+  mrrVnd: number;
+  activeSubscriptionCount: number;
 }
 
 // ── Danh sách đơn cho MÀN ADMIN (kèm field refund admin-only) ───────────────

@@ -20,6 +20,22 @@ function report(partial: Partial<RevenueReportResponse> = {}): RevenueReportResp
     netRevenueVnd: 800_000,
     byKind: [{ kind: OrderKind.CreditPack, amountVnd: 1_000_000, orderCount: 4 }],
     buckets: [{ periodStart: '2026-07-01T00:00:00Z', amountVnd: 1_000_000, orderCount: 4 }],
+    // F27 — giá vốn AI + margin + tỷ lệ hoàn + ARPU + phễu.
+    aiCostUsd: 5,
+    aiCostVnd: 130_000,
+    grossMarginVnd: 670_000,
+    refundRatePct: 20,
+    payingOwnerCount: 3,
+    arpuVnd: 333_333,
+    funnel: {
+      createdCount: 5,
+      paidCount: 4,
+      failedCount: 1,
+      expiredCount: 0,
+      cancelledCount: 0,
+      pendingCount: 0,
+      conversionRatePct: 80,
+    },
     ...partial,
   };
 }
